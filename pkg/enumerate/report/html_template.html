@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GoGatoZ Security Report</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.datatables.net/2.1.8/css/dataTables.bootstrap5.min.css" rel="stylesheet">
+  <link href="https://cdn.datatables.net/buttons/3.2.0/css/buttons.bootstrap5.min.css" rel="stylesheet">
+  <style>
+    body { background: #f8f9fa; }
+    .card-stat { text-align: center; }
+    .card-stat .display-4 { font-size: 2rem; font-weight: 700; }
+    .card-stat .card-title { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px; color: #6c757d; }
+    .severity-critical { color: #9b59b6; font-weight: bold; }
+    .severity-high { color: #dc3545; font-weight: bold; }
+    .severity-medium { color: #fd7e14; font-weight: bold; }
+    .severity-low { color: #ffc107; }
+    .severity-info { color: #17a2b8; }
+    .bg-purple { background-color: #9b59b6 !important; }
+    .navbar-brand { font-weight: 700; letter-spacing: 1px; }
+    code { font-size: 0.85em; word-break: break-all; }
+    canvas { max-height: 300px; }
+    .chart-card { min-height: 350px; }
+    .table td, .table th { vertical-align: middle; }
+    .copy-btn { padding: 2px 6px; cursor: pointer; }
+    .copy-btn.copied { color: #198754; border-color: #198754; }
+    footer { border-top: 1px solid #dee2e6; padding: 1rem 0; }
+  </style>
+</head>
+<body>
+
+  <!-- Navbar -->
+  <nav class="navbar navbar-dark bg-dark mb-3">
+    <div class="container-fluid">
+      <span class="navbar-brand">GoGatoZ Security Report</span>
+      <span class="navbar-text text-muted">Generated: {{.GeneratedAt.Format "2006-01-02 15:04:05 MST"}}</span>
+    </div>
+  </nav>
+
+  <!-- Summary Cards -->
+  <div class="container-fluid">
+    <div class="row g-3 mb-4">
+      <div class="col-sm-6 col-md-4 col-lg">
+        <div class="card card-stat h-100">
+          <div class="card-body">
+            <h6 class="card-title">Total Projects</h6>
+            <p class="display-4">{{.Summary.Total}}</p>
+          </div>
+        </div>
+      </div>
+      <div class="col-sm-6 col-md-4 col-lg">
+        <div class="card card-stat h-100">
+          <div class="card-body">
+            <h6 class="card-title">With Findings</h6>
+            <p class="display-4">{{.Summary.WithFindings}}</p>
+          </div>
+        </div>
+      </div>
+      <div class="col-sm-6 col-md-4 col-lg">
+        <div class="card card-stat h-100">
+          <div class="card-body">
+            <h6 class="card-title">Total Findings</h6>
+            <p class="display-4">{{.Summary.Findings}}</p>
+          </div>
+        </div>
+      </div>
+      <div class="col-sm-6 col-md-4 col-lg">
+        <div class="card card-stat h-100" style="border-color:#9b59b6">
+          <div class="card-body">
+            <h6 class="card-title">CRITICAL</h6>
+            <p class="display-4" style="color:#9b59b6">{{index .Summary.BySeverityStr "CRITICAL"}}</p>
+          </div>
+        </div>
+      </div>
+      <div class="col-sm-6 col-md-4 col-lg">
+        <div class="card card-stat h-100 border-danger">
+          <div class="card-body">
+            <h6 class="card-title">HIGH</h6>
+            <p class="display-4 text-danger">{{index .Summary.BySeverityStr "HIGH"}}</p>
+          </div>
+        </div>
+      </div>
+      <div class="col-sm-6 col-md-4 col-lg">
+        <div class="card card-stat h-100 border-warning">
+          <div class="card-body">
+            <h6 class="card-title">MEDIUM</h6>
+            <p class="display-4" style="color:#fd7e14">{{index .Summary.BySeverityStr "MEDIUM"}}</p>
+          </div>
+        </div>
+      </div>
+      <div class="col-sm-6 col-md-4 col-lg">
+        <div class="card card-stat h-100" style="border-color:#ffc107">
+          <div class="card-body">
+            <h6 class="card-title">LOW</h6>
+            <p class="display-4" style="color:#ffc107">{{index .Summary.BySeverityStr "LOW"}}</p>
+          </div>
+        </div>
+      </div>
+      <div class="col-sm-6 col-md-4 col-lg">
+        <div class="card card-stat h-100 border-info">
+          <div class="card-body">
+            <h6 class="card-title">INFO</h6>
+            <p class="display-4 text-info">{{index .Summary.BySeverityStr "INFORMATIONAL"}}</p>
+          </div>
+        </div>
+      </div>
+      <div class="col-sm-6 col-md-4 col-lg">
+        <div class="card card-stat h-100 border-success">
+          <div class="card-body">
+            <h6 class="card-title">Exploitable</h6>
+            <p class="display-4 text-success">{{.ExploitableCount}}</p>
+          </div>
+        </div>
+      </div>
+    </div>
+    {{if .HasFPFilter}}
+    <div class="row g-3 mt-2">
+      <div class="col-12">
+        <div class="card border-info">
+          <div class="card-body">
+            <h6 class="card-title"><i class="bi bi-funnel"></i> False Positive Filtering</h6>
+            <p class="mb-1">Raw findings: <strong>{{.Summary.FP.RawFindings}}</strong> &rarr; Filtered: <span class="text-warning">{{.Summary.FP.FalsePositives}}</span> &rarr; Adjusted: <strong>{{.Summary.FP.AdjustedFindings}}</strong></p>
+            {{range $reason, $count := .Summary.FP.ByReason}}
+            <span class="badge bg-info text-dark me-1">{{$reason}}: {{$count}}</span>
+            {{end}}
+          </div>
+        </div>
+      </div>
+    </div>
+    {{end}}
+  </div>
+
+  <!-- Charts -->
+  <div class="container-fluid mb-4">
+    <div class="row g-3">
+      <div class="col-md-4">
+        <div class="card chart-card">
+          <div class="card-header">Severity Distribution</div>
+          <div class="card-body d-flex align-items-center justify-content-center">
+            <canvas id="chartSeverity"></canvas>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="card chart-card">
+          <div class="card-header">Finding Types</div>
+          <div class="card-body">
+            <canvas id="chartTypes"></canvas>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="card chart-card">
+          <div class="card-header">Infrastructure Risks</div>
+          <div class="card-body">
+            <canvas id="chartInfra"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Projects Table -->
+  <div class="container-fluid mb-4">
+    <div class="card">
+      <div class="card-header"><h5 class="mb-0">Projects</h5></div>
+      <div class="card-body">
+        <table id="projectsTable" class="table table-striped table-hover" style="width:100%">
+          <thead>
+            <tr>
+              <th>Project</th>
+              <th>URL</th>
+              <th>Findings</th>
+              <th>CRIT</th>
+              <th>HIGH</th>
+              <th>MED</th>
+              <th>LOW</th>
+              <th>INFO</th>
+              <th>CI Summary</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{range .Projects}}
+            <tr>
+              <td>{{.Project.ProjectPathWithNS}}</td>
+              <td><a href="{{.Project.WebURL}}" target="_blank" rel="noopener">{{.Project.WebURL}}</a></td>
+              <td>{{.FindingCount}}</td>
+              <td>{{.Critical}}</td>
+              <td>{{.High}}</td>
+              <td>{{.Medium}}</td>
+              <td>{{.Low}}</td>
+              <td>{{.Informational}}</td>
+              <td>{{.Project.CISummary}}</td>
+            </tr>
+            {{end}}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Findings Table -->
+  <div class="container-fluid mb-4">
+    <div class="card">
+      <div class="card-header"><h5 class="mb-0">All Findings</h5></div>
+      <div class="card-body">
+        <table id="findingsTable" class="table table-striped table-hover" style="width:100%">
+          <thead>
+            <tr>
+              <th>Severity</th>
+              <th>ID</th>
+              <th>Project</th>
+              <th>Title</th>
+              <th>Job</th>
+              <th>Evidence</th>
+              <th>Recommendation</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{range .AllFindings}}
+            <tr>
+              <td><span class="badge {{severityBadge .Severity}}">{{.Severity}}</span></td>
+              <td>{{.ID}}</td>
+              <td>{{.Project}}</td>
+              <td>{{.Title}}</td>
+              <td>{{.JobName}}</td>
+              <td><code>{{.Evidence}}</code></td>
+              <td>{{.Recommendation}}</td>
+            </tr>
+            {{end}}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Exploitable Projects -->
+  {{if .ExploitableEntries}}
+  <div class="container-fluid mb-4">
+    <div class="card border-success">
+      <div class="card-header bg-success text-white"><h5 class="mb-0">Exploitable Projects</h5></div>
+      <div class="card-body">
+        <table id="exploitableTable" class="table table-striped table-hover" style="width:100%">
+          <thead>
+            <tr>
+              <th>Severity</th>
+              <th>Project</th>
+              <th>Finding ID</th>
+              <th>Title</th>
+              <th>Attack Command</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{range .ExploitableEntries}}
+            <tr>
+              <td><span class="badge {{severityBadge .Severity}}">{{.Severity}}</span></td>
+              <td><a href="{{.WebURL}}" target="_blank" rel="noopener">{{.Project}}</a></td>
+              <td>{{.ID}}</td>
+              <td>{{.Title}}</td>
+              <td>
+                <div class="d-flex align-items-center">
+                  <code class="me-2 flex-grow-1">{{.Command}}</code>
+                  <button class="btn btn-sm btn-outline-secondary copy-btn" data-cmd="{{.Command}}" title="Copy command">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
+                      <path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1v-1z"/>
+                      <path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5h3zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3z"/>
+                    </svg>
+                  </button>
+                </div>
+              </td>
+            </tr>
+            {{end}}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  {{end}}
+
+  <!-- Attack Results -->
+  {{if .HasAttacks}}
+  <div class="container-fluid mb-4">
+    <div class="card border-primary">
+      <div class="card-header bg-primary text-white"><h5 class="mb-0">Attack Results</h5></div>
+      <div class="card-body">
+        <div class="row g-3 mb-3">
+          <div class="col-md-4">
+            <div class="card card-stat h-100">
+              <div class="card-body">
+                <h6 class="card-title">Total Attacks</h6>
+                <p class="display-4">{{.AttackSummary.Total}}</p>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <div class="card card-stat h-100 border-success">
+              <div class="card-body">
+                <h6 class="card-title">Successful</h6>
+                <p class="display-4 text-success">{{.AttackSummary.Successful}}</p>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <div class="card card-stat h-100 border-danger">
+              <div class="card-body">
+                <h6 class="card-title">Failed</h6>
+                <p class="display-4 text-danger">{{.AttackSummary.Failed}}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+        <table id="attacksTable" class="table table-striped table-hover" style="width:100%">
+          <thead>
+            <tr>
+              <th>Status</th>
+              <th>Project</th>
+              <th>Mode</th>
+              <th>Payload</th>
+              <th>Branch</th>
+              <th>Pipeline</th>
+              <th>Tags</th>
+              <th>Duration (ms)</th>
+              <th>Error</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{range .Attacks}}
+            <tr>
+              <td><span class="badge {{statusBadge .Status}}">{{.Status}}</span></td>
+              <td><a href="{{.WebURL}}" target="_blank" rel="noopener">{{.PathWithNamespace}}</a></td>
+              <td>{{.Mode}}</td>
+              <td>{{.Payload}}</td>
+              <td><code>{{.Branch}}</code></td>
+              <td>{{if .PipelineURL}}<a href="{{.PipelineURL}}" target="_blank" rel="noopener">{{if .PipelineID}}#{{.PipelineID}}{{else}}view{{end}}</a>{{end}}</td>
+              <td>{{.Tags}}</td>
+              <td>{{.DurationMS}}</td>
+              <td>{{if .Error}}<code>{{.Error}}</code>{{end}}</td>
+            </tr>
+            {{end}}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  {{end}}
+
+  <!-- Infrastructure Summary -->
+  <div class="container-fluid mb-4">
+    <div class="row g-3">
+      <div class="col-md-6">
+        <div class="card">
+          <div class="card-header">Runner Exposure</div>
+          <div class="card-body">
+            <ul class="list-group list-group-flush">
+              <li class="list-group-item d-flex justify-content-between align-items-center">
+                Projects with tagged runners
+                <span class="badge bg-primary rounded-pill">{{.Runners.ProjectsWithTagged}}</span>
+              </li>
+              <li class="list-group-item d-flex justify-content-between align-items-center">
+                MR-triggered tagged jobs
+                <span class="badge bg-primary rounded-pill">{{.Runners.MRTagged}}</span>
+              </li>
+              <li class="list-group-item d-flex justify-content-between align-items-center">
+                Broadly exposed runners
+                <span class="badge bg-primary rounded-pill">{{.Runners.ExposedBroad}}</span>
+              </li>
+              <li class="list-group-item d-flex justify-content-between align-items-center">
+                Risky shell executors
+                <span class="badge bg-danger rounded-pill">{{.Runners.RiskyShellExecutors}}</span>
+              </li>
+              <li class="list-group-item d-flex justify-content-between align-items-center">
+                Risky docker executors
+                <span class="badge bg-warning text-dark rounded-pill">{{.Runners.RiskyDockerExecutors}}</span>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="card">
+          <div class="card-header">Pipeline Risks</div>
+          <div class="card-body">
+            <ul class="list-group list-group-flush">
+              <li class="list-group-item d-flex justify-content-between align-items-center">
+                Projects with CI
+                <span class="badge bg-primary rounded-pill">{{.Pipelines.ProjectsWithCI}}</span>
+              </li>
+              <li class="list-group-item d-flex justify-content-between align-items-center">
+                Remote includes
+                <span class="badge bg-danger rounded-pill">{{.Pipelines.RemoteIncludes}}</span>
+              </li>
+              <li class="list-group-item d-flex justify-content-between align-items-center">
+                Unpinned project includes
+                <span class="badge bg-warning text-dark rounded-pill">{{.Pipelines.UnpinnedProjectIncludes}}</span>
+              </li>
+              <li class="list-group-item d-flex justify-content-between align-items-center">
+                Components
+                <span class="badge bg-info text-dark rounded-pill">{{.Pipelines.Components}}</span>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <footer class="text-center text-muted mb-3">
+    <small>GoGatoZ {{.Version}} &mdash; {{.GeneratedAt.Format "2006-01-02"}}</small>
+  </footer>
+
+  <!-- JS Dependencies -->
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.datatables.net/2.1.8/js/dataTables.min.js"></script>
+  <script src="https://cdn.datatables.net/2.1.8/js/dataTables.bootstrap5.min.js"></script>
+  <script src="https://cdn.datatables.net/buttons/3.2.0/js/dataTables.buttons.min.js"></script>
+  <script src="https://cdn.datatables.net/buttons/3.2.0/js/buttons.bootstrap5.min.js"></script>
+  <script src="https://cdn.datatables.net/buttons/3.2.0/js/buttons.html5.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+
+  <script>
+    // Chart data injected from Go template
+    const severityData = {{.SeverityJSON}};
+    const typeData = {{.TypeCountsJSON}};
+    const infraData = {{.InfraJSON}};
+
+    // Severity Doughnut
+    new Chart(document.getElementById('chartSeverity'), {
+      type: 'doughnut',
+      data: {
+        labels: ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFO'],
+        datasets: [{
+          data: [severityData['CRITICAL'] || 0, severityData['HIGH'] || 0, severityData['MEDIUM'] || 0, severityData['LOW'] || 0, severityData['INFORMATIONAL'] || 0],
+          backgroundColor: ['#9b59b6', '#dc3545', '#fd7e14', '#ffc107', '#17a2b8']
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: { position: 'bottom' }
+        }
+      }
+    });
+
+    // Finding Types Horizontal Bar
+    if (typeData && typeData.length > 0) {
+      new Chart(document.getElementById('chartTypes'), {
+        type: 'bar',
+        data: {
+          labels: typeData.map(d => d.id),
+          datasets: [{
+            label: 'Count',
+            data: typeData.map(d => d.count),
+            backgroundColor: '#0d6efd'
+          }]
+        },
+        options: {
+          indexAxis: 'y',
+          responsive: true,
+          plugins: { legend: { display: false } },
+          scales: { x: { beginAtZero: true, ticks: { precision: 0 } } }
+        }
+      });
+    }
+
+    // Infrastructure Grouped Bar
+    new Chart(document.getElementById('chartInfra'), {
+      type: 'bar',
+      data: {
+        labels: ['Tagged', 'MR Tagged', 'Exposed', 'Shell Exec', 'Docker Exec', 'CI Projects', 'Remote Inc', 'Unpinned Inc', 'Components'],
+        datasets: [
+          {
+            label: 'Runners',
+            data: [
+              infraData.runners.ProjectsWithTagged || 0,
+              infraData.runners.MRTagged || 0,
+              infraData.runners.ExposedBroad || 0,
+              infraData.runners.RiskyShellExecutors || 0,
+              infraData.runners.RiskyDockerExecutors || 0,
+              0, 0, 0, 0
+            ],
+            backgroundColor: '#20c997'
+          },
+          {
+            label: 'Pipelines',
+            data: [
+              0, 0, 0, 0, 0,
+              infraData.pipelines.ProjectsWithCI || 0,
+              infraData.pipelines.RemoteIncludes || 0,
+              infraData.pipelines.UnpinnedProjectIncludes || 0,
+              infraData.pipelines.Components || 0
+            ],
+            backgroundColor: '#6610f2'
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { position: 'bottom' } },
+        scales: {
+          x: { stacked: false },
+          y: { beginAtZero: true, ticks: { precision: 0 } }
+        }
+      }
+    });
+
+    // DataTables
+    $(document).ready(function() {
+      $('#projectsTable').DataTable({
+        order: [[2, 'desc']],
+        pageLength: 25,
+        layout: {
+          topStart: 'buttons',
+          topEnd: 'search',
+          bottomStart: 'info',
+          bottomEnd: 'paging'
+        },
+        buttons: ['copy', 'csv']
+      });
+      $('#findingsTable').DataTable({
+        order: [[0, 'asc'], [2, 'asc']],
+        pageLength: 50,
+        layout: {
+          topStart: 'buttons',
+          topEnd: 'search',
+          bottomStart: 'info',
+          bottomEnd: 'paging'
+        },
+        buttons: ['copy', 'csv']
+      });
+      if ($('#exploitableTable').length) {
+        $('#exploitableTable').DataTable({
+          order: [[0, 'asc'], [1, 'asc']],
+          pageLength: 50,
+          layout: {
+            topStart: 'buttons',
+            topEnd: 'search',
+            bottomStart: 'info',
+            bottomEnd: 'paging'
+          },
+          buttons: ['copy', 'csv']
+        });
+      }
+      if ($('#attacksTable').length) {
+        $('#attacksTable').DataTable({
+          order: [[0, 'asc'], [1, 'asc']],
+          pageLength: 50,
+          layout: {
+            topStart: 'buttons',
+            topEnd: 'search',
+            bottomStart: 'info',
+            bottomEnd: 'paging'
+          },
+          buttons: ['copy', 'csv']
+        });
+      }
+      $(document).on('click', '.copy-btn', function() {
+        var cmd = $(this).data('cmd');
+        var btn = $(this);
+        navigator.clipboard.writeText(cmd).then(function() {
+          btn.addClass('copied');
+          setTimeout(function() { btn.removeClass('copied'); }, 1500);
+        });
+      });
+    });
+  </script>
+
+</body>
+</html>
