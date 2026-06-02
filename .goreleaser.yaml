@@ -90,11 +90,13 @@ release:
 # https://goreleaser.com/customization/docker_v2/
 dockers_v2:
   - images:
-      - "ghcr.io/mr-pmillz/gogatoz"
+      - "ghcr.io/mr-pmillz/{{ .ProjectName }}"
     tags:
       - "v{{ .Version }}"
       - "latest"
     dockerfile: Dockerfile.goreleaser
+    extra_files:
+      - entrypoint.sh
     platforms:
       - linux/amd64
       - linux/arm64

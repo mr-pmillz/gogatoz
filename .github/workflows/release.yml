@@ -13,6 +13,7 @@ permissions:
   packages: write # push images to ghcr.io
   attestations: write # write build-provenance attestations
   id-token: write # OIDC token for attestation signing
+  artifact-metadata: write
 
 jobs:
   release:
