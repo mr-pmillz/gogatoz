@@ -1,0 +1,14 @@
+:root {
+  --sl-content-width: 70em;
+}
+
+/* Tables: full width with horizontal scroll safety */
+table {
+  width: 100%;
+  display: table;
+}
+
+/* Prevent tables from overflowing container on narrow viewports */
+.sl-markdown-content {
+  overflow-x: auto;
+}

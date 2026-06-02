@@ -1,0 +1,37 @@
+*.log
+
+# Environments
+.env
+.venv
+env/
+venv/
+
+# Documentation
+/site
+docs/node_modules/
+docs/dist/
+docs/.astro/
+
+.idea/
+
+# OS Generated Files
+.DS_Store
+.DS_Store?
+
+# Output Artifacts
+*.zip
+*.sqlite3
+*.db
+*.html
+./test/
+*.xml
+public/
+Plans/
+.mcp.json
+
+output/
+*.sqlite3-shm
+*.sqlite3-wal
+.mcp.json.bak
+gogatoz
+TODO.md

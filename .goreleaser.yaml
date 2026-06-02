@@ -1,0 +1,114 @@
+# Goreleaser config for GoGatoZ
+# Builds cross-platform binaries, a source archive, and multi-arch container
+# images, then publishes a GitHub Release + pushes images to GHCR.
+# Docs: https://goreleaser.com
+project_name: gogatoz
+version: 2
+
+env:
+  - GO111MODULE=on
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - env: [CGO_ENABLED=0]
+    id: gogatoz
+    main: ./main.go
+    binary: gogatoz
+    flags:
+      - -trimpath
+    asmflags:
+      - all=-trimpath={{.Env.GOPATH}}
+    gcflags:
+      - all=-trimpath={{.Env.GOPATH}}
+    ldflags: |
+      -s -w -X github.com/mr-pmillz/gogatoz/cmd.version={{.Version}} -X github.com/mr-pmillz/gogatoz/cmd.commit={{.Commit}} -X github.com/mr-pmillz/gogatoz/cmd.date={{.CommitDate}}
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    # ensures the binary mod timestamp matches the commit timestamp (reproducible builds)
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+archives:
+  - id: tgz
+    formats: ['tar.gz']
+    format_overrides:
+      - goos: windows
+        formats: ['zip']
+
+# Configures the checksum file generation
+# https://goreleaser.com/customization/checksum/
+checksum:
+  name_template: "checksums.txt"
+
+# Change the digests filename for docker image attestation
+# https://goreleaser.com/customization/attestations/?h=docker_digest
+docker_digest:
+  name_template: "digests.txt"
+
+# Creates a source code archive (tar.gz)
+# https://goreleaser.com/customization/source/
+source:
+  enabled: true
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^chore:'
+  groups:
+    - title: Features
+      regexp: '^.*?feat(\([[:word:]]+\))??!?:.+$'
+      order: 0
+    - title: "Bug fixes"
+      regexp: '^.*?fix(\([[:word:]]+\))??!?:.+$'
+      order: 1
+    - title: "Performance"
+      regexp: '^.*?perf(\([[:word:]]+\))??!?:.+$'
+      order: 2
+
+# Configures the GitHub release
+# https://goreleaser.com/customization/release/
+release:
+  github:
+    owner: mr-pmillz
+    name: gogatoz
+  include_meta: true
+  draft: false
+  prerelease: auto
+
+# Builds multi-arch container images and pushes them to GHCR using the
+# Docker v2 API (buildx). Auth is handled by the workflow's docker login.
+# https://goreleaser.com/customization/docker_v2/
+dockers_v2:
+  - images:
+      - "ghcr.io/mr-pmillz/gogatoz"
+    tags:
+      - "v{{ .Version }}"
+      - "latest"
+    dockerfile: Dockerfile.goreleaser
+    platforms:
+      - linux/amd64
+      - linux/arm64
+    annotations:
+      "org.opencontainers.image.description": "GoGatoZ — GitLab CI/CD attack toolkit (Go port of Gato-X)"
+      "org.opencontainers.image.created": "{{ .Date }}"
+      "org.opencontainers.image.name": "{{ .ProjectName }}"
+      "org.opencontainers.image.revision": "{{ .FullCommit }}"
+      "org.opencontainers.image.version": "{{ .Version }}"
+      "org.opencontainers.image.source": "{{ .GitURL }}"
+    labels:
+      "org.opencontainers.image.description": "GoGatoZ — GitLab CI/CD attack toolkit (Go port of Gato-X)"
+      "org.opencontainers.image.created": "{{ .Date }}"
+      "org.opencontainers.image.name": "{{ .ProjectName }}"
+      "org.opencontainers.image.revision": "{{ .FullCommit }}"
+      "org.opencontainers.image.version": "{{ .Version }}"
+      "org.opencontainers.image.source": "{{ .GitURL }}"

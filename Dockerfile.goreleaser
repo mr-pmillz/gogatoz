@@ -1,0 +1,7 @@
+# Dockerfile used by goreleaser. The binary is prebuilt by goreleaser and
+# copied into the image — no go build happens here.
+FROM alpine:3.20
+RUN apk add --no-cache ca-certificates && adduser -D -u 10001 gogatoz
+COPY gogatoz /usr/local/bin/gogatoz
+USER 10001
+ENTRYPOINT ["/usr/local/bin/gogatoz"]
