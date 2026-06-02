@@ -68,6 +68,7 @@ export default defineConfig({
 							label: 'Concepts',
 							items: [
 								{ label: 'GitLab PATs', slug: 'user-guide/concepts/gitlab-pats' },
+								{ label: 'Callback Server', slug: 'user-guide/concepts/webhook-server' },
 							],
 						},
 					],
