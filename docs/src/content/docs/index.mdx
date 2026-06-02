@@ -1,0 +1,53 @@
+---
+title: GoGatoZ
+description: GitLab CI/CD security scanner and attack toolkit
+template: doc
+hero:
+  tagline: Identify exploitable GitLab CI/CD misconfigurations and privilege escalation paths. Go port of Gato-X.
+  actions:
+    - text: Quick Start
+      link: /quick-start/
+      icon: right-arrow
+      variant: primary
+    - text: Installation
+      link: /user-guide/installation/
+      variant: minimal
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+## Key Features
+
+<CardGrid stagger>
+  <Card title="Fast Scanning" icon="rocket">
+    Scan 30,000+ GitLab projects in 1-2 hours using a single GitLab PAT with configurable concurrency and rate limiting.
+  </Card>
+  <Card title="Cross-Project Analysis" icon="magnifier">
+    Analyze pipelines and transitive includes across projects to surface hidden attack paths in shared CI templates.
+  </Card>
+  <Card title="Self-Hosted Runner Attacks" icon="warning">
+    Target GitLab Runners with malicious pipelines, Runner-on-Runner implants, and secrets exfiltration payloads.
+  </Card>
+  <Card title="Post-Compromise Enumeration" icon="list-format">
+    Validate GitLab PATs, enumerate accessible resources, and identify privilege escalation paths.
+  </Card>
+</CardGrid>
+
+## What is GoGatoZ?
+
+GoGatoZ is an offensive security tool designed for Red Teamers, Bug Bounty Hunters, and Security Engineers looking to identify GitLab CI/CD misconfigurations. It focuses on:
+
+- Self-Hosted GitLab Runner enumeration using static analysis of pipeline files
+- Pwn Request (malicious merge requests) and pipeline injection enumeration
+- Post-compromise secrets enumeration and exfiltration
+- Public and private project self-hosted runner attacks and persistence mechanisms
+
+## What GoGatoZ is NOT
+
+GoGatoZ is _NOT_ a holistic tool to evaluate the GitLab CI/CD security posture of a project. It does not check for all best practices like include version pinning, branch protection, secure defaults, and other controls that are important but not directly exploitable.
+
+GoGatoZ's enumeration features focus on identifying _exploitable_ issues — issues that can be exploited without maintainer interaction (such as a Pwn Request via malicious merge request), or with mild social engineering (such as pipeline injection vulnerabilities).
+
+## Legal and Ethical Considerations
+
+GoGatoZ is designed for ethical security research purposes only. The `search` and `enumerate` modes are safe to run on public GitLab projects, but attack features should only be used with proper authorization. Always follow responsible disclosure practices when finding vulnerabilities.

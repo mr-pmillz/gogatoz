@@ -1,0 +1,455 @@
+# GoGatoZ Configuration File Example
+# =====================================
+# This file demonstrates all available configuration options for GoGatoZ.
+# CLI flags take precedence over environment variables, which take precedence over config file values.
+# 
+# To use this config file:
+#   1. Copy this file to .gogatoz.yaml in your working directory, or
+#   2. Specify the path with --config flag or GOGATOZ_CONFIG environment variable
+#
+# Note: Not all options need to be set. Uncomment and modify only the options you need.
+
+# =====================================
+# GLOBAL OPTIONS
+# =====================================
+# These options apply to all commands
+
+# Base URL of your GitLab instance
+# Default: https://gitlab.com
+# Environment: GITLAB_URL
+gitlab-url: "https://gitlab.com"
+
+# GitLab Personal Access Token (required)
+# Required scopes: api, read_repository, write_repository (for attack mode)
+# Environment: GITLAB_TOKEN
+# token: "glpat-xxxxxxxxxxxxxxxxxxxx"
+
+# Output format (text or JSON)
+# Default: false (text output)
+json: false
+
+# Enable verbose logging
+# Default: false
+verbose: false
+
+# =====================================
+# RATE LIMITING & RETRY OPTIONS
+# =====================================
+
+# Maximum requests per second to GitLab API (token bucket rate limiter)
+# Default: 8
+# Environment: GOGATOZ_RATE_RPS
+rate-rps: 8
+
+# Burst size for rate limiter tokens
+# Default: 16
+# Environment: GOGATOZ_RATE_BURST
+rate-burst: 16
+
+# Maximum retry attempts on 429/5xx responses (1 disables retries)
+# Default: 3
+# Environment: GOGATOZ_RETRY_MAX
+retry-max: 3
+
+# Custom User-Agent header (optional)
+# Environment: GOGATOZ_USER_AGENT
+# user-agent: "GoGatoZ/1.0"
+
+# =====================================
+# HTTP CONNECTION POOLING & TIMEOUTS
+# =====================================
+
+# HTTP transport: MaxIdleConns (0=default)
+# Environment: GOGATOZ_HTTP_MAX_IDLE
+# http-max-idle: 100
+
+# HTTP transport: MaxIdleConnsPerHost (0=default)
+# Environment: GOGATOZ_HTTP_MAX_IDLE_PER_HOST
+# http-max-idle-per-host: 10
+
+# HTTP transport: IdleConnTimeout (e.g., 90s)
+# Environment: GOGATOZ_HTTP_IDLE_TIMEOUT
+# http-idle-timeout: "90s"
+
+# HTTP transport: TLSHandshakeTimeout (e.g., 10s)
+# Environment: GOGATOZ_HTTP_TLS_TIMEOUT
+# http-tls-timeout: "10s"
+
+# HTTP transport: ExpectContinueTimeout (e.g., 1s)
+# Environment: GOGATOZ_HTTP_EXPECT_TIMEOUT
+# http-expect-timeout: "1s"
+
+# HTTP client: overall request timeout (e.g., 30s)
+# Environment: GOGATOZ_HTTP_REQ_TIMEOUT
+# http-req-timeout: "30s"
+
+# =====================================
+# TLS OPTIONS
+# =====================================
+# For self-hosted or internal GitLab instances
+
+# Skip TLS certificate verification (use only for testing!)
+# Default: false
+# Environment: GOGATOZ_INSECURE
+insecure-skip-tls-verify: false
+
+# Path to PEM file with additional trusted CA certificate(s)
+# Environment: GOGATOZ_CA_CERT
+# ca-cert: "/path/to/ca-bundle.pem"
+
+# =====================================
+# SEARCH COMMAND OPTIONS
+# =====================================
+# Options for: gogatoz search
+
+# Search query (matches name/path/description)
+# query: "kubernetes"
+
+# Projects per page
+# Default: 50
+# per-page: 50
+
+# Maximum number of pages to fetch (0=all)
+# Default: 1
+# max-pages: 10
+
+# Only projects owned by the authenticated user
+# Default: false
+# owned: false
+
+# Projects the authenticated user is a member of
+# Default: false
+# membership: false
+
+# Filter by visibility: public|internal|private
+# visibility: "public"
+
+# Only archived projects
+# Default: false
+# archived-only: false
+
+# Keep only projects where this exact path exists (e.g., .gitlab-ci.yml)
+# path-exists: ".gitlab-ci.yml"
+
+# Glob pattern to match repository file paths (supports *, ?, **)
+# path-pattern: "**/*.gitlab-ci.yml"
+
+# Git reference for path scan (defaults to project's default branch)
+# path-ref: "main"
+
+# Paths per page when scanning the repository tree
+# Default: 100
+# path-per-page: 100
+
+# Max pages to fetch from repository tree per project
+# Default: 10
+# path-max-pages: 10
+
+# Concurrency for per-project path scans (0=GOMAXPROCS)
+# Default: 0
+# path-concurrency: 4
+
+# Filter projects by code content match (uses per-project code search)
+# code-content: "runner"
+
+# Git reference for code search (defaults to project's default branch)
+# code-ref: "main"
+
+# Code search results per page when filtering
+# Default: 20
+# code-per-page: 20
+
+# Max pages to query per project for code search
+# Default: 1
+# code-max-pages: 1
+
+# Concurrency for per-project code searches (0=GOMAXPROCS)
+# Default: 0
+# code-concurrency: 4
+
+# Override GitLab instance just for this search
+# instance: "https://gitlab.internal.local"
+
+# Comma-separated list of languages to filter by (matches any)
+# language: "Go,Python"
+
+# Comma-separated list of project topics/tags to filter by (matches any)
+# topic: "devops,security"
+
+# Concurrency for per-project language API calls (0=GOMAXPROCS)
+# Default: 0
+# lang-concurrency: 4
+
+# Output format: text|json|jsonl (default respects --json)
+# format: "json"
+
+# Write output to file (default: stdout)
+# output: "search-results.json"
+
+# =====================================
+# ENUMERATE COMMAND OPTIONS
+# =====================================
+# Options for: gogatoz enumerate
+
+# Path to file with project identifiers (ID or path-with-namespace), one per line
+# Use '-' for stdin
+# input: "projects.txt"
+
+# Number of concurrent workers
+# Default: 16
+# concurrency: 16
+
+# Per-project timeout (e.g., 20s)
+# timeout: "20s"
+
+# Resolve includes transitively up to --include-depth
+# Default: true
+# follow-includes: true
+
+# Depth for include resolution
+# Default: 2
+# include-depth: 2
+
+# Enable deep mode (follow includes with depth >=3)
+# Default: false
+# deep: false
+
+# Allow resolving remote includes (guarded by --remote-allowlist)
+# Default: false
+# allow-remote-includes: false
+
+# Comma-separated host allowlist for remote includes
+# remote-allowlist: "raw.githubusercontent.com,gitlab.com"
+
+# Max bytes to fetch for a remote include (default 1MiB)
+# Default: 1048576
+# remote-max-bytes: 1048576
+
+# Timeout per remote include fetch (e.g., 10s)
+# Default: "10s"
+# remote-timeout: "10s"
+
+# Cross-call TTL cache for remote includes (e.g., 5m). Empty disables
+# remote-cache-ttl: "5m"
+
+# When printing text, only show projects with findings
+# Default: false
+# only-findings: false
+
+# Webhook URL to POST findings as JSON envelopes (one per finding)
+# webhook-url: "https://webhook.site/your-unique-id"
+
+# Additional HTTP header for webhook POST (repeatable)
+# webhook-header:
+#   - "Authorization: Bearer token123"
+#   - "X-Custom-Header: value"
+
+# Timeout per webhook request (e.g., 5s)
+# webhook-timeout: "5s"
+
+# Input format for --input: auto|text|json|jsonl (auto detects per line)
+# Default: "auto"
+# input-format: "auto"
+
+# Fetch and include names of protected branches for each project
+# Default: false
+# protected-branches: false
+
+# Git reference (branch or tag) to scan in addition to the default branch
+# ref: "develop"
+
+# Comma-separated list of refs to scan per project (in addition to --ref)
+# refs: "main,develop,staging"
+
+# Maximum number of refs to scan per project (0 = all provided)
+# Default: 0
+# max-refs: 3
+
+# Output format: text|json|jsonl (default respects --json)
+# format: "json"
+
+# Write output to file (default: stdout)
+# output: "enumerate-results.json"
+
+# =====================================
+# ATTACK COMMAND OPTIONS
+# =====================================
+# Options for: gogatoz attack
+
+# Target project (ID or path-with-namespace) - REQUIRED for attack
+# target: "mygroup/myproject"
+
+# Commit a .gitlab-ci.yml to the target repo
+# Default: false
+# commit-ci: false
+
+# Branch to commit the CI to (default: gogatoz-attack)
+# branch: "gogatoz-attack"
+
+# Commit message (optional)
+# message: "Add CI configuration"
+
+# Commit author name (optional; defaults to current user)
+# author-name: "Security Tester"
+
+# Commit author email (optional)
+# author-email: "security@example.com"
+
+# =====================================
+# CI CONTENT SOURCES (choose one)
+# =====================================
+
+# Inline CI YAML content
+# ci-yaml: |
+#   test:
+#     script:
+#       - echo "Hello World"
+
+# Path to CI YAML file to read
+# ci-file: "payload.yml"
+
+# Read CI YAML content from stdin
+# Default: false
+# ci-stdin: false
+
+# =====================================
+# SECRETS EXFILTRATION MODE
+# =====================================
+
+# Run secrets exfiltration attack (commits exfiltration CI)
+# Default: false
+# secrets: false
+
+# Path to RSA public key to encrypt exfiltrated data (optional)
+# pubkey-file: "pubkey.pem"
+
+# Include project variables in JSON output for --secrets
+# Default: false
+# project-vars: false
+
+# Include group variables in JSON output for --secrets
+# Default: false
+# group-vars: false
+
+# Group ID or full path for --group-vars
+# group-id: "mygroup"
+
+# Include protected variables when listing variables
+# Default: false
+# include-protected: false
+
+# =====================================
+# PAYLOAD RENDERING OPTIONS
+# =====================================
+
+# Payload type: ror-shell|pwn-request|ror|runner-on-runner|secrets|secrets-exfil
+# Use with --payload-only or as CI source with --commit-ci
+# payload: "ror-shell"
+
+# Render the selected payload YAML to stdout and exit
+# Default: false
+# payload-only: false
+
+# Payload job name (optional)
+# job-name: "attack_job"
+
+# Payload stage name (optional; default 'attack')
+# stage: "attack"
+
+# Comma-separated runner tags for the payload job or secrets mode
+# tags: "docker,shared"
+
+# Docker image for the payload job (optional)
+# image: "alpine:latest"
+
+# Add a manual rule to the payload job
+# Default: false
+# manual: false
+
+# Artifacts path to upload (optional)
+# artifacts-path: "results/"
+
+# Artifacts expire_in (e.g., 1 day)
+# artifacts-expire: "1 day"
+
+# =====================================
+# ROR-SHELL PAYLOAD OPTIONS
+# =====================================
+
+# Command for ror-shell payload (default: 'id; uname -a')
+# cmd: "id; uname -a"
+
+# Download a file instead of running a command (ror-shell)
+# download: "/etc/passwd"
+
+# =====================================
+# PWN-REQUEST PAYLOAD OPTIONS
+# =====================================
+
+# Regex for target branch name condition (pwn-request)
+# target-branch-regex: "^main$"
+
+# =====================================
+# RUNNER-ON-RUNNER PAYLOAD OPTIONS
+# =====================================
+
+# Remote script URL to execute (runner-on-runner)
+# script-url: "https://example.com/malicious.sh"
+
+# Target OS for runner-on-runner payload: linux|windows|macos
+# Default: "linux"
+# os: "linux"
+
+# Keep job alive by emitting heartbeat every N seconds
+# Default: 0 (disabled)
+# keepalive: 60
+
+# =====================================
+# RUNNER DISCOVERY
+# =====================================
+
+# Discover runner tags for the target project and exit
+# Default: false
+# discover-tags: false
+
+# Filter discovered tags by executor hint (docker|shell|kubernetes)
+# executor: "docker"
+
+# =====================================
+# SECRETS PAYLOAD OPTIONS
+# =====================================
+
+# Webhook URL to POST env dump for secrets payload (payload mode)
+# webhook: "https://webhook.site/your-unique-id"
+
+# =====================================
+# BRANCH DECONFLICT STRATEGY
+# =====================================
+
+# Branch deconflict strategy: fail|suffix|force
+# Default: "fail"
+# - fail: Error if branch exists
+# - suffix: Append timestamp suffix to branch name
+# - force: Force push to existing branch
+# deconflict: "fail"
+
+# =====================================
+# CLEANUP OPTIONS
+# =====================================
+
+# Enable cleanup mode to remove attack artifacts
+# Default: false
+# cleanup: false
+
+# Remove specified branch from target project
+# cleanup-branch: "gogatoz-attack"
+
+# Remove .gitlab-ci.yml from the target branch
+# Default: false
+# cleanup-ci: false
+
+# Revoke deploy key by ID from target project
+# revoke-deploy-key: 123
+
+# Remove member by user ID from target project
+# remove-member-id: 456

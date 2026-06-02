@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "gogatoz": {
+      "command": "go",
+      "args": ["run", ".", "mcp", "--db", "gogatoz-results.sqlite3"],
+      "cwd": "/path/to/gogatoz",
+      "env": {
+        "GITLAB_TOKEN": "${YOUR_GITLAB_TOKEN_ENV_VAR}",
+        "GITLAB_URL": "https://gitlab.com"
+      }
+    }
+  }
+}

@@ -1,0 +1,131 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '**.go'
+      - 'go.mod'
+      - 'go.sum'
+      - 'Makefile'
+      - '.golangci-lint.yml'
+      - '.github/workflows/ci.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - '**.go'
+      - 'go.mod'
+      - 'go.sum'
+      - 'Makefile'
+      - '.golangci-lint.yml'
+      - '.github/workflows/ci.yml'
+
+permissions:
+  contents: read
+  checks: write
+  pull-requests: write
+
+jobs:
+  build:
+    name: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # ratchet:actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build
+        run: |
+          CGO_ENABLED=0 go build \
+            -ldflags="-s -w" \
+            -o ./bin/gogatoz \
+            ./main.go
+
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # ratchet:actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@82606bf257cbaff209d206a39f5134f0cfbfd2ee # ratchet:golangci/golangci-lint-action@v9
+        with:
+          # version can be 'latest' or a pinned v2.x; this repo uses golangci-lint v2.
+          version: latest
+          args: --config ./.golangci-lint.yml --timeout=5m
+
+  test:
+    name: test
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # ratchet:actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Add GOPATH bin to PATH
+        run: echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: Install gotestsum
+        run: go install gotest.tools/gotestsum@latest
+
+      - name: Run unit tests with coverage
+        run: |
+          set -euo pipefail
+          mkdir -p coverage
+          gotestsum \
+            --jsonfile coverage/gotest.json \
+            --format pkgname \
+            -- ./... -race -coverprofile=coverage/coverage.txt -covermode=atomic
+
+      - name: Coverage summary
+        run: |
+          go tool cover -func=coverage/coverage.txt | tee coverage/coverage-summary.txt
+          {
+            echo "## Coverage Summary"
+            echo ""
+            echo '```'
+            tail -n 1 coverage/coverage-summary.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Generate HTML coverage report
+        run: go tool cover -html=coverage/coverage.txt -o coverage/coverage.html
+
+      - name: Upload coverage artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # ratchet:actions/upload-artifact@v7
+        if: always()
+        with:
+          name: coverage-report
+          path: |
+            coverage/coverage.txt
+            coverage/coverage.html
+            coverage/coverage-summary.txt
+            coverage/gotest.json
+          if-no-files-found: error
+
+      - name: Publish test results
+        uses: dorny/test-reporter@a43b3a5f7366b97d083190328d2c652e1a8b6aa2 # ratchet:dorny/test-reporter@v3
+        if: always()
+        with:
+          name: Go Tests
+          path: coverage/gotest.json
+          reporter: golang-json
+          fail-on-error: false

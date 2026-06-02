@@ -1,0 +1,24 @@
+stages: [build]
+
+job_img_services:
+  stage: build
+  image: alpine:3.20
+  services:
+    - postgres:13
+    - name: docker:24.0-dind
+      alias: dind
+  script:
+    - echo hello
+  artifacts:
+    paths: ["out/"]
+    expire_in: 1 week
+  cache:
+    paths: ["vendor/"]
+    key: "$CI_COMMIT_REF_NAME"
+
+job_img_map:
+  stage: build
+  image:
+    name: golang:1.22
+    entrypoint: ["/bin/sh", "-c"]
+  script: echo hi
