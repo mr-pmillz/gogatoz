@@ -43,7 +43,7 @@ jobs:
         env:
           OUTPUT: RELEASE_CHANGELOG.md
           GITHUB_REPO: ${{ github.repository }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GOGATOZ_CHANGELOG_TOKEN }}
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@06116385d9baf250c9f4dcb4858b16962ea869c3 # ratchet:docker/setup-qemu-action@v4
