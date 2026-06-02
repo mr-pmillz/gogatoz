@@ -31,23 +31,15 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      # On the first-ever release there is no prior tag to diff against, so
-      # `git-cliff --latest` would emit empty notes. Use the full changelog for
-      # the first tag and the latest-release section for every tag after that.
-      - name: Resolve changelog scope
-        id: cliff_args
+      - name: Set GOPATH
         run: |
-          if [ "$(git tag | wc -l)" -le 1 ]; then
-            echo "value=-r ." >> "$GITHUB_OUTPUT"
-          else
-            echo "value=-r . --latest" >> "$GITHUB_OUTPUT"
-          fi
+          echo "GOPATH=$(go env GOPATH)/bin" >> $GITHUB_ENV
 
-      - name: Generate release changelog
+      - name: Generate changelog
         uses: orhun/git-cliff-action@f50e11560dce63f7c33227798f90b924471a88b5 # ratchet:orhun/git-cliff-action@v4
         with:
           config: cliff.toml
-          args: ${{ steps.cliff_args.outputs.value }}
+          args: -r .  --latest
         env:
           OUTPUT: RELEASE_CHANGELOG.md
           GITHUB_REPO: ${{ github.repository }}
