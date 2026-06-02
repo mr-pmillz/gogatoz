@@ -182,7 +182,7 @@ func (cb *CallbackServer) decryptPayload(payload *ExfilPayload) (map[string]stri
 	}
 
 	// RSA decrypt (PKCS1v15, matching openssl rsautl -encrypt -pkcs)
-	aesPassphrase, err := rsa.DecryptPKCS1v15(rand.Reader, cb.privateKey, encKeyBytes)
+	aesPassphrase, err := rsa.DecryptPKCS1v15(rand.Reader, cb.privateKey, encKeyBytes) //nolint:staticcheck
 	if err != nil {
 		return nil, fmt.Errorf("rsa decrypt: %w", err)
 	}
