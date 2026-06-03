@@ -4,12 +4,10 @@ import starlight from '@astrojs/starlight';
 
 // https://astro.build/config
 export default defineConfig({
-	// Served at the ROOT of a GitHub Pages randomly-generated domain
-	// (e.g. https://<random>.pages.github.io/), so there is no `base` subpath
-	// and all asset/link URLs stay root-relative. Once the final Pages URL is
-	// known, set `site` to it to enable accurate canonical URLs and an absolute
-	// sitemap, e.g.:
-	//   site: 'https://<random>.pages.github.io',
+	// Served at https://mr-pmillz.github.io/gogatoz/ (project Pages, not user Pages),
+	// so base must match the repo name to keep asset/link URLs correct.
+	site: 'https://mr-pmillz.github.io/gogatoz',
+	base: '/gogatoz',
 	integrations: [
 		starlight({
 			title: 'GoGatoZ',

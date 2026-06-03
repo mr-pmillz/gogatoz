@@ -4,9 +4,8 @@
 #   - Enable Pages in repo Settings -> Pages with "Source: GitHub Actions".
 #   - Private repositories require a paid plan to publish GitHub Pages.
 #
-# Served at the root of the GitHub Pages domain assigned to this repo
-# (a randomly-generated https://<random>.pages.github.io/ URL), so the docs
-# build uses no `base` subpath (see docs/astro.config.mjs).
+# Served at https://mr-pmillz.github.io/gogatoz/ (project Pages subpath).
+# The `site` and `base` values in docs/astro.config.mjs must match this URL.
 
 name: Docs
 
