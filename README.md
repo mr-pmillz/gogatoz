@@ -1,7 +1,7 @@
 # GoGatoZ (GitLab Attack Toolkitz)
 
 GoGatoZ is the Golang port of Gato‑X, adapted for GitLab CI/CD instead of GitHub Actions.
-It provides three modes: search, enumerate, and attack.
+It provides multiple modes: search, enumerate, attack, pivot, secretscan, parse, report, notify, and mcp.
 
 GoGatoZ is hosted on GitHub at [mr-pmillz/gogatoz](https://github.com/mr-pmillz/gogatoz), with CI/CD on GitHub Actions and documentation published via GitHub Pages. The tool itself targets GitLab CI/CD as its scanning and attack surface.
 
