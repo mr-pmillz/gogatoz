@@ -48,7 +48,7 @@ func withFakeSecrets(fr *fakeSecrets) func() {
 func TestAttack_Secrets_Success_DefaultBranchAndPubkeyTags(t *testing.T) {
 	// ensure clean state
 	token = "tok"
-	gitlabURL = "https://gitlab.example.com"
+	gitlabURL = "https://gitlab.local"
 	atkTarget = "group/proj"
 	atkSecrets = true
 	atkCommitCI = false
@@ -61,7 +61,7 @@ func TestAttack_Secrets_Success_DefaultBranchAndPubkeyTags(t *testing.T) {
 		t.Fatal(err)
 	}
 	atkPubkeyFile = pub
-	fr := &fakeSecrets{retURL: "https://gitlab.example.com/group/proj/-/pipelines?ref=gogatoz-attack"}
+	fr := &fakeSecrets{retURL: "https://gitlab.local/group/proj/-/pipelines?ref=gogatoz-attack"}
 	defer withFakeSecrets(fr)()
 	var buf bytes.Buffer
 	attackCmd.SetOut(&buf)
@@ -86,7 +86,7 @@ func TestAttack_Secrets_Success_DefaultBranchAndPubkeyTags(t *testing.T) {
 func TestAttack_ModeSelectionValidation(t *testing.T) {
 	// both modes set should error
 	token = "tok"
-	gitlabURL = "https://gitlab.example.com"
+	gitlabURL = "https://gitlab.local"
 	atkTarget = "group/proj"
 	atkCommitCI = true
 	atkSecrets = true

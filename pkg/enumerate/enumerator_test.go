@@ -91,7 +91,7 @@ func newEnumMockServer(t *testing.T, serveCI bool) (*gitlabx.Client, *httptest.S
 			resp := map[string]any{
 				"id":                  int64(42),
 				"path_with_namespace": "group/test-project",
-				"web_url":             "https://gitlab.example.com/group/test-project",
+				"web_url":             "https://gitlab.local/group/test-project",
 				"default_branch":      "main",
 			}
 			_ = json.NewEncoder(w).Encode(resp)
@@ -326,7 +326,7 @@ func TestScanOne_FetchProtectedBranches(t *testing.T) {
 			json.NewEncoder(w).Encode(map[string]any{
 				"id":                  int64(42),
 				"path_with_namespace": "group/test-project",
-				"web_url":             "https://gitlab.example.com/group/test-project",
+				"web_url":             "https://gitlab.local/group/test-project",
 				"default_branch":      "main",
 			})
 			return
@@ -414,7 +414,7 @@ func TestScanOne_FetchRunners_ProjectScope(t *testing.T) {
 			json.NewEncoder(w).Encode(map[string]any{
 				"id":                  int64(42),
 				"path_with_namespace": "group/test-project",
-				"web_url":             "https://gitlab.example.com/group/test-project",
+				"web_url":             "https://gitlab.local/group/test-project",
 				"default_branch":      "main",
 			})
 			return
@@ -476,7 +476,7 @@ func TestScanOne_WithAnalysis(t *testing.T) {
 			json.NewEncoder(w).Encode(map[string]any{
 				"id":                  int64(42),
 				"path_with_namespace": "group/test-project",
-				"web_url":             "https://gitlab.example.com/group/test-project",
+				"web_url":             "https://gitlab.local/group/test-project",
 				"default_branch":      "main",
 			})
 			return
@@ -532,7 +532,7 @@ func TestScanOne_Redaction(t *testing.T) {
 			json.NewEncoder(w).Encode(map[string]any{
 				"id":                  int64(42),
 				"path_with_namespace": "group/test-project",
-				"web_url":             "https://gitlab.example.com/group/test-project",
+				"web_url":             "https://gitlab.local/group/test-project",
 				"default_branch":      "main",
 			})
 			return
@@ -605,7 +605,7 @@ func TestScanOne_FollowIncludes(t *testing.T) {
 			json.NewEncoder(w).Encode(map[string]any{
 				"id":                  int64(42),
 				"path_with_namespace": "group/test-project",
-				"web_url":             "https://gitlab.example.com/group/test-project",
+				"web_url":             "https://gitlab.local/group/test-project",
 				"default_branch":      "main",
 			})
 			return

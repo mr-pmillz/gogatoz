@@ -9,15 +9,15 @@ func TestNormalizeBaseURL_Variants(t *testing.T) {
 		in  string
 		out string
 	}{
-		{"gitlab.example.com", "https://gitlab.example.com"},
-		{"https://gitlab.example.com/", "https://gitlab.example.com"},
-		{"https://gitlab.example.com/api/v4", "https://gitlab.example.com"},
-		{"https://gitlab.example.com/api/v4/", "https://gitlab.example.com"},
-		{"https://gitlab.example.com/gitlab", "https://gitlab.example.com/gitlab"},
-		{"https://gitlab.example.com/gitlab/", "https://gitlab.example.com/gitlab"},
-		{"https://gitlab.example.com/gitlab/api", "https://gitlab.example.com/gitlab"},
-		{"https://gitlab.example.com/gitlab/api/v4", "https://gitlab.example.com/gitlab"},
-		{"https://gitlab.example.com/gitlab/api/v4/", "https://gitlab.example.com/gitlab"},
+		{"gitlab.local", "https://gitlab.local"},
+		{"https://gitlab.local/", "https://gitlab.local"},
+		{"https://gitlab.local/api/v4", "https://gitlab.local"},
+		{"https://gitlab.local/api/v4/", "https://gitlab.local"},
+		{"https://gitlab.local/gitlab", "https://gitlab.local/gitlab"},
+		{"https://gitlab.local/gitlab/", "https://gitlab.local/gitlab"},
+		{"https://gitlab.local/gitlab/api", "https://gitlab.local/gitlab"},
+		{"https://gitlab.local/gitlab/api/v4", "https://gitlab.local/gitlab"},
+		{"https://gitlab.local/gitlab/api/v4/", "https://gitlab.local/gitlab"},
 	}
 	for i, c := range cases {
 		got, err := normalizeBaseURL(c.in)

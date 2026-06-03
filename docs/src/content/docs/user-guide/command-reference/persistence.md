@@ -61,7 +61,7 @@ Once created, the deploy key provides Git access independent of any user token:
 ```bash
 # Clone using the deploy key
 GIT_SSH_COMMAND="ssh -i ./deploy_key -o StrictHostKeyChecking=no" \
-  git clone git@gitlab.example.com:group/project.git
+  git clone git@gitlab.local:group/project.git
 
 # Push changes (deploy key has write access)
 GIT_SSH_COMMAND="ssh -i ./deploy_key" git push origin main

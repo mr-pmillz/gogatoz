@@ -32,7 +32,7 @@ func (f *fakeRepo) DeleteFile(_ context.Context, _ any, branch, path, message st
 }
 func (f *fakeRepo) CommitCIPipeline(_ context.Context, _ any, branch, yamlContent, message string) (string, error) {
 	f.commits = append(f.commits, struct{ branch, yaml, msg string }{branch: branch, yaml: yamlContent, msg: message})
-	return "https://gitlab.example.com/group/proj/-/pipelines?ref=" + branch, nil
+	return "https://gitlab.local/group/proj/-/pipelines?ref=" + branch, nil
 }
 
 func TestEnsureBranchName_Suffix(t *testing.T) {

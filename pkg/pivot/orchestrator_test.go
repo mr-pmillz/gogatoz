@@ -159,7 +159,7 @@ func (m *mockGitLab) handler() http.Handler {
 					json.NewEncoder(w).Encode(map[string]any{
 						"id":                  p.ID,
 						"path_with_namespace": p.PathWithNamespace,
-						"web_url":             "https://gitlab.example.com/" + p.PathWithNamespace,
+						"web_url":             "https://gitlab.local/" + p.PathWithNamespace,
 						"default_branch":      p.DefaultBranch,
 						"visibility":          "private",
 					})

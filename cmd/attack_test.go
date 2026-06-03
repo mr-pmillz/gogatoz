@@ -58,7 +58,7 @@ func TestAttack_MissingTarget(t *testing.T) {
 
 // func TestAttack_ContentSourceValidation(t *testing.T) {
 //	token = "tok"
-//	gitlabURL = "https://gitlab.example.com"
+//	gitlabURL = "https://gitlab.local"
 //	cmd := attackCmd
 //	atkTarget = "group/proj"
 //	atkCommitCI = true
@@ -72,7 +72,7 @@ func TestAttack_MissingTarget(t *testing.T) {
 
 // func TestAttack_Success_InlineYAML_DefaultBranch(t *testing.T) {
 //	token = "tok"
-//	gitlabURL = "https://gitlab.example.com"
+//	gitlabURL = "https://gitlab.local"
 //	atkTarget = "group/proj"
 //	atkCommitCI = true
 //	atkBranch = "" // expect default gogatoz-attack
@@ -80,7 +80,7 @@ func TestAttack_MissingTarget(t *testing.T) {
 //	atkCIFile = ""
 //	atkCIStdin = false
 //	atkMessage = ""
-//	fr := &fakeRunner{retURL: "https://gitlab.example.com/group/proj/-/pipelines?ref=gogatoz-attack"}
+//	fr := &fakeRunner{retURL: "https://gitlab.local/group/proj/-/pipelines?ref=gogatoz-attack"}
 //	defer withFakeAttacker(fr)()
 //	var buf bytes.Buffer
 //	attackCmd.SetOut(&buf)
@@ -132,7 +132,7 @@ func TestLoadCIContent_FileAndStdin(t *testing.T) {
 
 // func TestAttack_RunnerErrorSurfaced(t *testing.T) {
 //	token = "tok"
-//	gitlabURL = "https://gitlab.example.com"
+//	gitlabURL = "https://gitlab.local"
 //	atkTarget = "group/proj"
 //	atkCommitCI = true
 //	atkBranch = "branch"

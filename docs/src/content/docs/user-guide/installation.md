@@ -71,7 +71,7 @@ export GITLAB_TOKEN=<YOUR_GITLAB_PAT>
 
 You can also set the GitLab instance URL (defaults to https://gitlab.com):
 ```bash
-export GITLAB_URL=https://gitlab.example.com
+export GITLAB_URL=https://gitlab.local
 ```
 
 GoGatoZ reads configuration from flags, environment, then config file (`.gogatoz.yaml`) in that precedence (flags > env > config).

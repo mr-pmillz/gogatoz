@@ -103,7 +103,7 @@ func newEnumMockGitLab(t *testing.T, serveCI bool, ciYAML string) (*gitlabx.Clie
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"id":                  int64(42),
 				"path_with_namespace": "group/test-project",
-				"web_url":             "https://gitlab.example.com/group/test-project",
+				"web_url":             "https://gitlab.local/group/test-project",
 				"default_branch":      "main",
 			})
 			return

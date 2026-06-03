@@ -56,7 +56,7 @@ func TestWithSOCKS5Proxy_EmptyAddr_IsNoOp(t *testing.T) {
 func TestNew_WithSOCKS5Proxy_TransportHasDialContext(t *testing.T) {
 	// Create a client with SOCKS5 — the transport should have DialContext set and Proxy nil.
 	// We can't actually connect, but we can verify the transport is configured correctly.
-	cl, err := New("https://gitlab.example.com", "test-token",
+	cl, err := New("https://gitlab.local", "test-token",
 		WithSOCKS5Proxy("127.0.0.1:1080", nil),
 		WithRateLimit(100, 100), // avoid rate limit blocking
 	)
@@ -75,7 +75,7 @@ func TestNew_WithSOCKS5Proxy_TransportHasDialContext(t *testing.T) {
 }
 
 func TestNew_WithoutSOCKS5_TransportUsesProxyFromEnvironment(t *testing.T) {
-	cl, err := New("https://gitlab.example.com", "test-token",
+	cl, err := New("https://gitlab.local", "test-token",
 		WithRateLimit(100, 100),
 	)
 	if err != nil {
@@ -92,7 +92,7 @@ func TestNew_WithoutSOCKS5_TransportUsesProxyFromEnvironment(t *testing.T) {
 }
 
 func TestNew_SOCKS5_ComposesWithTLS(t *testing.T) {
-	cl, err := New("https://gitlab.example.com", "test-token",
+	cl, err := New("https://gitlab.local", "test-token",
 		WithSOCKS5Proxy("127.0.0.1:1080", &proxy.Auth{User: "u", Password: "p"}),
 		WithInsecureTLS(true),
 		WithRateLimit(100, 100),
@@ -138,7 +138,7 @@ func extractBaseTransport(t *testing.T, rt http.RoundTripper) *http.Transport {
 
 // Verify the TLS + no-SOCKS5 composition — TLS config is set, proxy is from environment
 func TestNew_TLSWithoutSOCKS5(t *testing.T) {
-	cl, err := New("https://gitlab.example.com", "test-token",
+	cl, err := New("https://gitlab.local", "test-token",
 		WithInsecureTLS(true),
 		WithRateLimit(100, 100),
 	)

@@ -37,7 +37,7 @@ func BenchmarkEnumerateProjects(b *testing.B) {
 			resp := map[string]any{
 				"id":                  int64(42),
 				"path_with_namespace": "group/bench-project",
-				"web_url":             "https://gitlab.example.com/group/bench-project",
+				"web_url":             "https://gitlab.local/group/bench-project",
 				"default_branch":      "main",
 			}
 			_ = json.NewEncoder(w).Encode(resp)

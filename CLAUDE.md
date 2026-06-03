@@ -121,10 +121,10 @@ Located in `e2e/` with build tag `e2e`. Run against a live GitLab instance. 58 t
 
 ```bash
 # Via Makefile (TEST_API_PAT takes priority over GITLAB_TOKEN):
-TEST_API_PAT=glpat-xxx TEST_GITLAB_URL=https://gitlab.example.com TEST_RUNNER_TAG=shell_executor make test-e2e
+TEST_API_PAT=glpat-xxx TEST_GITLAB_URL=https://gitlab.local TEST_RUNNER_TAG=shell_executor make test-e2e
 
 # Directly:
-TEST_API_PAT=glpat-xxx TEST_GITLAB_URL=https://gitlab.example.com TEST_RUNNER_TAG=shell_executor \
+TEST_API_PAT=glpat-xxx TEST_GITLAB_URL=https://gitlab.local TEST_RUNNER_TAG=shell_executor \
   go test -tags e2e -v -count=1 -timeout 300s ./e2e/...
 ```
 

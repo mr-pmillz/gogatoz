@@ -25,12 +25,12 @@ import (
 
 // normalizeBaseURL ensures the provided base URL is suitable for composing GitLab API endpoints.
 // It accepts inputs like:
-//   - gitlab.example.com
-//   - https://gitlab.example.com
-//   - https://gitlab.example.com/
-//   - https://gitlab.example.com/api/v4
-//   - https://gitlab.example.com/gitlab (GitLab behind subpath)
-//   - https://gitlab.example.com/gitlab/api/v4
+//   - gitlab.local
+//   - https://gitlab.local
+//   - https://gitlab.local/
+//   - https://gitlab.local/api/v4
+//   - https://gitlab.local/gitlab (GitLab behind subpath)
+//   - https://gitlab.local/gitlab/api/v4
 //
 // It returns a URL without trailing slash and without the /api or /api/v4 suffix, preserving any
 // additional subpath if present. If the input lacks a scheme, https:// is assumed.

@@ -46,9 +46,9 @@ func TestInjectTokenIntoURL(t *testing.T) {
 		},
 		{
 			name:  "with_port",
-			url:   "https://gitlab.example.com:8443/org/repo.git",
+			url:   "https://gitlab.local:8443/org/repo.git",
 			token: "mytoken",
-			want:  "https://oauth2:mytoken@gitlab.example.com:8443/org/repo.git",
+			want:  "https://oauth2:mytoken@gitlab.local:8443/org/repo.git",
 		},
 		{
 			name:  "existing_user",

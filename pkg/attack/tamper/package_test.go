@@ -20,7 +20,7 @@ func TestPublishPackage_Success(t *testing.T) {
 				"package_id": 10,
 				"file_name":  "payload.tar.gz",
 				"size":       1024,
-				"file":       map[string]string{"url": "https://gitlab.example.com/file"},
+				"file":       map[string]string{"url": "https://gitlab.local/file"},
 			})
 			return
 		}

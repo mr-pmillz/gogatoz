@@ -53,7 +53,7 @@ func newMockGitLab() *httptest.Server {
 			json.NewEncoder(w).Encode(map[string]any{
 				"id":                  int64(42),
 				"path_with_namespace": ident,
-				"web_url":             "https://gitlab.example.com/" + ident,
+				"web_url":             "https://gitlab.local/" + ident,
 				"default_branch":      "main",
 			})
 			return
