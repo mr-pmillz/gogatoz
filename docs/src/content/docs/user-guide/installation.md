@@ -12,7 +12,7 @@ Download the latest release for your platform from the Releases page and place t
 ## Build from source
 
 Prerequisites:
-- Go 1.25+
+- Go 1.26+
 
 Steps:
 ```bash
