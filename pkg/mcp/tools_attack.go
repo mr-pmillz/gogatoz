@@ -310,7 +310,7 @@ func (s *Server) handleSecrets(ctx context.Context, att *attack.Attacker, input 
 		Method: input.ExfilMethod,
 		Target: input.ExfilTarget,
 	}
-	pipelineRefURL, err := sa.RunExfil(ctx, input.Target, finalBranch, "", tags, exfil)
+	pipelineRefURL, _, err := sa.RunExfil(ctx, input.Target, finalBranch, "", tags, exfil)
 	if err != nil {
 		out.Status = statusError
 		out.Error = fmt.Sprintf("secrets exfil: %s", err)

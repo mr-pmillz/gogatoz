@@ -23,13 +23,13 @@ type fakeSecrets struct {
 	retErr     error
 }
 
-func (f *fakeSecrets) RunExfil(_ context.Context, projectID any, branch, pubkey string, runnerTags []string, exfil attack.ExfilOptions) (string, error) {
+func (f *fakeSecrets) RunExfil(_ context.Context, projectID any, branch, pubkey string, runnerTags []string, exfil attack.ExfilOptions) (string, string, error) {
 	f.gotProject = projectID
 	f.gotBranch = branch
 	f.gotPubkey = pubkey
 	f.gotTags = runnerTags
 	f.gotExfil = exfil
-	return f.retURL, f.retErr
+	return f.retURL, "ci-test", f.retErr
 }
 
 func withFakeSecrets(fr *fakeSecrets) func() {

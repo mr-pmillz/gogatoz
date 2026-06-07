@@ -323,7 +323,7 @@ func (o *Orchestrator) attackTarget(ctx context.Context, cl *gitlabx.Client, tar
 		Target: o.opts.ExternalURL,
 	}
 
-	pipelineURL, err := sec.RunExfil(ctx, target.ProjectID, o.opts.AttackBranch, pubPEM, tags, exfil)
+	pipelineURL, _, err := sec.RunExfil(ctx, target.ProjectID, o.opts.AttackBranch, pubPEM, tags, exfil)
 	if err != nil {
 		return "", err
 	}
