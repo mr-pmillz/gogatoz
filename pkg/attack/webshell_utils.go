@@ -60,8 +60,10 @@ func PollWithTimeout(ctx context.Context, interval, timeout time.Duration, fn fu
 }
 
 // WaitForPipelineForRef polls GitLab for the latest pipeline on a project (optionally by ref)
-// and returns its ID when at least one is found, or an error on timeout.
-func WaitForPipelineForRef(ctx context.Context, client *gitlabx.Client, projectID any, ref string, interval, timeout time.Duration) (int64, error) {
+// and returns its ID when a pipeline with ID > minID is found, or an error on timeout.
+// Pass minID=0 to accept any pipeline; pass the ID of the latest pre-existing pipeline to
+// wait for a NEW pipeline (avoiding returning one created before the current commit).
+func WaitForPipelineForRef(ctx context.Context, client *gitlabx.Client, projectID any, ref string, minID int64, interval, timeout time.Duration) (int64, error) {
 	if client == nil {
 		return 0, fmt.Errorf("nil client")
 	}
@@ -103,7 +105,7 @@ func WaitForPipelineForRef(ctx context.Context, client *gitlabx.Client, projectI
 			return false, nil
 		}
 		foundID = arr[0].ID
-		return foundID > 0, nil
+		return foundID > minID, nil
 	}
 	if err := PollWithTimeout(ctx, interval, timeout, check); err != nil {
 		return 0, err

@@ -742,7 +742,7 @@ func (s *Server) waitAndLogPipeline(ctx context.Context, input attackInput, out 
 		}
 	}
 
-	pipelineID, err := attack.WaitForPipelineForRef(ctx, s.client, input.Target, branch, 2*time.Second, timeout)
+	pipelineID, err := attack.WaitForPipelineForRef(ctx, s.client, input.Target, branch, 0, 2*time.Second, timeout)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "[attack] pipeline wait: %s\n", err)
 		return

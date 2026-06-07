@@ -1206,12 +1206,17 @@ var attackCmd = &cobra.Command{
 			}
 			sr := newSecretsRunner(client, strings.TrimSpace(gitlabURL), atkAuthorName, atkAuthorEmail, 0)
 			exfil := attack.ExfilOptions{Method: atkExfilMethod, Target: atkExfilTarget}
+			// Capture the latest pipeline ID before committing so WaitForPipelineForRef
+			// returns only the NEW pipeline triggered by the exfil commit, not one created
+			// by EnsureBranch (which pushes the branch from main and triggers its own pipeline).
+			priorPipelineID, _ := attack.WaitForPipelineForRef(ctx, client, atkTarget, atkBranch, 0, 100*time.Millisecond, 2*time.Second)
 			url, err := sr.RunExfil(ctx, atkTarget, atkBranch, pubkey, tags, exfil)
 			if err != nil {
 				return err
 			}
-			// Resolve actual pipeline ID for a better URL.
-			pipelineID, waitErr := attack.WaitForPipelineForRef(ctx, client, atkTarget, atkBranch, 2*time.Second, 30*time.Second)
+			// Resolve actual pipeline ID for a better URL — require ID > priorPipelineID
+			// so we don't pick up the branch-creation pipeline.
+			pipelineID, waitErr := attack.WaitForPipelineForRef(ctx, client, atkTarget, atkBranch, priorPipelineID, 2*time.Second, 45*time.Second)
 			if waitErr == nil && pipelineID > 0 {
 				url = fmt.Sprintf("%s/%s/-/pipelines/%d", strings.TrimSuffix(gitlabURL, "/"), atkTarget, pipelineID)
 			}
@@ -1363,7 +1368,7 @@ var attackCmd = &cobra.Command{
 			return err
 		}
 		// Try to resolve actual pipeline ID for a better URL
-		pipelineID, waitErr := attack.WaitForPipelineForRef(ctx, client, atkTarget, finalBranch, 2*time.Second, 30*time.Second)
+		pipelineID, waitErr := attack.WaitForPipelineForRef(ctx, client, atkTarget, finalBranch, 0, 2*time.Second, 30*time.Second)
 		if waitErr == nil && pipelineID > 0 {
 			url = fmt.Sprintf("%s/%s/-/pipelines/%d", strings.TrimSuffix(gitlabURL, "/"), atkTarget, pipelineID)
 		}
