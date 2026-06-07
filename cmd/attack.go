@@ -1225,7 +1225,12 @@ var attackCmd = &cobra.Command{
 			)
 			exfilMethod := strings.ToLower(strings.TrimSpace(atkExfilMethod))
 			if !atkNoWait && pipelineID > 0 && (exfilMethod == "" || exfilMethod == "artifact") {
-				stdout := cmd.OutOrStdout()
+				// In JSON mode write progress to stderr so stdout stays clean JSON.
+				progressW := cmd.OutOrStdout()
+				if outputJSON {
+					progressW = cmd.ErrOrStderr()
+				}
+				stdout := progressW
 				renderInfo(stdout, fmt.Sprintf("waiting for exfiltrate job (timeout: %s)...", atkWaitTimeout))
 				exfilJobID, exfilStatus, _ = attack.WaitForJobCompletion(ctx, client, atkTarget, pipelineID, "exfiltrate", 5*time.Second, atkWaitTimeout)
 				switch exfilStatus {
