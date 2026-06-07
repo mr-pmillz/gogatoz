@@ -173,6 +173,52 @@ func persistSecretScanResults(results []secretscan.ScanResult, base string) {
 	fmt.Fprintf(os.Stderr, "[db] session %d saved (%d secret scan results, %d with findings)\n", session.ID, len(srs), withFindings)
 }
 
+// persistAttackExfil saves a secrets-mode attack result and its decrypted exfil secrets to the
+// CLI store. Non-fatal: logs to stderr on success, silently skips if the store is unavailable.
+func persistAttackExfil(gitlabURL, projectPath string, gitlabProjectID int64, webURL, branch, pipelineURL string, pipelineID, jobID int64, secrets map[string]string) {
+	if cliStore == nil {
+		return
+	}
+	now := time.Now()
+	session := &store.ScanSession{
+		GitLabURL:     gitlabURL,
+		StartedAt:     now,
+		FinishedAt:    &now,
+		Status:        "completed",
+		AttackTotal:   1,
+		AttackSuccess: 1,
+	}
+	if err := cliStore.CreateSession(session); err != nil {
+		return
+	}
+	ar := &store.AttackResult{
+		GitLabProjectID:   gitlabProjectID,
+		PathWithNamespace: projectPath,
+		WebURL:            webURL,
+		Mode:              "secrets",
+		Branch:            branch,
+		PipelineURL:       pipelineURL,
+		PipelineID:        pipelineID,
+		Status:            "success",
+	}
+	if err := cliStore.SaveAttackResult(session.ID, ar); err != nil {
+		return
+	}
+	if len(secrets) == 0 {
+		fmt.Fprintf(os.Stderr, "[db] session %d saved (attack result %d, no secrets)\n", session.ID, ar.ID)
+		return
+	}
+	secs := make([]store.AttackExfilSecret, 0, len(secrets))
+	for k, v := range secrets {
+		secs = append(secs, store.AttackExfilSecret{Key: k, Value: v})
+	}
+	if err := cliStore.SaveAttackExfilSecrets(ar.ID, secs); err != nil {
+		fmt.Fprintf(os.Stderr, "[db] session %d: attack result saved but secrets write failed: %v\n", session.ID, err)
+		return
+	}
+	fmt.Fprintf(os.Stderr, "[db] session %d saved (attack result %d, %d exfil secrets)\n", session.ID, ar.ID, len(secs))
+}
+
 // toInt64 extracts an int64 from a map value that may be int, int64, float64, or string.
 func toInt64(v any) int64 {
 	switch t := v.(type) {
