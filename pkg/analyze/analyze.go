@@ -154,9 +154,9 @@ func Run(doc *pipeline.Document, opts ...Option) ([]Finding, error) {
 		}
 	}
 
-	// 2b) Risky remote script execution in job scripts
+	// 2b) Risky remote script execution in job scripts (before, script, after)
 	for _, job := range doc.Jobs {
-		for _, line := range job.Script {
+		for _, line := range effectiveScripts(job, doc) {
 			if isRiskyRemoteScript(line) {
 				findings = append(findings, Finding{
 					ID:          "RISKY_REMOTE_SCRIPT",
@@ -270,6 +270,18 @@ func Run(doc *pipeline.Document, opts ...Option) ([]Finding, error) {
 	cachePoisonFindings := detectCachePoisoningRisk(doc)
 	findings = append(findings, cachePoisonFindings...)
 
+	// 14) LOTP: config-file-based RCE via build/lint tools in MR-triggered jobs
+	findings = append(findings, detectLOTPToolExec(doc)...)
+
+	// 15) Cache key injection via attacker-controllable CI variables
+	findings = append(findings, detectCacheKeyInjection(doc)...)
+
+	// 16) GitLab OIDC token exposed to MR-triggered jobs
+	findings = append(findings, detectOIDCTokenMRRisk(doc)...)
+
+	// 17) Downstream trigger chain abuse in MR-triggered jobs
+	findings = append(findings, detectTriggerChainRisk(doc)...)
+
 	// Attach basic recommendations
 	findings = withRecommendations(findings)
 	return findings, nil
@@ -324,11 +336,38 @@ func withRecommendations(in []Finding) []Finding {
 			in[i].Recommendation = "Require at least 2 approvals for merge requests and enable 'Prevent approval by author' in project settings. Use CODEOWNERS to enforce reviews for CI config and scripts. See: https://docs.gitlab.com/ee/user/project/merge_requests/approvals/ and https://docs.gitlab.com/ee/user/project/codeowners/" //nolint:gosec // G602: i bounded by range
 		case "CACHE_POISONING_RISK":
 			in[i].Recommendation = "Set cache policy to 'pull' for MR-triggered jobs to prevent cache writes from untrusted pipelines. Use separate cache keys per branch or pipeline source. See: https://docs.gitlab.com/ee/ci/caching/#cache-policy" //nolint:gosec // G602: i bounded by range
+		case "LOTP_TOOL_EXEC":
+			in[i].Recommendation = "Restrict MR-triggered jobs that run build/lint tools to protected branches, or use fork protection rules (CI_MERGE_REQUEST_SOURCE_PROJECT_PATH == CI_MERGE_REQUEST_TARGET_PROJECT_PATH). Consider moving tool config out of the repository or validating config file integrity before execution. See: https://boostsecurityio.github.io/lotp/ and https://docs.gitlab.com/ee/ci/pipelines/merge_request_pipelines.html" //nolint:gosec // G602: i bounded by range
+		case "CACHE_KEY_INJECTION":
+			in[i].Recommendation = "Avoid using attacker-controllable CI variables (e.g., CI_MERGE_REQUEST_TITLE, CI_COMMIT_MESSAGE) in cache keys. Use static keys or variables derived from pipeline source/branch that are not attacker-controllable. See: https://docs.gitlab.com/ee/ci/caching/#use-the-files-keyword-to-create-a-cache-key-based-on-specific-files" //nolint:gosec // G602: i bounded by range
+		case "OIDC_TOKEN_MR_RISK":
+			in[i].Recommendation = "Do not issue OIDC tokens in MR-triggered jobs — fork authors can harvest these tokens to authenticate against cloud providers (AWS, GCP, Azure). Restrict id_tokens to protected branch pipelines only. See: https://docs.gitlab.com/ee/ci/secrets/id_token_authentication.html and https://docs.gitlab.com/ee/ci/pipelines/merge_request_pipelines.html" //nolint:gosec // G602: i bounded by range
+		case "TRIGGER_CHAIN_RISK":
+			in[i].Recommendation = "Avoid triggering downstream pipelines from MR-triggered jobs. If required, ensure the downstream project restricts who can trigger pipelines and does not inherit parent secrets. Use strategy:mirror carefully and prefer strategy:depend only on protected pipelines. See: https://docs.gitlab.com/ee/ci/yaml/#trigger and https://docs.gitlab.com/ee/ci/pipelines/downstream_pipelines.html" //nolint:gosec // G602: i bounded by range
 		default:
 			in[i].Recommendation = "Review and harden configuration; apply least privilege and restrict triggers/inputs." //nolint:gosec // G602: i bounded by range
 		}
 	}
 	return in
+}
+
+// effectiveScripts returns the full ordered set of script lines a job will run:
+// before_script (job-level overrides global) + script + after_script (job-level overrides global).
+// This is the correct scope for injection and LOTP analysis.
+func effectiveScripts(job pipeline.Job, doc *pipeline.Document) []string {
+	var lines []string
+	before := job.BeforeScript
+	if before == nil {
+		before = doc.BeforeScript
+	}
+	lines = append(lines, before...)
+	lines = append(lines, job.Script...)
+	after := job.AfterScript
+	if after == nil {
+		after = doc.AfterScript
+	}
+	lines = append(lines, after...)
+	return lines
 }
 
 // isRiskyRemoteScript returns true if the script line appears to download code and execute it directly.

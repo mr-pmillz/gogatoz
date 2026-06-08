@@ -14,13 +14,14 @@ Exploitation and persistence modules for GoGatoZ. Provides CI pipeline injection
 | `secrets.go` | `SecretsAttack` wrapper for secrets enumeration and exfiltration with optional RSA encryption |
 | `persistence.go` | `Persistence` wrapper for deploy keys (RSA 2048), project members, MR-triggered pipelines |
 | `webshell.go` | `WebShell` wrapper for manual job-triggered web shells |
-| `webshell_utils.go` | Utilities: `ISOTimeNow()`, `PollWithTimeout()`, `WaitForPipelineForRef()` |
+| `webshell_utils.go` | Utilities: `ISOTimeNow()`, `PollWithTimeout()`, `WaitForPipelineForRef()`, `WaitForJobCompletion()` |
+| `lotp.go` | `LOTPAttack` wrapper; `InjectLOTPPayload()` reads+commits weaponized config files to a branch |
 
 **Subdirectories:**
 
 | Directory | Files | Purpose |
 |-----------|-------|---------|
-| `payloads/` | `payloads.go`, `payloads_test.go`, `infostealer.go`, `infostealer_test.go` | YAML payload template generators: RoR Shell, Pwn Request, Runner-on-Runner, Secrets Exfil; shell script generator: Infostealer (env dump, credential sweep, network enum, compression, encryption, HTTP/git exfil) |
+| `payloads/` | `payloads.go`, `payloads_test.go`, `infostealer.go`, `infostealer_test.go`, `lotp.go`, `lotp_test.go` | YAML payload generators: RoR Shell, Pwn Request, Runner-on-Runner, Secrets Exfil, Git Hook, Cache Poison; LOTP config-file payload generators: Phantom Gyp (binding.gyp+index.js), npm, Make, pytest, goreleaser, gradle, terraform; Infostealer shell script |
 | `c2/` | `controller.go`, `controller_test.go` | C2 session orchestration with branch deconflict strategies (fail/force/suffix) |
 | `ror/` | `ror.go` | Runner discovery and tag filtering by executor heuristics |
 | `secretsdump/` | `secretsdump.go`, `artifacts.go`, `logs.go`, `consts.go`, `logs_test.go` | Variable enumeration, ZIP artifact scraping, job log scraping for secrets |
@@ -29,11 +30,15 @@ Exploitation and persistence modules for GoGatoZ. Provides CI pipeline injection
 
 ## Exported API (Key Items)
 
-**Types:** `Attacker`, `PushCI`, `SecretsAttack`, `Persistence`, `WebShell` (root); `CommonOptions`, `RORShellOptions`, `PwnRequestOptions`, `RunnerOnRunnerOptions`, `SecretsExfilOptions`, `InfostealerOptions` (payloads); `Controller`, `StartOptions` (c2); `RunnerSummary` (ror); `Variable`, `ArtifactFinding`, `Finding` (secretsdump); `GitHookOptions`, `CachePoisonOptions` (payloads); `ScriptRef` (scriptinject); `TamperReleaseOptions`, `ReleaseInfo`, `LinkInfo`, `PackageResult`, `TamperTagOptions`, `TamperTagResult`, `TagCommitInfo` (tamper); `AutoMergeResult`, `ApprovalStatus` (persistence); `SharedRunnerInfo` (ror)
+**Types:** `Attacker`, `PushCI`, `SecretsAttack`, `Persistence`, `WebShell`, `LOTPAttack`, `LOTPResult` (root); `CommonOptions`, `RORShellOptions`, `PwnRequestOptions`, `RunnerOnRunnerOptions`, `SecretsExfilOptions`, `InfostealerOptions` (payloads); `Controller`, `StartOptions` (c2); `RunnerSummary` (ror); `Variable`, `ArtifactFinding`, `Finding` (secretsdump); `GitHookOptions`, `CachePoisonOptions` (payloads); `ScriptRef` (scriptinject); `TamperReleaseOptions`, `ReleaseInfo`, `LinkInfo`, `PackageResult`, `TamperTagOptions`, `TamperTagResult`, `TagCommitInfo` (tamper); `AutoMergeResult`, `ApprovalStatus` (persistence); `SharedRunnerInfo` (ror)
 
 **Key Functions:**
 
 - `NewAttacker(gl, baseURL, authorName, authorEmail, timeout)` -- constructor
+- `NewLOTPAttack(att)` -- wraps Attacker for LOTP config-file injection
+- `LOTPAttack.InjectLOTPPayload(ctx, projectID, branch, tool, cmd)` -- generates and commits weaponized config files to branch; returns LOTPResult
+- `payloads.GenerateLOTPPayload(tool, cmd)` -- returns LOTPPayload (tool, files, description, reference); tools: npm-gyp/gyp, npm, make, pytest, goreleaser, gradle, terraform
+- `payloads.KnownLOTPTools` -- []string of all supported LOTP tool identifiers
 - `Attacker.CommitCIPipeline(ctx, projectID, branch, yaml, message)` -- commit CI pipeline
 - `Attacker.EnsureBranch/UpsertFile/DeleteBranch/SetupUser` -- repo operations
 - `Attacker.EraseJob(ctx, projectID, jobID)` -- erase job trace (anti-forensics)

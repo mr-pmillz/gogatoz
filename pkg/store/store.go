@@ -37,6 +37,7 @@ func Open(dbPath string) (*Store, error) {
 		&EnumerateResult{},
 		&Finding{},
 		&AttackResult{},
+		&AttackExfilSecret{},
 		&SecretScanResult{},
 		&SecretFinding{},
 		&PivotSession{},
@@ -90,6 +91,20 @@ func (s *Store) SaveAttackResults(sessionID uint, results []AttackResult) error 
 		results[i].SessionID = sessionID
 	}
 	return s.db.CreateInBatches(results, 50).Error
+}
+
+// SaveAttackResult inserts a single attack result, populating its ID on success.
+func (s *Store) SaveAttackResult(sessionID uint, result *AttackResult) error {
+	result.SessionID = sessionID
+	return s.db.Create(result).Error
+}
+
+// SaveAttackExfilSecrets bulk-inserts decrypted exfil secrets linked to an attack result.
+func (s *Store) SaveAttackExfilSecrets(attackResultID uint, secrets []AttackExfilSecret) error {
+	for i := range secrets {
+		secrets[i].AttackResultID = attackResultID
+	}
+	return s.db.CreateInBatches(secrets, 100).Error
 }
 
 // SaveSecretScanResults bulk-inserts secret scan results with their nested

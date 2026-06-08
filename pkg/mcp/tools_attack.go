@@ -310,7 +310,7 @@ func (s *Server) handleSecrets(ctx context.Context, att *attack.Attacker, input 
 		Method: input.ExfilMethod,
 		Target: input.ExfilTarget,
 	}
-	pipelineRefURL, err := sa.RunExfil(ctx, input.Target, finalBranch, "", tags, exfil)
+	pipelineRefURL, _, err := sa.RunExfil(ctx, input.Target, finalBranch, "", tags, exfil)
 	if err != nil {
 		out.Status = statusError
 		out.Error = fmt.Sprintf("secrets exfil: %s", err)
@@ -742,7 +742,7 @@ func (s *Server) waitAndLogPipeline(ctx context.Context, input attackInput, out 
 		}
 	}
 
-	pipelineID, err := attack.WaitForPipelineForRef(ctx, s.client, input.Target, branch, 2*time.Second, timeout)
+	pipelineID, err := attack.WaitForPipelineForRef(ctx, s.client, input.Target, branch, 0, 2*time.Second, timeout)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "[attack] pipeline wait: %s\n", err)
 		return

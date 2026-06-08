@@ -59,6 +59,8 @@ type Job struct {
 	Name         string
 	Stage        string
 	Script       []string
+	BeforeScript []string       // job-level before_script (nil = inherits global)
+	AfterScript  []string       // job-level after_script (nil = inherits global)
 	Rules        any
 	Only         any
 	Except       any
@@ -181,6 +183,13 @@ func Parse(r io.Reader) (*Document, error) {
 		// script can be string or array of strings
 		if sc, ok := m["script"]; ok {
 			j.Script = toStringSlice(sc)
+		}
+		// before_script and after_script override the global defaults for this job
+		if bs, ok := m["before_script"]; ok {
+			j.BeforeScript = toStringSlice(bs)
+		}
+		if as, ok := m["after_script"]; ok {
+			j.AfterScript = toStringSlice(as)
 		}
 		if tg, ok := m["tags"]; ok {
 			j.Tags = toStringSlice(tg)
