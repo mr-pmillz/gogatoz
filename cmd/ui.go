@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"time"
 
 	"github.com/pterm/pterm"
@@ -50,6 +51,34 @@ func renderError(w io.Writer, msg string) {
 func renderInfo(w io.Writer, msg string) {
 	s := pterm.Info.Sprint(msg)
 	fmt.Fprintln(w, s)
+}
+
+// renderWarning writes a warning-styled message to w.
+func renderWarning(w io.Writer, msg string) {
+	s := pterm.Warning.Sprint(msg)
+	fmt.Fprintln(w, s)
+}
+
+// renderExfilSecrets prints decrypted exfil secrets as a sorted key=value table.
+func renderExfilSecrets(w io.Writer, secrets map[string]string) {
+	if len(secrets) == 0 {
+		renderInfo(w, "no secrets found in artifact")
+		return
+	}
+	keys := make([]string, 0, len(secrets))
+	for k := range secrets {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	data := pterm.TableData{{"Key", "Value"}}
+	for _, k := range keys {
+		v := secrets[k]
+		if len(v) > 120 {
+			v = v[:120] + "..."
+		}
+		data = append(data, []string{k, v})
+	}
+	_ = renderTable(w, data)
 }
 
 // formatTimestamp formats a timestamp string for table display.

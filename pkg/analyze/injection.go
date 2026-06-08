@@ -86,7 +86,7 @@ func detectVariableInjection(doc *pipeline.Document) []Finding {
 		// Check if job is triggered by MR or external events
 		mrTriggered := jobTriggersOnMR(job.Rules) || triggersOnMRViaOnly(job.Only)
 
-		for _, scriptLine := range job.Script {
+		for _, scriptLine := range effectiveScripts(job, doc) {
 			// Extract CI variables from script line
 			vars := extractCIVariables(scriptLine)
 			if len(vars) == 0 {
@@ -122,10 +122,7 @@ func detectVariableInjection(doc *pipeline.Document) []Finding {
 				}
 			}
 		}
-
-		// Also check before_script and after_script if present
-		// (These are less common in job-level but possible)
-	}
+}
 
 	return findings
 }
@@ -328,8 +325,8 @@ func detectForkScriptExecution(doc *pipeline.Document) []Finding {
 			continue
 		}
 
-		// Check each script line for local script execution
-		for _, line := range job.Script {
+		// Check each script line for local script execution (before, script, after)
+		for _, line := range effectiveScripts(job, doc) {
 			if isLocalScriptExecution(line) {
 				severity := SeverityMedium
 				desc := "MR-triggered job executes a repo-local script without fork protection. Fork MR authors can modify this script to inject arbitrary code."

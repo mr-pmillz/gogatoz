@@ -82,6 +82,14 @@ type AttackResult struct {
 	DurationMS        int64
 }
 
+// AttackExfilSecret stores a single decrypted key/value pair from an exfil artifact download.
+type AttackExfilSecret struct {
+	gorm.Model
+	AttackResultID uint   `gorm:"not null;index"`
+	Key            string `gorm:"not null"`
+	Value          string `gorm:"not null"` //nolint:gosec
+}
+
 // Finding stores a single vulnerability finding from CI/CD analysis.
 type Finding struct {
 	gorm.Model

@@ -268,7 +268,7 @@ func TestRunExfil(t *testing.T) {
 	defer ts.Close()
 
 	s := NewSecretsAttack(att)
-	url, err := s.RunExfil(context.Background(), "1", "exfil-branch", "", nil, ExfilOptions{})
+	url, _, err := s.RunExfil(context.Background(), "1", "exfil-branch", "", nil, ExfilOptions{})
 	if err != nil {
 		t.Fatalf("RunExfil: %v", err)
 	}

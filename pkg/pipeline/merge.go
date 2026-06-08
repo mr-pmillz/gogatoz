@@ -187,6 +187,12 @@ func jobFromMap(name string, m map[string]any) Job {
 	if sc, ok := m["script"]; ok {
 		j.Script = toStringSlice(sc)
 	}
+	if bs, ok := m["before_script"]; ok {
+		j.BeforeScript = toStringSlice(bs)
+	}
+	if as, ok := m["after_script"]; ok {
+		j.AfterScript = toStringSlice(as)
+	}
 	if tg, ok := m["tags"]; ok {
 		j.Tags = toStringSlice(tg)
 	}

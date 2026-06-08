@@ -65,7 +65,7 @@ func TestWaitForPipelineForRef(t *testing.T) {
 		t.Fatalf("new client: %v", err)
 	}
 	ctx := context.Background()
-	id, err := WaitForPipelineForRef(ctx, cl, 123, "", 20*time.Millisecond, 500*time.Millisecond)
+	id, err := WaitForPipelineForRef(ctx, cl, 123, "", 0, 20*time.Millisecond, 500*time.Millisecond)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
