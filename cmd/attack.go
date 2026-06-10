@@ -78,6 +78,7 @@ var (
 	atkExfilMethod string
 	atkExfilTarget string
 	atkNoWait      bool
+	atkAllVars     bool
 	atkWaitTimeout time.Duration
 	// secrets API dump options
 	atkWithProjVars     bool
@@ -1258,7 +1259,7 @@ var attackCmd = &cobra.Command{
 					renderWarning(stdout, fmt.Sprintf("exfiltrate job status: %s", exfilStatus))
 				}
 				if len(exfilSecrets) > 0 {
-					renderExfilSecrets(stdout, exfilSecrets)
+					renderExfilSecrets(stdout, exfilSecrets, atkAllVars)
 					persistAttackExfil(strings.TrimSpace(gitlabURL), atkTarget, 0, "", atkBranch, url, pipelineID, exfilJobID, exfilSecrets)
 				}
 			}
@@ -1455,6 +1456,7 @@ func init() {
 	attackCmd.Flags().StringVar(&atkExfilTarget, "exfil-target", "", "Exfil target (URL, domain, IP, or git repo URL depending on method)")
 	attackCmd.Flags().StringVar(&atkPrivkeyFile, "privkey-file", "", "RSA private key PEM for decrypting exfil artifacts (pairs with --pubkey-file)")
 	attackCmd.Flags().BoolVar(&atkNoWait, "no-wait", false, "Skip waiting for the exfiltrate job to finish (disables artifact download, decrypt, and DB store)")
+	attackCmd.Flags().BoolVar(&atkAllVars, "all-vars", false, "Show all exfiltrated variables including GitLab CI built-ins and OS variables (default: filtered)")
 	attackCmd.Flags().DurationVar(&atkWaitTimeout, "wait-timeout", 5*time.Minute, "Max time to wait for the exfiltrate job to complete (default: 5m)")
 	// secrets API dump options (for --secrets JSON output)
 	attackCmd.Flags().BoolVar(&atkWithProjVars, "project-vars", false, "Include project variables in JSON output for --secrets")
