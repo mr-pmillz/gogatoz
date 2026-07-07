@@ -122,7 +122,7 @@ func detectVariableInjection(doc *pipeline.Document) []Finding {
 				}
 			}
 		}
-}
+	}
 
 	return findings
 }

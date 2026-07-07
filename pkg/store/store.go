@@ -165,3 +165,54 @@ func (s *Store) SaveExfiltratedSecrets(pivotSessionID uint, secrets []Exfiltrate
 
 // DB exposes the raw GORM handle for advanced queries or testing.
 func (s *Store) DB() *gorm.DB { return s.db }
+
+// ---- Query methods ----
+
+// GetEnumerateResultsBySession returns all enumerate results for a session.
+func (s *Store) GetEnumerateResultsBySession(sessionID uint) ([]EnumerateResult, error) {
+	var results []EnumerateResult
+	err := s.db.Where("session_id = ?", sessionID).Preload("Findings").Find(&results).Error
+	return results, err
+}
+
+// GetAllEnumerateResults returns all enumerate results with findings preloaded.
+func (s *Store) GetAllEnumerateResults() ([]EnumerateResult, error) {
+	var results []EnumerateResult
+	err := s.db.Preload("Findings").Find(&results).Error
+	return results, err
+}
+
+// GetAllAttackResults returns all attack results.
+func (s *Store) GetAllAttackResults() ([]AttackResult, error) {
+	var results []AttackResult
+	err := s.db.Find(&results).Error
+	return results, err
+}
+
+// GetAttackResultsBySession returns attack results for a session.
+func (s *Store) GetAttackResultsBySession(sessionID uint) ([]AttackResult, error) {
+	var results []AttackResult
+	err := s.db.Where("session_id = ?", sessionID).Find(&results).Error
+	return results, err
+}
+
+// GetAttackExfilSecrets returns decrypted exfil secrets for an attack result.
+func (s *Store) GetAttackExfilSecrets(attackResultID uint) ([]AttackExfilSecret, error) {
+	var secrets []AttackExfilSecret
+	err := s.db.Where("attack_result_id = ?", attackResultID).Find(&secrets).Error
+	return secrets, err
+}
+
+// GetAllHarvestedCredentials returns all harvested credentials.
+func (s *Store) GetAllHarvestedCredentials() ([]HarvestedCredential, error) {
+	var creds []HarvestedCredential
+	err := s.db.Find(&creds).Error
+	return creds, err
+}
+
+// GetAllExfiltratedSecrets returns all exfiltrated secrets from pivot callbacks.
+func (s *Store) GetAllExfiltratedSecrets() ([]ExfiltratedSecret, error) {
+	var secrets []ExfiltratedSecret
+	err := s.db.Order("source_project_path ASC, key ASC").Find(&secrets).Error
+	return secrets, err
+}

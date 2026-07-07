@@ -59,8 +59,8 @@ type Job struct {
 	Name         string
 	Stage        string
 	Script       []string
-	BeforeScript []string       // job-level before_script (nil = inherits global)
-	AfterScript  []string       // job-level after_script (nil = inherits global)
+	BeforeScript []string // job-level before_script (nil = inherits global)
+	AfterScript  []string // job-level after_script (nil = inherits global)
 	Rules        any
 	Only         any
 	Except       any
