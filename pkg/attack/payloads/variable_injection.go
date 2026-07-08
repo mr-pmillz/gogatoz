@@ -2,7 +2,6 @@ package payloads
 
 import (
 	"fmt"
-	"os"
 	"strings"
 )
 
@@ -58,10 +57,7 @@ func buildVariableInjectionScript(o VariableInjectionOptions) string {
 		mode = "all"
 	}
 	baseURL := getBaseURL()
-	projPathEscaped := escapeProjectPath(os.Getenv("CI_PROJECT_PATH"))
-	if projPathEscaped == "" {
-		projPathEscaped = "$CI_PROJECT_PATH"
-	}
+	projPathEscaped := `$(echo "$CI_PROJECT_PATH" | sed 's|/|%2F|g')`
 
 	b.WriteString(`
 _VARINJECT() {
@@ -210,12 +206,12 @@ _VARINJECT() {
     -d '{
       "action": "var_injection_complete",
       "group": "%d",
-      "project": "%s",
-      "pipeline_id": "$CI_PIPELINE_ID",
+      "project": "'"$CI_PROJECT_PATH"'",
+      "pipeline_id": "'"$CI_PIPELINE_ID"'",
       "injected_key": "%s"
     }' \
     "%s" >/dev/null 2>&1
-`, o.GroupID, o.VarKey, o.VarKey, o.CallbackURL))
+`, o.GroupID, o.VarKey, o.CallbackURL))
 	}
 
 	b.WriteString(`  rm -rf "$_vidir"
@@ -236,21 +232,6 @@ func boolStr(b bool) string {
 	return "false"
 }
 
-// escapeProjectPath URL-encodes a GitLab project path for API use.
-func escapeProjectPath(p string) string {
-	var encoded strings.Builder
-	for _, r := range p {
-		switch r {
-		case '/':
-			encoded.WriteString("%2F")
-		case '.':
-			encoded.WriteString("%2E")
-		default:
-			encoded.WriteString(string(r))
-		}
-	}
-	return encoded.String()
-}
 
 // GenerateGroupVariableInjectionYAML is a convenience wrapper for group-level injection.
 func GenerateGroupVariableInjectionYAML(o VariableInjectionOptions) string {

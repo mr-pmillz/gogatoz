@@ -280,7 +280,7 @@ type SupplyChainWormResult struct {
 // RunSupplyChainWorm performs a supply chain worm attack across sibling repos.
 // Uses the GitLab SDK directly — no attacker package dependency — so it
 // compiles cleanly inside the payloads sub-package.
-func RunSupplyChainWorm(ctx context.Context, client *gitlab.Client, targetProjectID any, groupPath, payload string, maxRepos int, branch, _ string, authorName, authorEmail string, out io.Writer) SupplyChainWormResult {
+func RunSupplyChainWorm(ctx context.Context, client *gitlab.Client, targetProjectID any, groupPath, payload string, maxRepos int, branch string, authorName, authorEmail string, out io.Writer) SupplyChainWormResult {
 	var res SupplyChainWormResult
 	if maxRepos <= 0 {
 		maxRepos = 5

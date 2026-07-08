@@ -16,9 +16,7 @@ var (
 	queryDBPath   string
 	queryFormat   string
 	querySession  uint
-	queryProject  string
 	queryLimit    int
-	querySince    string
 	queryRedacted bool
 )
 
@@ -61,7 +59,7 @@ var sessionListCmd = &cobra.Command{
 	Short: "List all scan sessions",
 	Long:  "Display all stored scan sessions with summary statistics.",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return listSessions(queryDBPath, queryFormat)
+		return listSessions(queryFormat)
 	},
 }
 
@@ -71,7 +69,7 @@ var projectListCmd = &cobra.Command{
 	Short: "List scanned projects",
 	Long:  "Display all projects that have been scanned.",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return listProjects(queryDBPath, queryFormat, querySession)
+		return listProjects(queryFormat, querySession)
 	},
 }
 
@@ -81,7 +79,7 @@ var findingsCmd = &cobra.Command{
 	Short: "Show scan findings",
 	Long:  "Display vulnerability findings from enumerate scans.",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return listFindings(queryDBPath, queryFormat, querySession)
+		return listFindings(queryFormat, querySession)
 	},
 }
 
@@ -91,7 +89,7 @@ var attacksCmd = &cobra.Command{
 	Short: "Show attack results",
 	Long:  "Display attack operations and their outcomes.",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return listAttacks(queryDBPath, queryFormat, querySession)
+		return listAttacks(queryFormat, querySession)
 	},
 }
 
@@ -101,7 +99,7 @@ var secretsCmd = &cobra.Command{
 	Short: "Show exfiltrated secrets from attack operations",
 	Long:  "Display secrets extracted from CI/CD via attack operations (artifact downloads).",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return listExfilSecrets(queryDBPath, queryFormat)
+		return listExfilSecrets(queryFormat)
 	},
 }
 
@@ -111,7 +109,7 @@ var credentialsCmd = &cobra.Command{
 	Short: "Show harvested credentials from pivot operations",
 	Long:  "Display tokens harvested during pivot operations (shows hashes, not raw tokens).",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return listCredentials(queryDBPath, queryFormat)
+		return listCredentials(queryFormat)
 	},
 }
 
@@ -121,20 +119,20 @@ var exfilCmd = &cobra.Command{
 	Short: "Show exfiltrated secrets from ror-listen callbacks",
 	Long:  "Display secrets received via ror-listen HTTP callbacks (not artifact-based).",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return listExfilCallbacks(queryDBPath, queryFormat)
+		return listExfilCallbacks(queryFormat)
 	},
 }
 
-// redactValue returns the last 20 chars of a value with "..." prefix,
-// or the full value if redaction is not requested.
+// redactValue masks a secret value when redaction is requested.
+// Shows only the last 4 chars for values longer than 8 chars; fully masks shorter values.
 func redactValue(v string, redact bool) string {
 	if !redact {
 		return v
 	}
-	if len(v) <= 20 {
-		return "..." + v
+	if len(v) <= 8 {
+		return "****"
 	}
-	return "..." + v[len(v)-20:]
+	return "****" + v[len(v)-4:]
 }
 
 func init() {
@@ -146,9 +144,10 @@ func init() {
 		c.Flags().StringVar(&queryDBPath, "db", "", "SQLite database path (default: ~/.local/share/gogatoz/results.db)")
 		c.Flags().StringVar(&queryFormat, "format", "text", "Output format: text|json")
 		c.Flags().BoolVar(&queryRedacted, "redacted", false, "Redact (mask) secret values; unredacted by default")
-		c.Flags().IntVar(&queryLimit, "limit", 0, "Limit number of results (0 = no limit)")
-		c.Flags().StringVar(&querySince, "since", "", "Only show results after date (YYYY-MM-DD)")
 	}
+
+	// Limit flag only on sessions (the only subcommand that supports it)
+	sessionListCmd.Flags().IntVar(&queryLimit, "limit", 0, "Limit number of results (0 = no limit)")
 
 	// Session-specific flags
 	findingsCmd.Flags().UintVar(&querySession, "session", 0, "Filter by session ID")
@@ -169,7 +168,7 @@ func getDB() (*store.Store, error) {
 
 // ---- sessions ----
 
-func listSessions(dbPath, format string) error {
+func listSessions(format string) error {
 	st, err := getDB()
 	if err != nil {
 		return err
@@ -210,7 +209,7 @@ func listSessions(dbPath, format string) error {
 
 // ---- projects ----
 
-func listProjects(dbPath, format string, sessionID uint) error {
+func listProjects(format string, sessionID uint) error {
 	st, err := getDB()
 	if err != nil {
 		return err
@@ -281,7 +280,7 @@ func listProjects(dbPath, format string, sessionID uint) error {
 
 // ---- findings ----
 
-func listFindings(dbPath, format string, sessionID uint) error {
+func listFindings(format string, sessionID uint) error {
 	st, err := getDB()
 	if err != nil {
 		return err
@@ -338,35 +337,39 @@ func listFindings(dbPath, format string, sessionID uint) error {
 	}
 
 	// Group by severity
+	knownSeverities := map[string]bool{
+		"CRITICAL": true, "HIGH": true, "MEDIUM": true, "LOW": true, "INFORMATIONAL": true,
+	}
 	bySeverity := map[string][]findingView{
 		"CRITICAL":      {},
 		"HIGH":          {},
 		"MEDIUM":        {},
 		"LOW":           {},
 		"INFORMATIONAL": {},
+		"OTHER":         {},
 	}
 	for _, f := range findings {
 		s := strings.ToUpper(f.Severity)
-		if _, ok := bySeverity[s]; !ok {
-			bySeverity[s] = []findingView{}
+		if !knownSeverities[s] {
+			s = "OTHER"
 		}
 		bySeverity[s] = append(bySeverity[s], f)
 	}
 
-	for _, sev := range []string{"CRITICAL", "HIGH", "MEDIUM", "LOW", "INFORMATIONAL"} {
+	for _, sev := range []string{"CRITICAL", "HIGH", "MEDIUM", "LOW", "INFORMATIONAL", "OTHER"} {
 		list := bySeverity[sev]
 		if len(list) == 0 {
 			continue
 		}
 		fmt.Fprintln(os.Stdout, pterm.DefaultSection.Sprint(sev+" ("+fmt.Sprint(len(list))+")"))
-		data := pterm.TableData{{"Project", "Finding", "Job", "Severity"}}
+		data := pterm.TableData{{"Project", "Finding", "Job", "Severity", "Evidence"}}
 		for _, f := range list {
 			severity := strings.ToUpper(f.Severity)
 			evidence := f.Evidence
 			if len(evidence) > 80 {
 				evidence = evidence[:80] + "..."
 			}
-			data = append(data, []string{f.Project, f.FindingID, f.Job, severity})
+			data = append(data, []string{f.Project, f.FindingID, f.Job, severity, evidence})
 		}
 		_ = renderTable(os.Stdout, data)
 	}
@@ -375,7 +378,7 @@ func listFindings(dbPath, format string, sessionID uint) error {
 
 // ---- attacks ----
 
-func listAttacks(dbPath, format string, sessionID uint) error {
+func listAttacks(format string, sessionID uint) error {
 	st, err := getDB()
 	if err != nil {
 		return err
@@ -424,7 +427,7 @@ func listAttacks(dbPath, format string, sessionID uint) error {
 
 // ---- exfil secrets ----
 
-func listExfilSecrets(dbPath, format string) error {
+func listExfilSecrets(format string) error {
 	st, err := getDB()
 	if err != nil {
 		return err
@@ -505,7 +508,7 @@ func listExfilSecrets(dbPath, format string) error {
 
 // ---- credentials ----
 
-func listCredentials(dbPath, format string) error {
+func listCredentials(format string) error {
 	st, err := getDB()
 	if err != nil {
 		return err
@@ -578,7 +581,7 @@ func listCredentials(dbPath, format string) error {
 
 // ---- exfil callbacks ----
 
-func listExfilCallbacks(dbPath, format string) error {
+func listExfilCallbacks(format string) error {
 	st, err := getDB()
 	if err != nil {
 		return err

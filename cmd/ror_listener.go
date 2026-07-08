@@ -11,8 +11,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/mr-pmillz/gogatoz/pkg/store"
 )
 
 // CallbackResult holds the result of a single received callback.
@@ -25,25 +23,19 @@ type CallbackResult struct {
 
 // Listener is an HTTP server that receives exfiltrated data from ror-shell jobs.
 type Listener struct {
-	srv         *http.Server
-	addr        string
-	secretStore *store.Store
-	gitlabURL   string
-	target      string
-	results     []*CallbackResult
-	mu          sync.Mutex
-	out         io.Writer
+	srv     *http.Server
+	addr    string
+	results []*CallbackResult
+	mu      sync.Mutex
+	out     io.Writer
 }
 
 // NewListener creates a new ror-shell listener.
-func NewListener(listenAddr string, out io.Writer, secretStore *store.Store, gitlabURL, target string) *Listener {
+func NewListener(listenAddr string, out io.Writer) *Listener {
 	return &Listener{
-		addr:        listenAddr,
-		out:         out,
-		secretStore: secretStore,
-		gitlabURL:   gitlabURL,
-		target:      target,
-		results:     make([]*CallbackResult, 0),
+		addr:    listenAddr,
+		out:     out,
+		results: make([]*CallbackResult, 0),
 	}
 }
 
@@ -60,7 +52,7 @@ func (l *Listener) Run(ctx context.Context) error {
 	mux.HandleFunc("/", l.handleExfil)
 	mux.HandleFunc("/health", l.handleHealth)
 
-	l.srv = &http.Server{
+	srv := &http.Server{
 		Addr:              l.addr,
 		Handler:           mux,
 		ReadHeaderTimeout: 10 * time.Second,
@@ -68,6 +60,10 @@ func (l *Listener) Run(ctx context.Context) error {
 		WriteTimeout:      10 * time.Second,
 		IdleTimeout:       60 * time.Second,
 	}
+
+	l.mu.Lock()
+	l.srv = srv
+	l.mu.Unlock()
 
 	ln, err := net.Listen("tcp", l.addr)
 	if err != nil {
@@ -86,10 +82,10 @@ func (l *Listener) Run(ctx context.Context) error {
 		<-ctx.Done()
 		shutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		_ = l.srv.Shutdown(shutCtx)
+		_ = srv.Shutdown(shutCtx)
 	}()
 
-	if err := l.srv.Serve(ln); err != nil && err != http.ErrServerClosed {
+	if err := srv.Serve(ln); err != nil && err != http.ErrServerClosed {
 		return fmt.Errorf("serve: %w", err)
 	}
 	return nil
@@ -97,15 +93,20 @@ func (l *Listener) Run(ctx context.Context) error {
 
 // Stop gracefully shuts down the listener.
 func (l *Listener) Stop(ctx context.Context) error {
-	if l.srv == nil {
+	l.mu.Lock()
+	srv := l.srv
+	l.mu.Unlock()
+	if srv == nil {
 		return nil
 	}
-	return l.srv.Shutdown(ctx)
+	return srv.Shutdown(ctx)
 }
 
 // WaitFor blocks until the context is done or until data is received.
 // Returns all collected results.
 func (l *Listener) WaitFor(ctx context.Context, timeout time.Duration) ([]*CallbackResult, error) {
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
 	ticker := time.NewTicker(500 * time.Millisecond)
 	defer ticker.Stop()
 
@@ -113,7 +114,7 @@ func (l *Listener) WaitFor(ctx context.Context, timeout time.Duration) ([]*Callb
 		select {
 		case <-ctx.Done():
 			return l.getResults(), nil
-		case <-time.After(timeout):
+		case <-timer.C:
 			return l.getResults(), nil
 		case <-ticker.C:
 			l.mu.Lock()
@@ -176,9 +177,10 @@ func (l *Listener) handleExfil(w http.ResponseWriter, r *http.Request) {
 
 	l.mu.Lock()
 	l.results = append(l.results, result)
+	count := len(l.results)
 	l.mu.Unlock()
 
-	fmt.Fprintf(w, `{"status":"ok","received":%d}`+"\n", len(l.results))
+	fmt.Fprintf(w, `{"status":"ok","received":%d}`+"\n", count)
 }
 
 // handleHealth returns a simple health check response.

