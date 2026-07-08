@@ -300,6 +300,8 @@ func (a *Attacker) CommitCIPipeline(ctx context.Context, projectID any, branch, 
 }
 
 // SetProjectVariable creates or updates a CI variable in the project scope.
+// On 404 (variable does not exist), it falls back to CreateVariable so that
+// the caller can inject new variables, not only update existing ones.
 func (a *Attacker) SetProjectVariable(ctx context.Context, projectID any, key, value string, unprotected, masked bool, environmentScope string) (*gitlab.ProjectVariable, *gitlab.Response, error) {
 	opts := &gitlab.UpdateProjectVariableOptions{
 		Value:     new(value),
@@ -309,10 +311,31 @@ func (a *Attacker) SetProjectVariable(ctx context.Context, projectID any, key, v
 	if environmentScope != "" {
 		opts.EnvironmentScope = new(environmentScope)
 	}
-	return a.Client.GL.ProjectVariables.UpdateVariable(projectID, key, opts, gitlab.WithContext(ctx))
+	v, resp, err := a.Client.GL.ProjectVariables.UpdateVariable(projectID, key, opts, gitlab.WithContext(ctx))
+	if err == nil {
+		return v, resp, nil
+	}
+	// 404 means the variable doesn't exist — try creating it.
+	if resp != nil && resp.StatusCode == 404 {
+		createOpts := &gitlab.CreateProjectVariableOptions{
+			Key:    &key,
+			Value:  &value,
+			Masked: new(masked),
+		}
+		if !unprotected {
+			createOpts.Protected = new(true)
+		}
+		if environmentScope != "" {
+			createOpts.EnvironmentScope = new(environmentScope)
+		}
+		return a.Client.GL.ProjectVariables.CreateVariable(projectID, createOpts, gitlab.WithContext(ctx))
+	}
+	return v, resp, err
 }
 
 // SetGroupVariable creates or updates a CI variable in the group scope.
+// On 404 (variable does not exist), it falls back to CreateVariable so that
+// the caller can inject new variables, not only update existing ones.
 func (a *Attacker) SetGroupVariable(ctx context.Context, groupID, key, value string, unprotected, masked bool, environmentScope string) (*gitlab.GroupVariable, *gitlab.Response, error) {
 	opts := &gitlab.UpdateGroupVariableOptions{
 		Value:     new(value),
@@ -322,5 +345,24 @@ func (a *Attacker) SetGroupVariable(ctx context.Context, groupID, key, value str
 	if environmentScope != "" {
 		opts.EnvironmentScope = new(environmentScope)
 	}
-	return a.Client.GL.GroupVariables.UpdateVariable(groupID, key, opts, gitlab.WithContext(ctx))
+	v, resp, err := a.Client.GL.GroupVariables.UpdateVariable(groupID, key, opts, gitlab.WithContext(ctx))
+	if err == nil {
+		return v, resp, nil
+	}
+	// 404 means the variable doesn't exist — try creating it.
+	if resp != nil && resp.StatusCode == 404 {
+		createOpts := &gitlab.CreateGroupVariableOptions{
+			Key:    &key,
+			Value:  &value,
+			Masked: new(masked),
+		}
+		if !unprotected {
+			createOpts.Protected = new(true)
+		}
+		if environmentScope != "" {
+			createOpts.EnvironmentScope = new(environmentScope)
+		}
+		return a.Client.GL.GroupVariables.CreateVariable(groupID, createOpts, gitlab.WithContext(ctx))
+	}
+	return v, resp, err
 }

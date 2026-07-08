@@ -219,8 +219,8 @@ var (
 	atkVaultAddr       string // Vault server URL
 	atkVaultAuthMethod string // token|kubernetes|aws
 	// K8s secrets sweep mode (Kubernetes RBAC exploit)
-	atkK8sSecrets     bool
-	atkK8sNamespaces  string // comma-separated namespaces
+	atkK8sSecrets    bool
+	atkK8sNamespaces string // comma-separated namespaces
 	// Dead Man's Switch mode (persistence with revocation detection)
 	atkDeadManSwitch bool
 	atkDMSMonitorURL string // endpoint to probe
@@ -229,10 +229,10 @@ var (
 	atkDMSHandler    string // command on revocation
 	atkDMSPlatform   string // linux|macos
 	// Branch mutator mode (mass branch CI poisoning)
-	atkBranchMutator   bool
-	atkMutatorFile     string // file to create/update on each branch
-	atkMutatorContent  string // content to write
-	atkMutatorMaxBranches int // max branches to target
+	atkBranchMutator      bool
+	atkMutatorFile        string // file to create/update on each branch
+	atkMutatorContent     string // content to write
+	atkMutatorMaxBranches int    // max branches to target
 	// Sigstore provenance forgery mode
 	atkSigstore        bool
 	atkSigstorePackage string // package name for attestation

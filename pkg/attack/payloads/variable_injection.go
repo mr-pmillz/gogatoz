@@ -232,7 +232,6 @@ func boolStr(b bool) string {
 	return "false"
 }
 
-
 // GenerateGroupVariableInjectionYAML is a convenience wrapper for group-level injection.
 func GenerateGroupVariableInjectionYAML(o VariableInjectionOptions) string {
 	o.InjectionMode = "group"
