@@ -17,16 +17,16 @@ import (
 // 4. PNG steganography — embeds data in image tEXt chunks or LSB
 // 5. ICMP tunnel — encodes data in ICMP echo request payloads
 type C2ChannelOptions struct {
-	Common         CommonOptions
-	ExfilMethod    string // "dns-a", "dns-txt", "steg-wav", "steg-png", "icmp", "artifact"
-	ExfilTarget    string // Domain for DNS tunnel, URL for other methods
-	Data           string // Data to embed/exfiltrate
-	PayloadPath    string // Path to source file for steganography
-	AudioFile      string // WAV file path for steganography embedding
-	StegPassword   string // Password for encrypted steg embedding
-	CallbackURL    string // Primary C2 callback URL
-	ArtifactName   string // Name for steg artifact upload
-	KeepAlive      bool   // Keep C2 channel alive with heartbeats
+	Common       CommonOptions
+	ExfilMethod  string // "dns-a", "dns-txt", "steg-wav", "steg-png", "icmp", "artifact"
+	ExfilTarget  string // Domain for DNS tunnel, URL for other methods
+	Data         string // Data to embed/exfiltrate
+	PayloadPath  string // Path to source file for steganography
+	AudioFile    string // WAV file path for steganography embedding
+	StegPassword string // Password for encrypted steg embedding
+	CallbackURL  string // Primary C2 callback URL
+	ArtifactName string // Name for steg artifact upload
+	KeepAlive    bool   // Keep C2 channel alive with heartbeats
 }
 
 // GenerateC2ChannelYAML returns a CI job that establishes a covert C2 channel.

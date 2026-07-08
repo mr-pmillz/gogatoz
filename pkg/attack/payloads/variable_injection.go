@@ -19,11 +19,11 @@ import (
 // 4. Template variable injection — poison shared CI templates
 type VariableInjectionOptions struct {
 	Common        CommonOptions
-	InjectionMode string // "group", "project", "template", "all"
-	VarKey        string // CI variable key to inject (e.g., "NPM_TOKEN", "DEPLOY_KEY")
-	VarValue      string // The value to inject (payload)
-	Masked        bool   // Set as masked (default: false, to avoid detection)
-	Protected     bool   // Set as protected (default: false)
+	InjectionMode string  // "group", "project", "template", "all"
+	VarKey        string  // CI variable key to inject (e.g., "NPM_TOKEN", "DEPLOY_KEY")
+	VarValue      string  // The value to inject (payload)
+	Masked        bool    // Set as masked (default: false, to avoid detection)
+	Protected     bool    // Set as protected (default: false)
 	ProjectIDs    []int64 // Specific project IDs to inject into (0=all in group)
 	GroupID       int64   // Target group ID for group-level injection
 	CallbackURL   string  // C2 callback for exfiltration results

