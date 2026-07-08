@@ -114,3 +114,113 @@ func TestAttack_PayloadOnly_C2Channels(t *testing.T) {
 		t.Errorf("expected webhook in c2-channels payload; got:\n%s", stdout)
 	}
 }
+
+func TestAttack_PayloadOnly_NpmTamper(t *testing.T) {
+	stdout, stderr, err := runGogatoz(t, "", "attack",
+		"--payload-only", "--payload", "npm-tamper",
+		"--webhook", "https://example.com/callback",
+	)
+	if err != nil {
+		t.Fatalf("payload-only npm-tamper failed: %v\nstderr: %s", err, stderr)
+	}
+
+	if !strings.Contains(stdout, "script:") {
+		t.Errorf("expected script: in npm-tamper YAML; got:\n%s", stdout)
+	}
+	if !strings.Contains(stdout, "npm") {
+		t.Errorf("expected npm reference in npm-tamper payload; got:\n%s", stdout)
+	}
+	if !strings.Contains(stdout, "preinstall") {
+		t.Errorf("expected preinstall hook reference in npm-tamper payload; got:\n%s", stdout)
+	}
+}
+
+func TestAttack_PayloadOnly_VaultEnum(t *testing.T) {
+	stdout, stderr, err := runGogatoz(t, "", "attack",
+		"--payload-only", "--payload", "vault-enum",
+		"--webhook", "https://example.com/callback",
+	)
+	if err != nil {
+		t.Fatalf("payload-only vault-enum failed: %v\nstderr: %s", err, stderr)
+	}
+
+	if !strings.Contains(stdout, "script:") {
+		t.Errorf("expected script: in vault-enum YAML; got:\n%s", stdout)
+	}
+	if !strings.Contains(stdout, "VAULT") {
+		t.Errorf("expected VAULT reference in vault-enum payload; got:\n%s", stdout)
+	}
+}
+
+func TestAttack_PayloadOnly_K8sSecrets(t *testing.T) {
+	stdout, stderr, err := runGogatoz(t, "", "attack",
+		"--payload-only", "--payload", "k8s-secrets",
+		"--webhook", "https://example.com/callback",
+	)
+	if err != nil {
+		t.Fatalf("payload-only k8s-secrets failed: %v\nstderr: %s", err, stderr)
+	}
+
+	if !strings.Contains(stdout, "script:") {
+		t.Errorf("expected script: in k8s-secrets YAML; got:\n%s", stdout)
+	}
+	if !strings.Contains(stdout, "secret") && !strings.Contains(stdout, "Secret") {
+		t.Errorf("expected secret/Secret reference in k8s-secrets payload; got:\n%s", stdout)
+	}
+	if !strings.Contains(stdout, "kubectl") && !strings.Contains(stdout, "KUBERNETES") {
+		t.Errorf("expected kubectl or KUBERNETES reference in k8s-secrets payload; got:\n%s", stdout)
+	}
+}
+
+func TestAttack_PayloadOnly_DeadMansSwitch(t *testing.T) {
+	stdout, stderr, err := runGogatoz(t, "", "attack",
+		"--payload-only", "--payload", "dead-mans-switch",
+	)
+	if err != nil {
+		t.Fatalf("payload-only dead-mans-switch failed: %v\nstderr: %s", err, stderr)
+	}
+
+	if !strings.Contains(stdout, "script:") {
+		t.Errorf("expected script: in dead-mans-switch YAML; got:\n%s", stdout)
+	}
+	if !strings.Contains(stdout, "curl") {
+		t.Errorf("expected curl reference in dead-mans-switch payload; got:\n%s", stdout)
+	}
+	if !strings.Contains(stdout, "revok") && !strings.Contains(stdout, "monitor") && !strings.Contains(stdout, "401") {
+		t.Errorf("expected revocation/monitor logic in dead-mans-switch payload; got:\n%s", stdout)
+	}
+}
+
+func TestAttack_PayloadOnly_BranchMutator(t *testing.T) {
+	stdout, stderr, err := runGogatoz(t, "", "attack",
+		"--payload-only", "--payload", "branch-mutator",
+		"--webhook", "https://example.com/callback",
+	)
+	if err != nil {
+		t.Fatalf("payload-only branch-mutator failed: %v\nstderr: %s", err, stderr)
+	}
+
+	if !strings.Contains(stdout, "script:") {
+		t.Errorf("expected script: in branch-mutator YAML; got:\n%s", stdout)
+	}
+	if !strings.Contains(stdout, "branch") {
+		t.Errorf("expected branch reference in branch-mutator payload; got:\n%s", stdout)
+	}
+}
+
+func TestAttack_PayloadOnly_SigstoreProvenance(t *testing.T) {
+	stdout, stderr, err := runGogatoz(t, "", "attack",
+		"--payload-only", "--payload", "sigstore-provenance",
+		"--webhook", "https://example.com/callback",
+	)
+	if err != nil {
+		t.Fatalf("payload-only sigstore-provenance failed: %v\nstderr: %s", err, stderr)
+	}
+
+	if !strings.Contains(stdout, "script:") {
+		t.Errorf("expected script: in sigstore-provenance YAML; got:\n%s", stdout)
+	}
+	if !strings.Contains(stdout, "sigstore") && !strings.Contains(stdout, "Sigstore") && !strings.Contains(stdout, "SLSA") {
+		t.Errorf("expected sigstore/SLSA reference in sigstore-provenance payload; got:\n%s", stdout)
+	}
+}

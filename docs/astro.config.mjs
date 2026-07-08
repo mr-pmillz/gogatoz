@@ -48,6 +48,7 @@ export default defineConfig({
 							{ label: 'Persistence', slug: 'user-guide/use-cases/persistence' },
 								{ label: 'Lateral Movement', slug: 'user-guide/use-cases/lateral-movement' },
 								{ label: 'Supply Chain Attacks', slug: 'user-guide/use-cases/supply-chain' },
+								{ label: 'Advanced Supply Chain', slug: 'user-guide/use-cases/advanced-supply-chain' },
 								{ label: 'Reporting', slug: 'user-guide/use-cases/reporting' },
 								{ label: 'MCP Capstone Lab', slug: 'user-guide/use-cases/mcp-lab' },
 							],
