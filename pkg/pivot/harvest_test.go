@@ -144,8 +144,7 @@ func TestHarvester_MethodNotAllowed(t *testing.T) {
 		Timeout:    3 * time.Second,
 	})
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	go func() { _, _ = h.Run(ctx) }()
 	time.Sleep(200 * time.Millisecond)

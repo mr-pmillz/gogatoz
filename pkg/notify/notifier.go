@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/http"
 	"time"
 
@@ -43,9 +44,7 @@ func New(opts Options) (*Notifier, error) {
 	}
 	// Copy headers map to avoid external mutation
 	h := map[string]string{}
-	for k, v := range opts.Headers {
-		h[k] = v
-	}
+	maps.Copy(h, opts.Headers)
 	return &Notifier{url: u, headers: h, hc: hc}, nil
 }
 

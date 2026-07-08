@@ -295,7 +295,7 @@ func scanOne(ctx context.Context, cl *gitlabx.Client, ident string, opts Options
 		return r
 	}
 
-	file, resp, err := cl.GL.RepositoryFiles.GetFile(proj.ID, ".gitlab-ci.yml", &gitlab.GetFileOptions{Ref: gitlab.Ptr(refToUse)}, gitlab.WithContext(ctx))
+	file, resp, err := cl.GL.RepositoryFiles.GetFile(proj.ID, ".gitlab-ci.yml", &gitlab.GetFileOptions{Ref: new(refToUse)}, gitlab.WithContext(ctx))
 	if err != nil {
 		if resp != nil && resp.Response != nil && resp.StatusCode == 404 {
 			r.CISummary = "no .gitlab-ci.yml"

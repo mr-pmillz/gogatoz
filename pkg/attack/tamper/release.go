@@ -87,10 +87,10 @@ func TamperRelease(ctx context.Context, client *gitlabx.Client, projectID any, t
 	if opts.NewName != "" || opts.NewDescription != "" {
 		updateOpts := &gitlab.UpdateReleaseOptions{}
 		if opts.NewName != "" {
-			updateOpts.Name = gitlab.Ptr(opts.NewName)
+			updateOpts.Name = new(opts.NewName)
 		}
 		if opts.NewDescription != "" {
-			updateOpts.Description = gitlab.Ptr(opts.NewDescription)
+			updateOpts.Description = new(opts.NewDescription)
 		}
 		_, _, err = client.GL.Releases.UpdateRelease(projectID, tagName, updateOpts, gitlab.WithContext(ctx))
 		if err != nil {
@@ -116,8 +116,8 @@ func TamperRelease(ctx context.Context, client *gitlabx.Client, projectID any, t
 			}
 			// Create replacement with same name.
 			_, _, cerr := client.GL.ReleaseLinks.CreateReleaseLink(projectID, tagName, &gitlab.CreateReleaseLinkOptions{
-				Name: gitlab.Ptr(link.Name),
-				URL:  gitlab.Ptr(newURL),
+				Name: new(link.Name),
+				URL:  new(newURL),
 			}, gitlab.WithContext(ctx))
 			if cerr != nil {
 				return replaced, added, fmt.Errorf("create replacement link %q: %w", link.Name, cerr)
@@ -129,8 +129,8 @@ func TamperRelease(ctx context.Context, client *gitlabx.Client, projectID any, t
 	// Add new links.
 	for name, url := range opts.AddLinks {
 		_, _, cerr := client.GL.ReleaseLinks.CreateReleaseLink(projectID, tagName, &gitlab.CreateReleaseLinkOptions{
-			Name: gitlab.Ptr(name),
-			URL:  gitlab.Ptr(url),
+			Name: new(name),
+			URL:  new(url),
 		}, gitlab.WithContext(ctx))
 		if cerr != nil {
 			return replaced, added, fmt.Errorf("add link %q: %w", name, cerr)

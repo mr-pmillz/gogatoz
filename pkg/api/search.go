@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 
@@ -31,16 +32,16 @@ func searchProjects(ctx context.Context, cl *gitlabx.Client, opts searchProjects
 		ListOptions: gitlab.ListOptions{Page: 1, PerPage: perPage},
 	}
 	if q := strings.TrimSpace(opts.Query); q != "" {
-		listOpts.Search = gitlab.Ptr(q)
+		listOpts.Search = new(q)
 	}
 	if opts.Owned {
-		listOpts.Owned = gitlab.Ptr(true)
+		listOpts.Owned = new(true)
 	}
 	if opts.Membership {
-		listOpts.Membership = gitlab.Ptr(true)
+		listOpts.Membership = new(true)
 	}
 	if opts.Archived {
-		listOpts.Archived = gitlab.Ptr(true)
+		listOpts.Archived = new(true)
 	}
 	if v := strings.ToLower(strings.TrimSpace(opts.Visibility)); v != "" {
 		var vv gitlab.VisibilityValue
@@ -115,7 +116,7 @@ func searchProjects(ctx context.Context, cl *gitlabx.Client, opts searchProjects
 			if ref == "" {
 				return false
 			}
-			_, resp, err := cl.GL.RepositoryFiles.GetFile(p.ID, strings.TrimLeft(pe, "/"), &gitlab.GetFileOptions{Ref: gitlab.Ptr(ref)}, gitlab.WithContext(ctx))
+			_, resp, err := cl.GL.RepositoryFiles.GetFile(p.ID, strings.TrimLeft(pe, "/"), &gitlab.GetFileOptions{Ref: new(ref)}, gitlab.WithContext(ctx))
 			return err == nil && resp != nil && resp.StatusCode >= 200 && resp.StatusCode < 300
 		})
 	}
@@ -140,12 +141,7 @@ func searchProjects(ctx context.Context, cl *gitlabx.Client, opts searchProjects
 			if err != nil {
 				return false
 			}
-			for _, path := range paths {
-				if rgx.MatchString(path) {
-					return true
-				}
-			}
-			return false
+			return slices.ContainsFunc(paths, rgx.MatchString)
 		})
 	}
 
@@ -185,7 +181,7 @@ func searchProjects(ctx context.Context, cl *gitlabx.Client, opts searchProjects
 // parseCSV splits a comma-separated string into a lowercase set.
 func parseCSV(s string) map[string]struct{} {
 	m := make(map[string]struct{})
-	for _, v := range strings.Split(s, ",") {
+	for v := range strings.SplitSeq(s, ",") {
 		v = strings.ToLower(strings.TrimSpace(v))
 		if v != "" {
 			m[v] = struct{}{}
@@ -227,7 +223,7 @@ func filterConcurrent(ctx context.Context, cl *gitlabx.Client, projects []*gitla
 	out := make(chan result)
 	var wg sync.WaitGroup
 	wg.Add(conc)
-	for i := 0; i < conc; i++ {
+	for range conc {
 		go func() {
 			defer wg.Done()
 			for j := range in {
@@ -242,7 +238,7 @@ func filterConcurrent(ctx context.Context, cl *gitlabx.Client, projects []*gitla
 		close(in)
 	}()
 	var filtered []*gitlab.Project
-	for i := 0; i < len(projects); i++ {
+	for range projects {
 		r := <-out
 		if r.ok {
 			filtered = append(filtered, r.p)

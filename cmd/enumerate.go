@@ -148,7 +148,7 @@ var enumerateCmd = &cobra.Command{
 			groupIdents = append(groupIdents, strings.TrimSpace(enumGroup))
 		}
 		if strings.TrimSpace(enumGroups) != "" {
-			for _, g := range strings.Split(enumGroups, ",") {
+			for g := range strings.SplitSeq(enumGroups, ",") {
 				g = strings.TrimSpace(g)
 				if g != "" {
 					groupIdents = append(groupIdents, g)
@@ -245,8 +245,8 @@ var enumerateCmd = &cobra.Command{
 		// Redaction (off by default: findings show real secret values)
 		opts.Redact = enumRedact
 		if strings.TrimSpace(remoteAllowlist) != "" {
-			parts := strings.Split(remoteAllowlist, ",")
-			for _, p := range parts {
+			parts := strings.SplitSeq(remoteAllowlist, ",")
+			for p := range parts {
 				p = strings.TrimSpace(p)
 				if p != "" {
 					opts.RemoteAllowlist = append(opts.RemoteAllowlist, p)
@@ -274,7 +274,7 @@ var enumerateCmd = &cobra.Command{
 			refs = append(refs, strings.TrimSpace(refOne))
 		}
 		if strings.TrimSpace(refsMany) != "" {
-			for _, r := range strings.Split(refsMany, ",") {
+			for r := range strings.SplitSeq(refsMany, ",") {
 				r = strings.TrimSpace(r)
 				if r != "" {
 					refs = append(refs, r)

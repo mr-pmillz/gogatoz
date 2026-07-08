@@ -130,8 +130,8 @@ func TamperTag(ctx context.Context, client *gitlabx.Client, projectID any, opts 
 		return nil, fmt.Errorf("generate temp branch name: %w", err)
 	}
 	_, _, err = client.GL.Branches.CreateBranch(projectID, &gitlab.CreateBranchOptions{
-		Branch: gitlab.Ptr(tmpBranch),
-		Ref:    gitlab.Ptr(sourceRef),
+		Branch: new(tmpBranch),
+		Ref:    new(sourceRef),
 	}, gitlab.WithContext(ctx))
 	if err != nil {
 		return nil, fmt.Errorf("create temp branch %q from %q: %w", tmpBranch, sourceRef, err)
@@ -145,15 +145,15 @@ func TamperTag(ctx context.Context, client *gitlabx.Client, projectID any, opts 
 	// 3. Create new commit with file swap
 	action := gitlab.FileUpdate
 	commit, _, err := client.GL.Commits.CreateCommit(projectID, &gitlab.CreateCommitOptions{
-		Branch:        gitlab.Ptr(tmpBranch),
-		CommitMessage: gitlab.Ptr(commitMsg),
-		AuthorName:    gitlab.Ptr(authorName),
-		AuthorEmail:   gitlab.Ptr(authorEmail),
+		Branch:        new(tmpBranch),
+		CommitMessage: new(commitMsg),
+		AuthorName:    new(authorName),
+		AuthorEmail:   new(authorEmail),
 		Actions: []*gitlab.CommitActionOptions{
 			{
 				Action:   &action,
-				FilePath: gitlab.Ptr(targetFile),
-				Content:  gitlab.Ptr(opts.PayloadContent),
+				FilePath: new(targetFile),
+				Content:  new(opts.PayloadContent),
 			},
 		},
 	}, gitlab.WithContext(ctx))
@@ -170,8 +170,8 @@ func TamperTag(ctx context.Context, client *gitlabx.Client, projectID any, opts 
 
 	// 5. Create new tag pointing to the new commit
 	_, _, err = client.GL.Tags.CreateTag(projectID, &gitlab.CreateTagOptions{
-		TagName: gitlab.Ptr(tagName),
-		Ref:     gitlab.Ptr(newSHA),
+		TagName: new(tagName),
+		Ref:     new(newSHA),
 	}, gitlab.WithContext(ctx))
 	if err != nil {
 		return nil, fmt.Errorf("create tag %q pointing to %s: %w", tagName, newSHA, err)

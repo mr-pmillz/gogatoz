@@ -208,13 +208,13 @@ func discoverProjects(ctx context.Context, cl *gitlabx.Client, opts Options) ([]
 		ListOptions: gitlab.ListOptions{Page: 1, PerPage: perPage},
 	}
 	if q := strings.TrimSpace(opts.Query); q != "" {
-		listOpts.Search = gitlab.Ptr(q)
+		listOpts.Search = new(q)
 	}
 	if opts.Owned {
-		listOpts.Owned = gitlab.Ptr(true)
+		listOpts.Owned = new(true)
 	}
 	if opts.Membership {
-		listOpts.Membership = gitlab.Ptr(true)
+		listOpts.Membership = new(true)
 	}
 	if v := strings.ToLower(strings.TrimSpace(opts.Visibility)); v != "" {
 		var vv gitlab.VisibilityValue

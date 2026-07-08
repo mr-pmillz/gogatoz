@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -828,7 +829,7 @@ var attackCmd = &cobra.Command{
 			// Build and commit git-hook payload
 			var tags []string
 			if strings.TrimSpace(atkTags) != "" {
-				for _, t := range strings.Split(atkTags, ",") {
+				for t := range strings.SplitSeq(atkTags, ",") {
 					t = strings.TrimSpace(t)
 					if t != "" {
 						tags = append(tags, t)
@@ -1697,7 +1698,7 @@ var attackCmd = &cobra.Command{
 			// parse tags
 			var tags []string
 			if strings.TrimSpace(atkTags) != "" {
-				for _, t := range strings.Split(atkTags, ",") {
+				for t := range strings.SplitSeq(atkTags, ",") {
 					t = strings.TrimSpace(t)
 					if t != "" {
 						tags = append(tags, t)
@@ -2138,7 +2139,7 @@ func renderPayload() (string, error) {
 	// Build common options
 	var tags []string
 	if strings.TrimSpace(atkTags) != "" {
-		for _, t := range strings.Split(atkTags, ",") {
+		for t := range strings.SplitSeq(atkTags, ",") {
 			t = strings.TrimSpace(t)
 			if t != "" {
 				tags = append(tags, t)
@@ -2223,9 +2224,7 @@ func newRorShellListener(listenAddr string, out io.Writer, secretStore *store.St
 func resultsToMap(results []*CallbackResult) map[string]string {
 	combined := make(map[string]string)
 	for _, r := range results {
-		for k, v := range r.Secrets {
-			combined[k] = v
-		}
+		maps.Copy(combined, r.Secrets)
 	}
 	return combined
 }

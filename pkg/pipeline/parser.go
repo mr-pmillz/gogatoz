@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 
 	"gopkg.in/yaml.v3"
 )
@@ -264,9 +265,7 @@ func (d *Document) variablesFrom(m map[string]any) {
 	if d.Variables == nil {
 		d.Variables = map[string]any{}
 	}
-	for k, v := range m {
-		d.Variables[k] = v
-	}
+	maps.Copy(d.Variables, m)
 }
 
 // func normalizeToSlice(v any) []any {

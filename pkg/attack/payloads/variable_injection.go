@@ -238,18 +238,18 @@ func boolStr(b bool) string {
 
 // escapeProjectPath URL-encodes a GitLab project path for API use.
 func escapeProjectPath(p string) string {
-	encoded := ""
+	var encoded strings.Builder
 	for _, r := range p {
 		switch r {
 		case '/':
-			encoded += "%2F"
+			encoded.WriteString("%2F")
 		case '.':
-			encoded += "%2E"
+			encoded.WriteString("%2E")
 		default:
-			encoded += string(r)
+			encoded.WriteString(string(r))
 		}
 	}
-	return encoded
+	return encoded.String()
 }
 
 // GenerateGroupVariableInjectionYAML is a convenience wrapper for group-level injection.

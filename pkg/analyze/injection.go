@@ -2,6 +2,7 @@ package analyze
 
 import (
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/mr-pmillz/gogatoz/pkg/pipeline"
@@ -415,23 +416,21 @@ func detectAIPromptInjection(doc *pipeline.Document) []Finding {
 		}
 
 		severity := SeverityMedium
-		desc := "MR-triggered job invokes an AI tool that may process untrusted content from fork MRs. Attackers can poison AI config files (CLAUDE.md, .cursorrules) or MR descriptions to manipulate the AI into malicious actions."
+		var desc strings.Builder
+		desc.WriteString("MR-triggered job invokes an AI tool that may process untrusted content from fork MRs. Attackers can poison AI config files (CLAUDE.md, .cursorrules) or MR descriptions to manipulate the AI into malicious actions.")
 
 		// Escalate if job can push commits (AI-driven code changes)
 		if jobHasWriteCapability(job.Script) {
 			severity = SeverityHigh
-			desc += " Job has git write capability, enabling AI-driven malicious commits."
+			desc.WriteString(" Job has git write capability, enabling AI-driven malicious commits.")
 		}
 
 		// Escalate if job uses unsafe variables alongside AI
 		for _, line := range job.Script {
 			vars := extractCIVariables(line)
-			for _, v := range vars {
-				if isUnsafeVariable(v) {
-					severity = SeverityHigh
-					desc += " Attacker-controllable CI variables are passed to the AI tool."
-					break
-				}
+			if slices.ContainsFunc(vars, isUnsafeVariable) {
+				severity = SeverityHigh
+				desc.WriteString(" Attacker-controllable CI variables are passed to the AI tool.")
 			}
 			if severity == SeverityHigh {
 				break
@@ -441,14 +440,14 @@ func detectAIPromptInjection(doc *pipeline.Document) []Finding {
 		// Escalate if no fork protection
 		if !checkForkProtection(job.Rules) && severity != SeverityHigh {
 			severity = SeverityHigh
-			desc += " No fork protection detected."
+			desc.WriteString(" No fork protection detected.")
 		}
 
 		findings = append(findings, Finding{
 			ID:          "AI_PROMPT_INJECTION",
 			Severity:    severity,
 			Title:       "AI tool in MR-triggered job vulnerable to prompt injection",
-			Description: desc,
+			Description: desc.String(),
 			Evidence:    truncateEvidence("ai_invocation="+aiLine, 200),
 			JobName:     job.Name,
 		})

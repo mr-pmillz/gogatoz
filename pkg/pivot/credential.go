@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 
@@ -97,10 +98,8 @@ func shouldSkipKey(key string) bool {
 
 func isTokenCandidate(key, value string) bool {
 	upper := strings.ToUpper(key)
-	for _, name := range tokenNamePatterns {
-		if upper == name {
-			return true
-		}
+	if slices.Contains(tokenNamePatterns, upper) {
+		return true
 	}
 	for _, suffix := range tokenNameSuffixes {
 		if strings.HasSuffix(upper, suffix) {

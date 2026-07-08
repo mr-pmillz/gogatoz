@@ -187,7 +187,7 @@ func (l *Listener) handleHealth(w http.ResponseWriter, r *http.Request) {
 	count := len(l.results)
 	l.mu.Unlock()
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	json.NewEncoder(w).Encode(map[string]any{
 		"status":    "ok",
 		"results":   count,
 		"listening": true,
@@ -197,7 +197,7 @@ func (l *Listener) handleHealth(w http.ResponseWriter, r *http.Request) {
 // parseEnvVars parses raw env var output into a map.
 func parseEnvVars(raw string) map[string]string {
 	secrets := make(map[string]string)
-	for _, line := range strings.Split(raw, "\n") {
+	for line := range strings.SplitSeq(raw, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" {
 			continue

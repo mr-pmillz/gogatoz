@@ -65,9 +65,9 @@ func (p *Persistence) CreateDeployKey(ctx context.Context, projectID any, title,
 
 	// Add deploy key to project with push access (write)
 	opt := &gitlab.AddDeployKeyOptions{
-		Title:   gitlab.Ptr(title),
-		Key:     gitlab.Ptr(strings.TrimSpace(pubKeyStr)),
-		CanPush: gitlab.Ptr(true),
+		Title:   new(title),
+		Key:     new(strings.TrimSpace(pubKeyStr)),
+		CanPush: new(true),
 	}
 	dk, _, err := p.Client.GL.DeployKeys.AddDeployKey(projectID, opt, gitlab.WithContext(ctx))
 	if err != nil {
@@ -86,7 +86,7 @@ func (p *Persistence) AddProjectMemberByUsername(ctx context.Context, projectID 
 	if err != nil {
 		return err
 	}
-	users, _, err := p.Client.GL.Users.ListUsers(&gitlab.ListUsersOptions{Username: gitlab.Ptr(username)}, gitlab.WithContext(ctx))
+	users, _, err := p.Client.GL.Users.ListUsers(&gitlab.ListUsersOptions{Username: new(username)}, gitlab.WithContext(ctx))
 	if err != nil {
 		return err
 	}
@@ -94,7 +94,7 @@ func (p *Persistence) AddProjectMemberByUsername(ctx context.Context, projectID 
 		return fmt.Errorf("user not found: %s", username)
 	}
 	u := users[0]
-	opt := &gitlab.AddProjectMemberOptions{UserID: gitlab.Ptr(u.ID), AccessLevel: gitlab.Ptr(lvl)}
+	opt := &gitlab.AddProjectMemberOptions{UserID: new(u.ID), AccessLevel: new(lvl)}
 	_, _, err = p.Client.GL.ProjectMembers.AddProjectMember(projectID, opt, gitlab.WithContext(ctx))
 	return err
 }
@@ -152,7 +152,7 @@ func (p *Persistence) ApproveMergeRequest(ctx context.Context, projectID any, mr
 func (p *Persistence) MergeMergeRequest(ctx context.Context, projectID any, mrIID int64, removeSourceBranch bool) error {
 	_, _, err := p.Client.GL.MergeRequests.AcceptMergeRequest(projectID, mrIID,
 		&gitlab.AcceptMergeRequestOptions{
-			ShouldRemoveSourceBranch: gitlab.Ptr(removeSourceBranch),
+			ShouldRemoveSourceBranch: new(removeSourceBranch),
 		}, gitlab.WithContext(ctx))
 	return err
 }
