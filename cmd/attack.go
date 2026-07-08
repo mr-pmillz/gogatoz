@@ -21,6 +21,7 @@ import (
 	"github.com/mr-pmillz/gogatoz/pkg/attack/tamper"
 	"github.com/mr-pmillz/gogatoz/pkg/gitlabx"
 	"github.com/mr-pmillz/gogatoz/pkg/pipeline"
+	gitlab "gitlab.com/gitlab-org/api/client-go"
 	"github.com/mr-pmillz/gogatoz/pkg/pivot"
 	"github.com/mr-pmillz/gogatoz/pkg/store"
 	"github.com/spf13/cobra"
@@ -1032,11 +1033,30 @@ var attackCmd = &cobra.Command{
 				return fmt.Errorf("--script-payload or --script-payload-file is required for --inject-script")
 			}
 
+			// Branch handling
+			if strings.TrimSpace(atkBranch) == "" {
+				atkBranch = attack.GogatozAttacks
+			}
+			finalBranch, berr := ensureBranchDeconflict(ctx, client, atkTarget, atkBranch, atkDeconflict, atkAuthorName, atkAuthorEmail)
+			if berr != nil {
+				return berr
+			}
+
+			// Fetch the project to determine the default branch for CI config detection
+			var defaultBranch string
+			p, _, perr := client.GL.Projects.GetProject(atkTarget, &gitlab.GetProjectOptions{}, gitlab.WithContext(ctx))
+			if perr == nil && p != nil {
+				defaultBranch = p.DefaultBranch
+			}
+			if defaultBranch == "" {
+				defaultBranch = "main"
+			}
+
 			// Determine target script path
 			scriptPath := strings.TrimSpace(atkScriptPath)
 			if scriptPath == "" {
-				// Auto-detect: fetch CI config and extract script references
-				content, ferr := att.GetFileContent(ctx, atkTarget, "", ".gitlab-ci.yml")
+				// Auto-detect: fetch CI config from the default branch and extract script references
+				content, ferr := att.GetFileContent(ctx, atkTarget, defaultBranch, ".gitlab-ci.yml")
 				if ferr != nil {
 					return fmt.Errorf("fetch .gitlab-ci.yml for script detection: %w", ferr)
 				}
@@ -1052,22 +1072,14 @@ var attackCmd = &cobra.Command{
 				fmt.Fprintf(cmd.ErrOrStderr(), "[attack] auto-detected script: %s (from job %q)\n", scriptPath, refs[0].JobName)
 			}
 
-			// Branch handling
-			if strings.TrimSpace(atkBranch) == "" {
-				atkBranch = attack.GogatozAttacks
-			}
-			finalBranch, berr := ensureBranchDeconflict(ctx, client, atkTarget, atkBranch, atkDeconflict, atkAuthorName, atkAuthorEmail)
-			if berr != nil {
-				return berr
-			}
 			if err := att.EnsureBranch(ctx, atkTarget, finalBranch); err != nil {
 				return err
 			}
 
-			// Fetch original file content
-			original, ferr := att.GetFileContent(ctx, atkTarget, finalBranch, scriptPath)
+			// Fetch original file content from the default branch
+			original, ferr := att.GetFileContent(ctx, atkTarget, defaultBranch, scriptPath)
 			if ferr != nil {
-				return fmt.Errorf("fetch %s: %w", scriptPath, ferr)
+				return fmt.Errorf("fetch %s from %s: %w", scriptPath, defaultBranch, ferr)
 			}
 
 			// Inject payload

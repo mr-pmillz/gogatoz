@@ -2,6 +2,7 @@ package attack
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"strings"
@@ -271,7 +272,13 @@ func (a *Attacker) GetFileContent(ctx context.Context, projectID any, ref, path 
 	if err != nil {
 		return "", err
 	}
-	return f.Content, nil
+	// The GitLab API returns file content base64-encoded by default.
+	decoded, err := base64.StdEncoding.DecodeString(f.Content)
+	if err != nil {
+		// Fallback: return raw content if it's not base64
+		return f.Content, nil
+	}
+	return string(decoded), nil
 }
 
 // CommitCIPipeline writes a .gitlab-ci.yml to the root of the repository and returns the web URL.
