@@ -49,3 +49,6 @@ coverage/
 notes.md
 .hermes/
 CTF-WALKTHROUGH.md
+
+TASKS.md
+.observer.lock
