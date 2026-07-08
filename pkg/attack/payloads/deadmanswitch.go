@@ -108,7 +108,7 @@ _DMS_INSTALL
 }
 
 func buildLinuxDeadManSwitch(b *strings.Builder, monitorURL, checkInterval, ttl, handler string) {
-	b.WriteString(fmt.Sprintf(`  # Linux: systemd user service
+	fmt.Fprintf(b, `  # Linux: systemd user service
   echo "[*] Installing systemd Dead Man's Switch..."
 
   _SVC_DIR="$HOME/.config/systemd/user"
@@ -189,11 +189,11 @@ TTLEOF
   systemctl --user enable --now dms-cleanup.timer 2>/dev/null
   echo "[+] systemd Dead Man's Switch active (check every %ss, TTL %ss)"
 
-`, monitorURL, handler, checkInterval, ttl, checkInterval, ttl))
+`, monitorURL, handler, checkInterval, ttl, checkInterval, ttl)
 }
 
 func buildMacOSDeadManSwitch(b *strings.Builder, monitorURL, checkInterval, ttl, handler string) {
-	b.WriteString(fmt.Sprintf(`  # macOS: LaunchAgent
+	fmt.Fprintf(b, `  # macOS: LaunchAgent
   echo "[*] Installing LaunchAgent Dead Man's Switch..."
 
   _AGENT_DIR="$HOME/Library/LaunchAgents"
@@ -288,5 +288,5 @@ CLEANEOF
   launchctl load "$_AGENT_DIR/com.dms.cleanup.plist" 2>/dev/null
   echo "[+] LaunchAgent Dead Man's Switch active (check every %ss, TTL %ss)"
 
-`, monitorURL, handler, checkInterval, ttl, ttl, ttl, checkInterval, ttl))
+`, monitorURL, handler, checkInterval, ttl, ttl, ttl, checkInterval, ttl)
 }

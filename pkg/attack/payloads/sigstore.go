@@ -130,10 +130,10 @@ func buildSigstoreScript(o SigstoreOptions) string {
 	// Step 4: Build in-toto/SLSA v1 predicate (printf — no heredocs)
 	b.WriteString("  # Step 4: Build in-toto/SLSA v1 predicate\n")
 	b.WriteString("  echo \"[*] Building SLSA v1 predicate...\"\n")
-	b.WriteString(fmt.Sprintf("  _pkg_digest=$(echo -n \"%s@%s\" | sha256sum | cut -d' ' -f1)\n", pkgName, version))
+	fmt.Fprintf(&b, "  _pkg_digest=$(echo -n \"%s@%s\" | sha256sum | cut -d' ' -f1)\n", pkgName, version)
 	b.WriteString("  _started=$(date -u +%%Y-%%m-%%dT%%H:%%M:%%SZ)\n")
 	b.WriteString("  _invocation=\"${CI_PIPELINE_ID:-unknown}\"\n")
-	b.WriteString(fmt.Sprintf("  printf '{\"_type\":\"https://in-toto.io/Statement/v1\",\"subject\":[{\"name\":\"%s\",\"digest\":{\"sha256\":\"%%s\"}}],\"predicateType\":\"https://slsa.dev/provenance/v1\",\"predicate\":{\"buildDefinition\":{\"buildType\":\"https://slsa-framework.github.io/github-actions-buildtypes/workflow/v1\",\"externalParameters\":{\"source\":\"%s/%s\",\"version\":\"%s\"},\"resolvedDependencies\":[]},\"runDetails\":{\"builder\":{\"id\":\"https://github.com/slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@refs/tags/v1.9.0\"},\"metadata\":{\"invocationId\":\"%%s\",\"startedOn\":\"%%s\"}}}}' \\\n", pkgName, registryURL, pkgName, version))
+	fmt.Fprintf(&b, "  printf '{\"_type\":\"https://in-toto.io/Statement/v1\",\"subject\":[{\"name\":\"%s\",\"digest\":{\"sha256\":\"%%s\"}}],\"predicateType\":\"https://slsa.dev/provenance/v1\",\"predicate\":{\"buildDefinition\":{\"buildType\":\"https://slsa-framework.github.io/github-actions-buildtypes/workflow/v1\",\"externalParameters\":{\"source\":\"%s/%s\",\"version\":\"%s\"},\"resolvedDependencies\":[]},\"runDetails\":{\"builder\":{\"id\":\"https://github.com/slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@refs/tags/v1.9.0\"},\"metadata\":{\"invocationId\":\"%%s\",\"startedOn\":\"%%s\"}}}}' \\\n", pkgName, registryURL, pkgName, version)
 	b.WriteString("    \"$_pkg_digest\" \"$_invocation\" \"$_started\" > \"$_sdir/predicate.json\"\n")
 	b.WriteString("  echo \"[+] SLSA v1 predicate built\"\n\n")
 
@@ -182,7 +182,7 @@ func buildSigstoreScript(o SigstoreOptions) string {
 	b.WriteString("    -H \"Content-Type: application/json\" \\\n")
 	b.WriteString("    -H \"User-Agent: sigstore-go/0.6.0\" \\\n")
 	b.WriteString("    -d @\"$_sdir/bundle.sigstore.json\" \\\n")
-	b.WriteString(fmt.Sprintf("    \"%s\" >/dev/null 2>&1 || true\n", callbackURL))
+	fmt.Fprintf(&b, "    \"%s\" >/dev/null 2>&1 || true\n", callbackURL)
 	b.WriteString("  echo \"[+] Bundle exfiltrated\"\n\n")
 
 	// Cleanup

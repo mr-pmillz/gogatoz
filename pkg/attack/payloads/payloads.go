@@ -74,13 +74,6 @@ func rulesManual(manual bool) string {
 	return "\n  rules:\n    - when: manual"
 }
 
-func coAuthorTrailer(email string) string {
-	if strings.TrimSpace(email) == "" {
-		return ""
-	}
-	return fmt.Sprintf("\n\nCo-authored-by: %s", strings.TrimSpace(email))
-}
-
 // RORShellOptions models a simple web shell payload akin to the GitHub ROR_SHELL, for GitLab.
 type RORShellOptions struct {
 	Common       CommonOptions

