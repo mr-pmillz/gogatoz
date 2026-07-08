@@ -298,3 +298,29 @@ func (a *Attacker) CommitCIPipeline(ctx context.Context, projectID any, branch, 
 	}
 	return fmt.Sprintf("%s/%s/-/pipelines?ref=%s", strings.TrimSuffix(a.GitLabURL, "/"), p.PathWithNamespace, branch), nil
 }
+
+// SetProjectVariable creates or updates a CI variable in the project scope.
+func (a *Attacker) SetProjectVariable(ctx context.Context, projectID any, key, value string, unprotected, masked bool, environmentScope string) (*gitlab.ProjectVariable, *gitlab.Response, error) {
+	opts := &gitlab.UpdateProjectVariableOptions{
+		Value:     gitlab.Ptr(value),
+		Protected: gitlab.Ptr(!unprotected),
+		Masked:    gitlab.Ptr(masked),
+	}
+	if environmentScope != "" {
+		opts.EnvironmentScope = gitlab.Ptr(environmentScope)
+	}
+	return a.Client.GL.ProjectVariables.UpdateVariable(projectID, key, opts, gitlab.WithContext(ctx))
+}
+
+// SetGroupVariable creates or updates a CI variable in the group scope.
+func (a *Attacker) SetGroupVariable(ctx context.Context, groupID, key, value string, unprotected, masked bool, environmentScope string) (*gitlab.GroupVariable, *gitlab.Response, error) {
+	opts := &gitlab.UpdateGroupVariableOptions{
+		Value:     gitlab.Ptr(value),
+		Protected: gitlab.Ptr(!unprotected),
+		Masked:    gitlab.Ptr(masked),
+	}
+	if environmentScope != "" {
+		opts.EnvironmentScope = gitlab.Ptr(environmentScope)
+	}
+	return a.Client.GL.GroupVariables.UpdateVariable(groupID, key, opts, gitlab.WithContext(ctx))
+}
