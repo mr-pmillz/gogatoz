@@ -114,6 +114,33 @@ gogatoz bh queries --url https://bloodhound.example.com --token-id XXX --token-k
 | `CICD_TriggersDownstream` | **yes** | Downstream trigger |
 | `CICD_SharedRunner` | **yes** | Shared runner link |
 
+## CTF Challenge: Dependency Pwnage Matrix (Flag 27, 500 pts)
+
+**Track**: Dependency Pwnage Matrix
+**Entry point**: cicd-bot PAT from Flag 1
+**Objective**: Discover and exploit a transitive CI/CD dependency chain to reach crown jewel secrets
+
+### Challenge Design
+
+Three projects form a transitive include chain:
+```
+vuln-dep-leaf → includes → vuln-dep-middle → includes → vuln-dep-crown (FLAG_27)
+```
+
+The student must:
+1. Use `gogatoz bloodhound export` to generate the attack surface graph
+2. Upload to BloodHound-CE and run the "Dependency Pwnage Matrix" Cypher query
+3. Discover the transitive chain: leaf → middle → crown
+4. Exploit `vuln-dep-leaf` (broadest attack surface) to inject CI that traverses the dependency chain to access `vuln-dep-crown`'s `FLAG_27` variable
+
+### Repos Created
+- `root/vuln-dep-leaf` — Frontend app, includes `root/vuln-dep-middle/middle-template.yml`, broad MR triggers
+- `root/vuln-dep-middle` — Middleware, includes `root/vuln-dep-crown/crown-template.yml`, extends crown deploy
+- `root/vuln-dep-crown` — Crown jewels, has `FLAG_27` and `CROWN_API_KEY` CI variables
+
+### Flag Value
+`FLAG+d3p_pwn4g3_m4tr1x_tr4ns1t1v3_ch41n_cr0wn_j3w3ls+`
+
 ## Architecture Decisions
 
 1. **New `pkg/bloodhound/` package** -- separate from `pkg/graph/` (different data model and purpose)
