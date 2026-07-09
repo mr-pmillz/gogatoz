@@ -1550,11 +1550,34 @@ var attackCmd = &cobra.Command{
 			if strings.TrimSpace(atkMessage) == "" {
 				atkMessage = "build: optimize container runtime"
 			}
+			var tags []string
+			if strings.TrimSpace(atkTags) != "" {
+				for t := range strings.SplitSeq(atkTags, ",") {
+					t = strings.TrimSpace(t)
+					if t != "" {
+						tags = append(tags, t)
+					}
+				}
+			}
+			if len(tags) == 0 {
+				tags = []string{"docker"}
+			}
+			ceImage := strings.TrimSpace(atkImage)
+			if ceImage == "" {
+				ceImage = "docker:dind"
+			}
 			yaml := payloadgen.GenerateContainerEscapeYAML(payloadgen.ContainerEscapeOptions{
 				Common: payloadgen.CommonOptions{
-					Image: "docker:dind", // privileged Docker-in-Docker
-					Tags:  []string{"docker"},
+					JobName:         strings.TrimSpace(atkJobName),
+					Stage:           strings.TrimSpace(atkStage),
+					Image:           ceImage,
+					Tags:            tags,
+					Manual:          atkManual,
+					ArtifactsPath:   strings.TrimSpace(atkArtifactsPath),
+					ArtifactsExpire: strings.TrimSpace(atkArtifactsExpire),
 				},
+				ExfilMethod:  strings.TrimSpace(atkExfilMethod),
+				ExfilTarget:  strings.TrimSpace(atkExfilTarget),
 				EscapeMethod: escapeMethod,
 				EscapeCmd:    escapeCmd,
 				MountPath:    mountPath,
@@ -1718,10 +1741,25 @@ var attackCmd = &cobra.Command{
 			if strings.TrimSpace(atkMessage) == "" {
 				atkMessage = "tools: add network diagnostics"
 			}
+			var tags []string
+			if strings.TrimSpace(atkTags) != "" {
+				for t := range strings.SplitSeq(atkTags, ",") {
+					t = strings.TrimSpace(t)
+					if t != "" {
+						tags = append(tags, t)
+					}
+				}
+			}
+			if len(tags) == 0 {
+				tags = []string{"shell_executor"}
+			}
 			yaml := payloadgen.GenerateC2ChannelYAML(payloadgen.C2ChannelOptions{
 				Common: payloadgen.CommonOptions{
-					Image: "alpine:latest",
-					Tags:  []string{"shell_executor"},
+					JobName: strings.TrimSpace(atkJobName),
+					Stage:   strings.TrimSpace(atkStage),
+					Image:   strings.TrimSpace(atkImage),
+					Tags:    tags,
+					Manual:  atkManual,
 				},
 				ExfilMethod: method,
 				ExfilTarget: target,

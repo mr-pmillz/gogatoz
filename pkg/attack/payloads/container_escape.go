@@ -45,7 +45,15 @@ stages: [%s]
   script:
     - |
       %s
-  allow_failure: true%s
+  allow_failure: true
+  artifacts:
+    when: always
+    paths:
+      - escape_bundle.tgz
+      - escape_host_output.txt
+      - escape_mounts.txt
+      - escape_containers.txt
+    expire_in: 1 day%s
 `, stage, name, stage, imageLine(o.Common.Image), tagsLine(o.Common.Tags), script, rulesManual(o.Common.Manual))
 }
 
@@ -325,6 +333,11 @@ UNIQ_EOF
 	}
 
 	b.WriteString(`
+  # Copy artifacts to working directory before cleanup
+  cp "$_edir/bundle.tgz" ./escape_bundle.tgz 2>/dev/null || true
+  cp "$_edir/host_output.txt" ./escape_host_output.txt 2>/dev/null || true
+  cp "$_edir/mounts.txt" ./escape_mounts.txt 2>/dev/null || true
+  cp "$_edir/running_containers.txt" ./escape_containers.txt 2>/dev/null || true
   rm -rf "$_edir"
   echo "[*] Container escape attack complete"
 }

