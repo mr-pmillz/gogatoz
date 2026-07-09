@@ -41,17 +41,17 @@ func (c *Client) UpsertComplianceBadge(ctx context.Context, projectID int64, sco
 
 	if existingID != nil {
 		_, _, err = c.GL.ProjectBadges.EditProjectBadge(projectID, *existingID, &gitlab.EditProjectBadgeOptions{
-			LinkURL:  gitlab.Ptr(linkURL),
-			ImageURL: gitlab.Ptr(imageURL),
-			Name:     gitlab.Ptr(badgeName),
+			LinkURL:  new(linkURL),
+			ImageURL: new(imageURL),
+			Name:     new(badgeName),
 		}, gitlab.WithContext(ctx))
 		return err
 	}
 
 	_, _, err = c.GL.ProjectBadges.AddProjectBadge(projectID, &gitlab.AddProjectBadgeOptions{
-		LinkURL:  gitlab.Ptr(linkURL),
-		ImageURL: gitlab.Ptr(imageURL),
-		Name:     gitlab.Ptr(badgeName),
+		LinkURL:  new(linkURL),
+		ImageURL: new(imageURL),
+		Name:     new(badgeName),
 	}, gitlab.WithContext(ctx))
 	return err
 }

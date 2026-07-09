@@ -218,12 +218,12 @@ var unpinnedPatterns = []unpinnedPackagePattern{
 				return false
 			}
 			// Find the package tokens after "pip install" / "pip3 install"
-			idx := strings.Index(lower, "install")
-			if idx < 0 {
+			_, after, ok := strings.Cut(lower, "install")
+			if !ok {
 				return false
 			}
-			rest := strings.TrimSpace(lower[idx+len("install"):])
-			for _, tok := range strings.Fields(rest) {
+			rest := strings.TrimSpace(after)
+			for tok := range strings.FieldsSeq(rest) {
 				if strings.HasPrefix(tok, "-") {
 					continue // skip flags
 				}
@@ -300,11 +300,11 @@ var unpinnedPatterns = []unpinnedPackagePattern{
 		name: "go install",
 		extraCheck: func(line string) bool {
 			lower := strings.ToLower(line)
-			idx := strings.Index(lower, "go install")
-			if idx < 0 {
+			_, after, ok := strings.Cut(lower, "go install")
+			if !ok {
 				return false
 			}
-			rest := strings.TrimSpace(lower[idx+len("go install"):])
+			rest := strings.TrimSpace(after)
 			pkg := strings.Fields(rest)
 			if len(pkg) == 0 {
 				return false
@@ -317,12 +317,12 @@ var unpinnedPatterns = []unpinnedPackagePattern{
 		name: "apk",
 		extraCheck: func(line string) bool {
 			lower := strings.ToLower(line)
-			idx := strings.Index(lower, "apk add")
-			if idx < 0 {
+			_, after, ok := strings.Cut(lower, "apk add")
+			if !ok {
 				return false
 			}
-			rest := lower[idx+len("apk add"):]
-			for _, tok := range strings.Fields(rest) {
+			rest := after
+			for tok := range strings.FieldsSeq(rest) {
 				if strings.HasPrefix(tok, "-") {
 					continue
 				}
@@ -347,7 +347,7 @@ var unpinnedPatterns = []unpinnedPackagePattern{
 				return false
 			}
 			rest := lower[idx:]
-			for _, tok := range strings.Fields(rest) {
+			for tok := range strings.FieldsSeq(rest) {
 				if strings.HasPrefix(tok, "-") {
 					continue
 				}

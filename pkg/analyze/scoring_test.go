@@ -84,7 +84,7 @@ func TestComputeScore_HighCapApplied(t *testing.T) {
 	// HIGH cap is 60. Many same-ID findings should hit the cap.
 	// 2^20 = 1048576 findings: loss = 15*(1+0.5*20) = 15*11 = 165, capped to 60.
 	var findings []Finding
-	for i := 0; i < 1024; i++ {
+	for range 1024 {
 		findings = append(findings, Finding{ID: "CAPPED", Severity: SeverityHigh})
 	}
 	res := ComputeScore(findings)
@@ -108,7 +108,7 @@ func TestComputeScore_HighCapApplied(t *testing.T) {
 func TestComputeScore_MediumCapApplied(t *testing.T) {
 	// MEDIUM cap is 20, weight=6. Many findings: 6*(1+0.5*10) = 6*6 = 36 > 20.
 	var findings []Finding
-	for i := 0; i < 1024; i++ {
+	for range 1024 {
 		findings = append(findings, Finding{ID: "MED_CAP", Severity: SeverityMedium})
 	}
 	res := ComputeScore(findings)
@@ -124,7 +124,7 @@ func TestComputeScore_MediumCapApplied(t *testing.T) {
 func TestComputeScore_LowCapApplied(t *testing.T) {
 	// LOW cap is 10, weight=3. 64 findings: 3*(1+0.5*6) = 3*4 = 12 > 10.
 	var findings []Finding
-	for i := 0; i < 64; i++ {
+	for range 64 {
 		findings = append(findings, Finding{ID: "LOW_CAP", Severity: SeverityLow})
 	}
 	res := ComputeScore(findings)
@@ -169,10 +169,10 @@ func TestComputeScore_CriticalAlreadyLow(t *testing.T) {
 	// Each code: loss = 25*(1+0.5*log2(4)) = 25*2 = 50
 	// Total = 100, raw = 0, final = 0. Malus doesn't fire.
 	var findings []Finding
-	for i := 0; i < 4; i++ {
+	for range 4 {
 		findings = append(findings, Finding{ID: "CRIT_A", Severity: SeverityCritical})
 	}
-	for i := 0; i < 4; i++ {
+	for range 4 {
 		findings = append(findings, Finding{ID: "CRIT_B", Severity: SeverityCritical})
 	}
 	res := ComputeScore(findings)
@@ -287,7 +287,7 @@ func TestComputeScore_InformationalOnly(t *testing.T) {
 func TestComputeScore_FloorAtZero(t *testing.T) {
 	// Massive losses should floor at 0, not go negative.
 	var findings []Finding
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		findings = append(findings, Finding{ID: "MEGA", Severity: SeverityCritical})
 	}
 	res := ComputeScore(findings)
@@ -337,7 +337,7 @@ func TestComputeScore_GradeBoundaries(t *testing.T) {
 			name: "raw 49 (3 HIGH + 1 MED) -> D",
 			findings: func() []Finding {
 				var f []Finding
-				for i := 0; i < 3; i++ {
+				for i := range 3 {
 					f = append(f, Finding{ID: fmt.Sprintf("GB_H%d", i), Severity: SeverityHigh})
 				}
 				f = append(f, Finding{ID: "GB_M1", Severity: SeverityMedium})
@@ -351,10 +351,10 @@ func TestComputeScore_GradeBoundaries(t *testing.T) {
 			name: "raw 43 (3 HIGH + 2 MED) -> D",
 			findings: func() []Finding {
 				var f []Finding
-				for i := 0; i < 3; i++ {
+				for i := range 3 {
 					f = append(f, Finding{ID: fmt.Sprintf("GB_H%d", i), Severity: SeverityHigh})
 				}
-				for i := 0; i < 2; i++ {
+				for i := range 2 {
 					f = append(f, Finding{ID: fmt.Sprintf("GB_M%d", i), Severity: SeverityMedium})
 				}
 				return f
@@ -367,7 +367,7 @@ func TestComputeScore_GradeBoundaries(t *testing.T) {
 			name: "raw 31 (4 HIGH + 1 MED + 1 LOW) -> D",
 			findings: func() []Finding {
 				var f []Finding
-				for i := 0; i < 4; i++ {
+				for i := range 4 {
 					f = append(f, Finding{ID: fmt.Sprintf("GB_H%d", i), Severity: SeverityHigh})
 				}
 				f = append(f, Finding{ID: "GB_M0", Severity: SeverityMedium})
@@ -382,10 +382,10 @@ func TestComputeScore_GradeBoundaries(t *testing.T) {
 			name: "raw 28 (4 HIGH + 2 MED) -> E",
 			findings: func() []Finding {
 				var f []Finding
-				for i := 0; i < 4; i++ {
+				for i := range 4 {
 					f = append(f, Finding{ID: fmt.Sprintf("GB_H%d", i), Severity: SeverityHigh})
 				}
-				for i := 0; i < 2; i++ {
+				for i := range 2 {
 					f = append(f, Finding{ID: fmt.Sprintf("GB_M%d", i), Severity: SeverityMedium})
 				}
 				return f
@@ -581,7 +581,7 @@ func TestComputeScore_CriticalUncapped(t *testing.T) {
 	// loss exceeding 60 (the HIGH cap), demonstrating critical is unbounded.
 	var findings []Finding
 	// 16 critical findings: loss = 25*(1+0.5*log2(16)) = 25*(1+2) = 75
-	for i := 0; i < 16; i++ {
+	for range 16 {
 		findings = append(findings, Finding{ID: "BIG_CRIT", Severity: SeverityCritical})
 	}
 	res := ComputeScore(findings)

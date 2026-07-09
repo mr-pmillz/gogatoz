@@ -69,11 +69,11 @@ func parseImageRef(ref string) (registry, name, tag, digest string) {
 	// s is now the registry+name portion (no tag, no digest).
 	// Split into registry vs name. Heuristic: if the first path component
 	// contains a "." or ":" (port) or is "localhost", treat it as a registry.
-	if slashIdx := strings.Index(s, "/"); slashIdx >= 0 {
-		first := s[:slashIdx]
+	if before, after, ok := strings.Cut(s, "/"); ok {
+		first := before
 		if strings.Contains(first, ".") || strings.Contains(first, ":") || first == "localhost" {
 			registry = first
-			name = s[slashIdx+1:]
+			name = after
 		} else {
 			name = s
 		}

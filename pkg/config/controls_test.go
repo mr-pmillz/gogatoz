@@ -1,6 +1,7 @@
 package config
 
 import (
+	"slices"
 	"strings"
 	"testing"
 )
@@ -57,13 +58,7 @@ func TestDefaultControls_ForbiddenImageTags(t *testing.T) {
 	if len(d.ForbiddenImageTags) == 0 {
 		t.Fatal("expected non-empty ForbiddenImageTags")
 	}
-	found := false
-	for _, tag := range d.ForbiddenImageTags {
-		if tag == "latest" {
-			found = true
-			break
-		}
-	}
+	found := slices.Contains(d.ForbiddenImageTags, "latest")
 	if !found {
 		t.Fatal("expected 'latest' in default ForbiddenImageTags")
 	}
@@ -74,13 +69,7 @@ func TestDefaultControls_SecurityJobPatterns(t *testing.T) {
 	if len(d.SecurityJobPatterns) == 0 {
 		t.Fatal("expected non-empty SecurityJobPatterns")
 	}
-	found := false
-	for _, p := range d.SecurityJobPatterns {
-		if p == "sast" {
-			found = true
-			break
-		}
-	}
+	found := slices.Contains(d.SecurityJobPatterns, "sast")
 	if !found {
 		t.Fatal("expected 'sast' in default SecurityJobPatterns")
 	}
@@ -91,13 +80,7 @@ func TestDefaultControls_DebugTraceVariables(t *testing.T) {
 	if len(d.DebugTraceVariables) == 0 {
 		t.Fatal("expected non-empty DebugTraceVariables")
 	}
-	found := false
-	for _, v := range d.DebugTraceVariables {
-		if v == "CI_DEBUG_TRACE" {
-			found = true
-			break
-		}
-	}
+	found := slices.Contains(d.DebugTraceVariables, "CI_DEBUG_TRACE")
 	if !found {
 		t.Fatal("expected 'CI_DEBUG_TRACE' in default DebugTraceVariables")
 	}

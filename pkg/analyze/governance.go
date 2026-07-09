@@ -2,6 +2,7 @@ package analyze
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/mr-pmillz/gogatoz/pkg/config"
@@ -169,12 +170,7 @@ func isSecurityJobIn(name string, patterns []string) bool {
 // (case-insensitive). Tags like "v1.2.3" and commit SHAs will not match.
 func isForbiddenBranchRef(ref string) bool {
 	lower := strings.ToLower(ref)
-	for _, branch := range forbiddenBranchRefs {
-		if lower == branch {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(forbiddenBranchRefs, lower)
 }
 
 // rulesContainWhenNever checks whether the job's rules contain a "when: never"

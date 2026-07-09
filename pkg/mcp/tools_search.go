@@ -272,7 +272,7 @@ func filterConcurrent(ctx context.Context, cl *gitlabx.Client, projects []*gitla
 	out := make(chan result)
 	var wg sync.WaitGroup
 	wg.Add(conc)
-	for i := 0; i < conc; i++ {
+	for range conc {
 		go func() {
 			defer wg.Done()
 			for j := range in {

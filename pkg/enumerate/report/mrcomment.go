@@ -35,10 +35,7 @@ func BuildMRCommentBody(rep Report, score *analyze.ScoreResult) string {
 		fmt.Fprintf(&b, "**Exploitable projects**: %d\n\n", rep.Summary.Exploitable)
 	}
 
-	maxProjects := 10
-	if len(rep.Projects) < maxProjects {
-		maxProjects = len(rep.Projects)
-	}
+	maxProjects := min(len(rep.Projects), 10)
 	if maxProjects > 0 {
 		b.WriteString("<details>\n<summary>Top findings by project</summary>\n\n")
 		b.WriteString("| Project | Findings | Critical | High | Medium |\n")
@@ -55,10 +52,7 @@ func BuildMRCommentBody(rep Report, score *analyze.ScoreResult) string {
 		b.WriteString("<details>\n<summary>Score breakdown</summary>\n\n")
 		b.WriteString("| Finding | Severity | Count | Loss |\n")
 		b.WriteString("|---------|----------|-------|------|\n")
-		maxLosses := 15
-		if len(score.CodeLosses) < maxLosses {
-			maxLosses = len(score.CodeLosses)
-		}
+		maxLosses := min(len(score.CodeLosses), 15)
 		for i := 0; i < maxLosses; i++ {
 			cl := score.CodeLosses[i]
 			fmt.Fprintf(&b, "| %s | %s | %d | -%.1f |\n", cl.Code, cl.Severity, cl.Count, cl.CappedLoss)
