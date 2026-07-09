@@ -10,8 +10,8 @@ import (
 
 // Finding ID constants for container image supply chain checks.
 const (
-	ImageMutableTagID  = "IMAGE_MUTABLE_TAG"
-	ImageNotPinnedID   = "IMAGE_NOT_PINNED"
+	ImageMutableTagID = "IMAGE_MUTABLE_TAG"
+	ImageNotPinnedID  = "IMAGE_NOT_PINNED"
 )
 
 // forbiddenMutableTags lists tags that are inherently mutable and make builds

@@ -11,8 +11,8 @@ import (
 
 // Finding ID constants for compliance detections.
 const (
-	DebugTraceEnabledID     = "DEBUG_TRACE_ENABLED"
-	UnverifiedScriptExecID  = "UNVERIFIED_SCRIPT_EXEC"
+	DebugTraceEnabledID      = "DEBUG_TRACE_ENABLED"
+	UnverifiedScriptExecID   = "UNVERIFIED_SCRIPT_EXEC"
 	UnpinnedPackageInstallID = "UNPINNED_PACKAGE_INSTALL"
 )
 

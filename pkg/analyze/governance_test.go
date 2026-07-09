@@ -377,10 +377,10 @@ func TestIsForbiddenBranchRef(t *testing.T) {
 		{"staging", true},
 		{"production", true},
 		{"release", true},
-		{"Main", true},     // case-insensitive
-		{"MASTER", true},   // case-insensitive
-		{"v1.2.3", false},  // tag
-		{"abc123", false},  // short sha
+		{"Main", true},    // case-insensitive
+		{"MASTER", true},  // case-insensitive
+		{"v1.2.3", false}, // tag
+		{"abc123", false}, // short sha
 		{"feature/x", false},
 		{"", false},
 	}

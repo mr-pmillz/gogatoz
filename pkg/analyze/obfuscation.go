@@ -74,4 +74,3 @@ func isBidiOverride(r rune) bool {
 	}
 	return false
 }
-

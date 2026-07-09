@@ -199,4 +199,3 @@ func FormatPurl(registry, name, tag, digest string) string {
 func SplitImageRef(ref string) (registry, name, tag, digest string) {
 	return parseImageRef(ref)
 }
-

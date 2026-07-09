@@ -50,8 +50,8 @@ func TestBuildSARIF_MixedSeverities(t *testing.T) {
 
 	// Verify severity mapping per result.
 	wantLevels := map[string]string{
-		"PLAINTEXT_SECRET":    "warning",
-		"SELF_HOSTED_EXPOSED": "error",
+		"PLAINTEXT_SECRET":     "warning",
+		"SELF_HOSTED_EXPOSED":  "error",
 		"WORKFLOW_BROAD_RULES": "note",
 	}
 	for _, res := range run.Results {

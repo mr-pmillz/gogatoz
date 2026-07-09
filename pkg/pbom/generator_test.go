@@ -67,12 +67,12 @@ func TestGenerate_Includes(t *testing.T) {
 	}
 
 	tests := []struct {
-		idx       int
-		wantType  string
-		wantLoc   string
-		wantProj  string
-		wantRef   string
-		wantComp  string
+		idx      int
+		wantType string
+		wantLoc  string
+		wantProj string
+		wantRef  string
+		wantComp string
 	}{
 		{0, "local", "/templates/ci.yml", "", "", ""},
 		{1, "project", "build.yml", "shared/templates", "v2.0", ""},
