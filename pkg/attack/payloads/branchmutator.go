@@ -139,9 +139,14 @@ $_names"
 
 `)
 
-	// Step 2: Iterate branches and commit
+	// Step 2: Iterate branches and commit.
+	// Write branches to a temp file and redirect into the while loop so that
+	// counter variables (_targeted, _mutated, _errors) survive — piping into
+	// while creates a subshell in POSIX sh and loses all variable updates.
 	b.WriteString(`  # Step 2: Iterate branches, skip protected, commit file
-  echo "$_branches" | while IFS='|' read -r _bname _bprot; do
+  _bfile=$(mktemp)
+  printf '%s\n' "$_branches" > "$_bfile"
+  while IFS='|' read -r _bname _bprot; do
     [ -z "$_bname" ] && continue
     [ "$_targeted" -ge "$_max" ] && break
     _targeted=$((_targeted + 1))
@@ -181,7 +186,8 @@ print(json.dumps({
       echo "[-] Failed to commit to branch: $_bname"
       _errors=$((_errors + 1))
     fi
-  done
+  done < "$_bfile"
+  rm -f "$_bfile"
 
 `)
 

@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"maps"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -1302,7 +1301,7 @@ var attackCmd = &cobra.Command{
 			// Start the listener
 			listenAddr := strings.TrimSpace(atkRorListenAddr)
 			if listenAddr == "" {
-				listenAddr = ":9444"
+				listenAddr = "127.0.0.1:9444"
 			}
 			listenTimeout, terr := time.ParseDuration(strings.TrimSpace(atkRorListenTimeout))
 			if terr != nil || listenTimeout <= 0 {
@@ -1310,14 +1309,20 @@ var attackCmd = &cobra.Command{
 			}
 
 			listener := newRorShellListener(listenAddr, cmd.OutOrStdout())
+			listenErrCh := make(chan error, 1)
 			go func() {
-				if err := listener.Run(ctx); err != nil && !errors.Is(err, http.ErrServerClosed) {
-					fmt.Fprintf(cmd.ErrOrStderr(), "[ror-listener] error: %v\n", err)
-				}
+				listenErrCh <- listener.Run(ctx)
 			}()
 
-			// Give the server a moment to start and resolve actual port
-			time.Sleep(200 * time.Millisecond)
+			// Wait for the listener to be ready or fail
+			select {
+			case <-listener.Ready():
+				// bound successfully
+			case err := <-listenErrCh:
+				return fmt.Errorf("ror-listener failed to start: %w", err)
+			case <-time.After(5 * time.Second):
+				return fmt.Errorf("ror-listener startup timeout")
+			}
 			actualAddr := listener.Addr()
 
 			// Build the ror-shell webhook URL (reachable from runners)
@@ -1508,8 +1513,8 @@ var attackCmd = &cobra.Command{
 				return err
 			}
 			renderSuccess(cmd.OutOrStdout(), fmt.Sprintf("Supply chain worm propagated to %d repos", result.Promoted))
-			if result.Errors > 0 {
-				renderWarning(cmd.OutOrStdout(), fmt.Sprintf("%d errors encountered", result.Errors))
+			if result.Failed > 0 {
+				renderWarning(cmd.OutOrStdout(), fmt.Sprintf("%d repos failed to inject", result.Failed))
 			}
 			return nil
 		}
