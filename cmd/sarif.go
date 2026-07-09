@@ -105,17 +105,44 @@ func sarifSecuritySeverity(sev analyze.Severity) string {
 // the analyze.LookupFinding registry, falling back to the finding's own
 // Title/Description when the ID is not registered.
 func buildSARIF(findings []analyze.Finding, toolVersion string) sarifLog {
-	seenRules := make(map[string]bool)
+	type ruleState struct {
+		index      int
+		maxSev     analyze.Severity
+		maxSevRank int
+	}
+	seenRules := make(map[string]*ruleState)
 	var rules []sarifRule
 	var results []sarifResult
+
+	sevRank := func(s analyze.Severity) int {
+		switch s {
+		case analyze.SeverityCritical:
+			return 4
+		case analyze.SeverityHigh:
+			return 3
+		case analyze.SeverityMedium:
+			return 2
+		case analyze.SeverityLow:
+			return 1
+		default:
+			return 0
+		}
+	}
 
 	for _, f := range findings {
 		if f.ID == "" {
 			continue
 		}
 
-		// Build or reuse the rule for this finding ID.
-		if !seenRules[f.ID] {
+		// Build or update the rule for this finding ID.
+		if st, exists := seenRules[f.ID]; exists {
+			if rank := sevRank(f.Severity); rank > st.maxSevRank {
+				st.maxSev = f.Severity
+				st.maxSevRank = rank
+				rules[st.index].DefaultConfiguration.Level = sarifLevel(f.Severity)
+				rules[st.index].Properties["security-severity"] = sarifSecuritySeverity(f.Severity)
+			}
+		} else {
 			title := f.Title
 			desc := f.Description
 			sev := f.Severity
@@ -125,7 +152,6 @@ func buildSARIF(findings []analyze.Finding, toolVersion string) sarifLog {
 			if info := analyze.LookupFinding(f.ID); info != nil {
 				title = info.Title
 				desc = info.Description
-				sev = info.Severity
 				helpText = info.Remediation
 				helpURI = info.DocURL
 			}
@@ -151,7 +177,7 @@ func buildSARIF(findings []analyze.Finding, toolVersion string) sarifLog {
 				r.HelpURI = helpURI
 			}
 
-			seenRules[f.ID] = true
+			seenRules[f.ID] = &ruleState{index: len(rules), maxSev: sev, maxSevRank: sevRank(sev)}
 			rules = append(rules, r)
 		}
 

@@ -384,6 +384,48 @@ var enumerateCmd = &cobra.Command{
 			}
 		}
 
+		// Compute score if requested (before any output format)
+		var scoreResult *analyze.ScoreResult
+		if enumScore {
+			var allFindings []analyze.Finding
+			for _, r := range results {
+				allFindings = append(allFindings, r.Findings...)
+			}
+			sr := analyze.ComputeScore(allFindings)
+			scoreResult = &sr
+		}
+
+		// Write sidecar SARIF/GLSAST files if requested (alongside any primary output)
+		if p := strings.TrimSpace(sarifOutputPath); p != "" {
+			if sErr := writeSidecarSARIF(p, collectFindings(results), version); sErr != nil {
+				fmt.Fprintf(cmd.ErrOrStderr(), "warning: failed to write SARIF: %v\n", sErr)
+			}
+		}
+		if p := strings.TrimSpace(glsastOutputPath); p != "" {
+			if sErr := writeSidecarGLSAST(p, collectFindings(results), version, scanStart); sErr != nil {
+				fmt.Fprintf(cmd.ErrOrStderr(), "warning: failed to write GLSAST: %v\n", sErr)
+			}
+		}
+
+		// Build report for MR comment/badge (needed before output to avoid skipping)
+		repOpts := report.Options{OnlyFindings: onlyFindings}
+		rep := report.Build(results, repOpts)
+		rep.Score = scoreResult
+
+		// Post-analysis: MR comment (requires single-project scan with known project ID)
+		if enumMRComment > 0 && len(results) > 0 && results[0].ProjectID > 0 {
+			commentBody := report.BuildMRCommentBody(rep, scoreResult)
+			if mrErr := upsertMRComment(cmd.Context(), client, results[0].ProjectID, enumMRComment, commentBody); mrErr != nil {
+				fmt.Fprintf(cmd.ErrOrStderr(), "warning: MR comment failed: %v\n", mrErr)
+			}
+		}
+		// Post-analysis: Badge (requires single-project scan with known project ID + score)
+		if enumBadge && scoreResult != nil && len(results) == 1 && results[0].ProjectID > 0 {
+			if badgeErr := client.UpsertComplianceBadge(cmd.Context(), results[0].ProjectID, scoreResult.Score, gitlabURL); badgeErr != nil {
+				fmt.Fprintf(cmd.ErrOrStderr(), "warning: badge update failed: %v\n", badgeErr)
+			}
+		}
+
 		// Output selection: default text; --json or --format=json => pretty JSON; --format=jsonl => JSON Lines
 		w := cmd.OutOrStdout()
 		var closer func() error
@@ -405,7 +447,6 @@ var enumerateCmd = &cobra.Command{
 			fmtSel = fmtJSON
 		}
 		if fmtSel == fmtJSON {
-			// Preserve legacy JSON array of results for compatibility
 			enc := json.NewEncoder(w)
 			enc.SetIndent("", "  ")
 			return enc.Encode(results)
@@ -422,17 +463,6 @@ var enumerateCmd = &cobra.Command{
 			}
 			return nil
 		}
-		// Compute score if requested
-		var scoreResult *analyze.ScoreResult
-		if enumScore {
-			var allFindings []analyze.Finding
-			for _, r := range results {
-				allFindings = append(allFindings, r.Findings...)
-			}
-			sr := analyze.ComputeScore(allFindings)
-			scoreResult = &sr
-		}
-
 		// SARIF format
 		if fmtSel == fmtSARIF {
 			return WriteSARIF(w, collectFindings(results), version)
@@ -441,43 +471,13 @@ var enumerateCmd = &cobra.Command{
 		if fmtSel == fmtGLSAST {
 			return WriteGLSAST(w, collectFindings(results), version, scanStart, time.Now())
 		}
-		// Write sidecar SARIF/GLSAST files if requested (alongside primary output)
-		if p := strings.TrimSpace(sarifOutputPath); p != "" {
-			if sErr := writeSidecarSARIF(p, collectFindings(results), version); sErr != nil {
-				fmt.Fprintf(cmd.ErrOrStderr(), "warning: failed to write SARIF: %v\n", sErr)
-			}
-		}
-		if p := strings.TrimSpace(glsastOutputPath); p != "" {
-			if sErr := writeSidecarGLSAST(p, collectFindings(results), version, scanStart); sErr != nil {
-				fmt.Fprintf(cmd.ErrOrStderr(), "warning: failed to write GLSAST: %v\n", sErr)
-			}
-		}
 		// html via report renderer
 		if fmtSel == fmtHTML {
-			repOpts := report.Options{OnlyFindings: onlyFindings}
-			rep := report.Build(results, repOpts)
-			rep.Score = scoreResult
 			return report.RenderHTML(w, rep, version)
 		}
 		// text via pterm report renderer
-		repOpts := report.Options{OnlyFindings: onlyFindings}
-		rep := report.Build(results, repOpts)
-		rep.Score = scoreResult
 		if err := report.RenderPTerm(w, rep); err != nil {
 			return err
-		}
-		// Post-analysis: MR comment (requires single-project scan with known project ID)
-		if enumMRComment > 0 && len(results) > 0 && results[0].ProjectID > 0 {
-			commentBody := report.BuildMRCommentBody(rep, scoreResult)
-			if mrErr := upsertMRComment(cmd.Context(), client, results[0].ProjectID, enumMRComment, commentBody); mrErr != nil {
-				fmt.Fprintf(cmd.ErrOrStderr(), "warning: MR comment failed: %v\n", mrErr)
-			}
-		}
-		// Post-analysis: Badge (requires single-project scan with known project ID + score)
-		if enumBadge && scoreResult != nil && len(results) == 1 && results[0].ProjectID > 0 {
-			if badgeErr := client.UpsertComplianceBadge(cmd.Context(), results[0].ProjectID, scoreResult.Score, gitlabURL); badgeErr != nil {
-				fmt.Fprintf(cmd.ErrOrStderr(), "warning: badge update failed: %v\n", badgeErr)
-			}
 		}
 		if !outputJSON && verbose {
 			_, err := fmt.Fprintln(cmd.ErrOrStderr())

@@ -101,19 +101,40 @@ func ScoreColor(score string) string {
 	}
 }
 
-// codeKey groups a finding by its ID and severity for deduplication.
-type codeKey struct {
-	code     string
-	severity Severity
+// codeAgg accumulates count and worst severity per finding code.
+type codeAgg struct {
+	count   int
+	maxSev  Severity
+	maxRank int
+}
+
+// sevRank returns a numeric rank for severity comparison (higher is worse).
+func sevRank(s Severity) int {
+	switch s {
+	case SeverityCritical:
+		return 4
+	case SeverityHigh:
+		return 3
+	case SeverityMedium:
+		return 2
+	case SeverityLow:
+		return 1
+	default:
+		return 0
+	}
 }
 
 // ComputeScore evaluates a slice of findings and returns a compliance score
 // using the scoring-v3 algorithm (ported from Plumber).
 //
+// Findings are grouped by code (ID) only. The worst (highest) severity seen
+// for each code determines the weight and cap, preventing a scoring inversion
+// where consolidating severity levels could reduce the total penalty.
+//
 // False-positive findings are excluded from the calculation.
 func ComputeScore(findings []Finding) ScoreResult {
 	var counts SeverityCounts
-	codeCounts := make(map[codeKey]int)
+	codes := make(map[string]*codeAgg)
 
 	for _, f := range findings {
 		if f.FalsePositive {
@@ -131,23 +152,31 @@ func ComputeScore(findings []Finding) ScoreResult {
 		case SeverityInformational:
 			counts.Informational++
 		}
-		k := codeKey{code: f.ID, severity: f.Severity}
-		codeCounts[k]++
+		agg, ok := codes[f.ID]
+		if !ok {
+			agg = &codeAgg{maxSev: f.Severity, maxRank: sevRank(f.Severity)}
+			codes[f.ID] = agg
+		}
+		agg.count++
+		if r := sevRank(f.Severity); r > agg.maxRank {
+			agg.maxSev = f.Severity
+			agg.maxRank = r
+		}
 	}
 
 	var losses []CodeLoss
 	var totalLoss float64
 
-	for k, count := range codeCounts {
-		w := severityWeight(k.severity)
-		uncapped := w * (1 + 0.5*math.Log2(float64(count)))
-		cap := severityCap(k.severity)
+	for code, agg := range codes {
+		w := severityWeight(agg.maxSev)
+		uncapped := w * (1 + 0.5*math.Log2(float64(agg.count)))
+		cap := severityCap(agg.maxSev)
 		capped := math.Min(uncapped, cap)
 
 		losses = append(losses, CodeLoss{
-			Code:         k.code,
-			Severity:     k.severity,
-			Count:        count,
+			Code:         code,
+			Severity:     agg.maxSev,
+			Count:        agg.count,
 			Weight:       w,
 			UncappedLoss: uncapped,
 			CappedLoss:   capped,

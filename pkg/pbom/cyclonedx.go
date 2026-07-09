@@ -167,12 +167,12 @@ func buildContainerPurl(img ContainerImage) string {
 // without requiring a UUID dependency.
 func generateSerialNumber(projectPath, timestamp string) string {
 	h := sha256.Sum256([]byte(projectPath + "|" + timestamp))
-	// Format as UUID v5 style: xxxxxxxx-xxxx-5xxx-xxxx-xxxxxxxxxxxx
+	// Format as UUID v5 style: xxxxxxxx-xxxx-5xxx-yxxx-xxxxxxxxxxxx
 	return fmt.Sprintf("urn:uuid:%08x-%04x-5%03x-%04x-%012x",
 		h[0:4],
 		h[4:6],
-		uint16(h[6:8][0])<<8|uint16(h[6:8][1])&0x0fff,
-		uint16(h[8:10][0])<<8|uint16(h[8:10][1])&0x3fff|0x8000,
+		(uint16(h[6])<<8|uint16(h[7]))&0x0fff,
+		((uint16(h[8])<<8|uint16(h[9]))&0x3fff)|0x8000,
 		h[10:16],
 	)
 }

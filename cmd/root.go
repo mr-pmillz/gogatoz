@@ -253,6 +253,7 @@ func versionString() string {
 func initConfig() error {
 	// Determine config file to read
 	file := viper.GetString("config")
+	explicit := file != ""
 	if file == "" {
 		// Use ./.gogatoz.yaml if present
 		if _, err := os.Stat(".gogatoz.yaml"); err == nil {
@@ -265,9 +266,8 @@ func initConfig() error {
 		return nil // no config, nothing to do
 	}
 	if err := viper.ReadInConfig(); err != nil {
-		// If file not found, ignore; otherwise return error
-		if !os.IsNotExist(err) {
-			return fmt.Errorf("read config: %w", err)
+		if explicit {
+			return fmt.Errorf("read config %q: %w", file, err)
 		}
 	}
 	// Normalize relative paths if needed (future use)

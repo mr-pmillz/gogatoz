@@ -149,20 +149,14 @@ func resolveVariable(job pipeline.Job, doc *pipeline.Document, name string) (str
 	// Job-level takes precedence
 	if job.Variables != nil {
 		if v, ok := job.Variables[name]; ok {
-			if s, ok := v.(string); ok {
-				return s, true
-			}
-			return fmt.Sprintf("%v", v), true
+			return extractVarValue(v)
 		}
 	}
 
 	// Fall back to global variables
 	if doc.Variables != nil {
 		if v, ok := doc.Variables[name]; ok {
-			if s, ok := v.(string); ok {
-				return s, true
-			}
-			return fmt.Sprintf("%v", v), true
+			return extractVarValue(v)
 		}
 	}
 

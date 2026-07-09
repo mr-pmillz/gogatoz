@@ -48,7 +48,7 @@ func detectDebugTrace(doc *pipeline.Document, controls *config.ControlsConfig) [
 	// Check global variables
 	for _, varName := range vars {
 		if val, ok := doc.Variables[varName]; ok {
-			strVal := fmt.Sprintf("%v", val)
+			strVal, _ := extractVarValue(val)
 			if isTruthy(strVal) {
 				findings = append(findings, Finding{
 					ID:          DebugTraceEnabledID,
@@ -65,7 +65,7 @@ func detectDebugTrace(doc *pipeline.Document, controls *config.ControlsConfig) [
 	for _, job := range doc.Jobs {
 		for _, varName := range vars {
 			if val, ok := job.Variables[varName]; ok {
-				strVal := fmt.Sprintf("%v", val)
+				strVal, _ := extractVarValue(val)
 				if isTruthy(strVal) {
 					findings = append(findings, Finding{
 						ID:          DebugTraceEnabledID,
@@ -227,6 +227,11 @@ var unpinnedPatterns = []unpinnedPackagePattern{
 				if strings.HasPrefix(tok, "-") {
 					continue // skip flags
 				}
+				// Local directory installs (., ./, ..[dev], /path) are not PyPI packages
+				if tok == "." || strings.HasPrefix(tok, "./") || strings.HasPrefix(tok, "../") ||
+					strings.HasPrefix(tok, "/") || strings.HasPrefix(tok, ".[") {
+					continue
+				}
 				// If any package token has ==, it's pinned
 				if strings.Contains(tok, "==") {
 					continue
@@ -321,8 +326,9 @@ var unpinnedPatterns = []unpinnedPackagePattern{
 				if strings.HasPrefix(tok, "-") {
 					continue
 				}
-				// If first package token has =, it's pinned
-				return !strings.Contains(tok, "=")
+				if !strings.Contains(tok, "=") {
+					return true // found an unpinned package
+				}
 			}
 			return false
 		},
@@ -345,7 +351,9 @@ var unpinnedPatterns = []unpinnedPackagePattern{
 				if strings.HasPrefix(tok, "-") {
 					continue
 				}
-				return !strings.Contains(tok, "=")
+				if !strings.Contains(tok, "=") {
+					return true // found an unpinned package
+				}
 			}
 			return false
 		},

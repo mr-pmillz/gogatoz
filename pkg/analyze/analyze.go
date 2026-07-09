@@ -342,6 +342,27 @@ func withRecommendations(in []Finding) []Finding {
 	return in
 }
 
+// extractVarValue extracts the string value from a CI variable that may use
+// GitLab's expanded syntax: {value: "...", description: "..."}.
+// Returns (stringValue, true) if the variable exists, ("", false) otherwise.
+func extractVarValue(raw any) (string, bool) {
+	if raw == nil {
+		return "", false
+	}
+	if s, ok := raw.(string); ok {
+		return s, true
+	}
+	if m, ok := raw.(map[string]any); ok {
+		if v, exists := m["value"]; exists {
+			if s, ok := v.(string); ok {
+				return s, true
+			}
+			return fmt.Sprintf("%v", v), true
+		}
+	}
+	return fmt.Sprintf("%v", raw), true
+}
+
 // effectiveScripts returns the full ordered set of script lines a job will run:
 // before_script (job-level overrides global) + script + after_script (job-level overrides global).
 // This is the correct scope for injection and LOTP analysis.
