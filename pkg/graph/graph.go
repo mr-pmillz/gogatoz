@@ -106,13 +106,7 @@ func (g *Graph) AddNode(n Node) {
 		}
 		lst := g.TagIndex[t]
 		// avoid duplicates
-		seen := false
-		for _, v := range lst {
-			if v == id {
-				seen = true
-				break
-			}
-		}
+		seen := slices.Contains(lst, id)
 		if !seen {
 			g.TagIndex[t] = append(lst, id)
 		}
@@ -140,10 +134,8 @@ func (g *Graph) AddEdge(fromID, toID string) {
 	// avoid duplicates
 	addUnique := func(m map[string][]string, k, v string) {
 		lst := m[k]
-		for _, x := range lst {
-			if x == v {
-				return
-			}
+		if slices.Contains(lst, v) {
+			return
 		}
 		m[k] = append(lst, v)
 	}

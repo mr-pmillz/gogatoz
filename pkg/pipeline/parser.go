@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 
 	"gopkg.in/yaml.v3"
 )
@@ -59,8 +60,8 @@ type Job struct {
 	Name         string
 	Stage        string
 	Script       []string
-	BeforeScript []string       // job-level before_script (nil = inherits global)
-	AfterScript  []string       // job-level after_script (nil = inherits global)
+	BeforeScript []string // job-level before_script (nil = inherits global)
+	AfterScript  []string // job-level after_script (nil = inherits global)
 	Rules        any
 	Only         any
 	Except       any
@@ -264,9 +265,7 @@ func (d *Document) variablesFrom(m map[string]any) {
 	if d.Variables == nil {
 		d.Variables = map[string]any{}
 	}
-	for k, v := range m {
-		d.Variables[k] = v
-	}
+	maps.Copy(d.Variables, m)
 }
 
 // func normalizeToSlice(v any) []any {

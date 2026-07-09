@@ -22,11 +22,11 @@ func NewLOTPAttack(att *Attacker) *LOTPAttack {
 
 // LOTPResult captures the outcome of an InjectLOTPPayload call.
 type LOTPResult struct {
-	Branch      string   `json:"branch"`
-	Tool        string   `json:"tool"`
+	Branch         string   `json:"branch"`
+	Tool           string   `json:"tool"`
 	FilesCommitted []string `json:"files_committed"`
-	Description string   `json:"description"`
-	Reference   string   `json:"reference"`
+	Description    string   `json:"description"`
+	Reference      string   `json:"reference"`
 }
 
 // InjectLOTPPayload commits a weaponized LOTP config payload to the given branch

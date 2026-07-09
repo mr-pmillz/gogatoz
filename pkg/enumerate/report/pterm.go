@@ -71,6 +71,23 @@ func RenderPTerm(w io.Writer, r Report) error {
 		r.Summary.Exploitable,
 	)
 	fmt.Fprintln(w, stats)
+
+	// Score banner (if computed)
+	if r.Score != nil {
+		scoreStyle := pterm.NewStyle(pterm.FgGreen, pterm.Bold)
+		switch r.Score.Score {
+		case "C":
+			scoreStyle = pterm.NewStyle(pterm.FgYellow, pterm.Bold)
+		case "D", "E":
+			scoreStyle = pterm.NewStyle(pterm.FgRed, pterm.Bold)
+		}
+		scoreLine := fmt.Sprintf("Security Score: %s  (%.0f/100 pts)",
+			scoreStyle.Sprint(r.Score.Score), r.Score.FinalPoints)
+		if r.Score.CriticalMalusApplied {
+			scoreLine += pterm.FgRed.Sprint("  [critical finding — capped at E]")
+		}
+		fmt.Fprintln(w, scoreLine)
+	}
 	fmt.Fprintln(w)
 
 	// Projects table

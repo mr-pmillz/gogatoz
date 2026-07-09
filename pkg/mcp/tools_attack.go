@@ -224,7 +224,7 @@ func (s *Server) handleCommitCI(ctx context.Context, att *attack.Attacker, input
 	// Parse tags
 	var tags []string
 	if t := strings.TrimSpace(input.Tags); t != "" {
-		for _, tag := range strings.Split(t, ",") {
+		for tag := range strings.SplitSeq(t, ",") {
 			if v := strings.TrimSpace(tag); v != "" {
 				tags = append(tags, v)
 			}
@@ -297,7 +297,7 @@ func (s *Server) handleSecrets(ctx context.Context, att *attack.Attacker, input 
 
 	var tags []string
 	if t := strings.TrimSpace(input.Tags); t != "" {
-		for _, tag := range strings.Split(t, ",") {
+		for tag := range strings.SplitSeq(t, ",") {
 			if v := strings.TrimSpace(tag); v != "" {
 				tags = append(tags, v)
 			}
@@ -714,7 +714,7 @@ func (s *Server) handleCleanupTraces(ctx context.Context, att *attack.Attacker, 
 func parseTags(s string) []string {
 	var tags []string
 	if t := strings.TrimSpace(s); t != "" {
-		for _, tag := range strings.Split(t, ",") {
+		for tag := range strings.SplitSeq(t, ",") {
 			if v := strings.TrimSpace(tag); v != "" {
 				tags = append(tags, v)
 			}

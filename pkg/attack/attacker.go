@@ -2,6 +2,7 @@ package attack
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"strings"
@@ -55,10 +56,10 @@ func (a *Attacker) DeleteFile(ctx context.Context, projectID any, branch, path, 
 	}
 	path = strings.TrimPrefix(path, "/")
 	_, err := a.Client.GL.RepositoryFiles.DeleteFile(projectID, path, &gitlab.DeleteFileOptions{
-		Branch:        gitlab.Ptr(branch),
-		CommitMessage: gitlab.Ptr(message),
-		AuthorName:    gitlab.Ptr(a.AuthorName),
-		AuthorEmail:   gitlab.Ptr(a.AuthorEmail),
+		Branch:        new(branch),
+		CommitMessage: new(message),
+		AuthorName:    new(a.AuthorName),
+		AuthorEmail:   new(a.AuthorEmail),
 	}, gitlab.WithContext(ctx))
 	return err
 }
@@ -105,9 +106,9 @@ func (a *Attacker) CreateSnippet(ctx context.Context, title, filename, content s
 		vis = gitlab.PublicVisibility
 	}
 	opts := &gitlab.CreateSnippetOptions{
-		Title:      gitlab.Ptr(title),
-		FileName:   gitlab.Ptr(filename),
-		Content:    gitlab.Ptr(content),
+		Title:      new(title),
+		FileName:   new(filename),
+		Content:    new(content),
 		Visibility: &vis,
 	}
 	return a.Client.GL.Snippets.CreateSnippet(opts, gitlab.WithContext(ctx))
@@ -132,25 +133,25 @@ func (a *Attacker) EnsureBranch(ctx context.Context, projectID any, branch strin
 		ref = "main"
 	}
 	_, _, err = a.Client.GL.Branches.CreateBranch(projectID, &gitlab.CreateBranchOptions{
-		Branch: gitlab.Ptr(branch),
-		Ref:    gitlab.Ptr(ref),
+		Branch: new(branch),
+		Ref:    new(ref),
 	}, gitlab.WithContext(ctx))
 	return err
 }
 
 // UpsertFile creates or updates a file in the repository at the given path on the branch.
 func (a *Attacker) UpsertFile(ctx context.Context, projectID any, branch, path, content, commitMsg string) error {
-	contentPtr := gitlab.Ptr(content)
-	branchPtr := gitlab.Ptr(branch)
+	contentPtr := new(content)
+	branchPtr := new(branch)
 	path = strings.TrimPrefix(path, "/")
 
 	// Try update first
 	_, resp, err := a.Client.GL.RepositoryFiles.UpdateFile(projectID, path, &gitlab.UpdateFileOptions{
 		Branch:        branchPtr,
 		Content:       contentPtr,
-		CommitMessage: gitlab.Ptr(commitMsg),
-		AuthorName:    gitlab.Ptr(a.AuthorName),
-		AuthorEmail:   gitlab.Ptr(a.AuthorEmail),
+		CommitMessage: new(commitMsg),
+		AuthorName:    new(a.AuthorName),
+		AuthorEmail:   new(a.AuthorEmail),
 	}, gitlab.WithContext(ctx))
 	if err == nil {
 		return nil
@@ -161,9 +162,9 @@ func (a *Attacker) UpsertFile(ctx context.Context, projectID any, branch, path, 
 		_, _, err = a.Client.GL.RepositoryFiles.CreateFile(projectID, path, &gitlab.CreateFileOptions{
 			Branch:        branchPtr,
 			Content:       contentPtr,
-			CommitMessage: gitlab.Ptr(commitMsg),
-			AuthorName:    gitlab.Ptr(a.AuthorName),
-			AuthorEmail:   gitlab.Ptr(a.AuthorEmail),
+			CommitMessage: new(commitMsg),
+			AuthorName:    new(a.AuthorName),
+			AuthorEmail:   new(a.AuthorEmail),
 		}, gitlab.WithContext(ctx))
 		return err
 	}
@@ -190,10 +191,10 @@ func (a *Attacker) CreateMergeRequest(ctx context.Context, projectID any, source
 		title = "Update CI configuration"
 	}
 	mr, _, err := a.Client.GL.MergeRequests.CreateMergeRequest(projectID, &gitlab.CreateMergeRequestOptions{
-		SourceBranch: gitlab.Ptr(sourceBranch),
-		TargetBranch: gitlab.Ptr(targetBranch),
-		Title:        gitlab.Ptr(title),
-		Description:  gitlab.Ptr(description),
+		SourceBranch: new(sourceBranch),
+		TargetBranch: new(targetBranch),
+		Title:        new(title),
+		Description:  new(description),
 	}, gitlab.WithContext(ctx))
 	if err != nil {
 		return nil, fmt.Errorf("create merge request: %w", err)
@@ -222,11 +223,11 @@ func (a *Attacker) EraseRecentPipelines(ctx context.Context, projectID any, ref 
 	}
 	opts := &gitlab.ListProjectPipelinesOptions{
 		ListOptions: gitlab.ListOptions{Page: 1, PerPage: int64(maxPipelines)},
-		OrderBy:     gitlab.Ptr("id"),
-		Sort:        gitlab.Ptr("desc"),
+		OrderBy:     new("id"),
+		Sort:        new("desc"),
 	}
 	if ref != "" {
-		opts.Ref = gitlab.Ptr(ref)
+		opts.Ref = new(ref)
 	}
 	pipelines, _, err := a.Client.GL.Pipelines.ListProjectPipelines(projectID, opts, gitlab.WithContext(ctx))
 	if err != nil {
@@ -254,7 +255,7 @@ func (a *Attacker) EraseRecentPipelines(ctx context.Context, projectID any, ref 
 // TriggerPipeline creates a new pipeline for the given ref via the API.
 func (a *Attacker) TriggerPipeline(ctx context.Context, projectID any, ref string) (int64, string, error) {
 	p, _, err := a.Client.GL.Pipelines.CreatePipeline(projectID, &gitlab.CreatePipelineOptions{
-		Ref: gitlab.Ptr(ref),
+		Ref: new(ref),
 	}, gitlab.WithContext(ctx))
 	if err != nil {
 		return 0, "", fmt.Errorf("create pipeline: %w", err)
@@ -266,12 +267,18 @@ func (a *Attacker) TriggerPipeline(ctx context.Context, projectID any, ref strin
 func (a *Attacker) GetFileContent(ctx context.Context, projectID any, ref, path string) (string, error) {
 	path = strings.TrimPrefix(path, "/")
 	f, _, err := a.Client.GL.RepositoryFiles.GetFile(projectID, path, &gitlab.GetFileOptions{
-		Ref: gitlab.Ptr(ref),
+		Ref: new(ref),
 	}, gitlab.WithContext(ctx))
 	if err != nil {
 		return "", err
 	}
-	return f.Content, nil
+	// The GitLab API returns file content base64-encoded by default.
+	decoded, err := base64.StdEncoding.DecodeString(f.Content)
+	if err != nil {
+		// Fallback: return raw content if it's not base64
+		return f.Content, nil
+	}
+	return string(decoded), nil
 }
 
 // CommitCIPipeline writes a .gitlab-ci.yml to the root of the repository and returns the web URL.
@@ -290,4 +297,72 @@ func (a *Attacker) CommitCIPipeline(ctx context.Context, projectID any, branch, 
 		return "", err
 	}
 	return fmt.Sprintf("%s/%s/-/pipelines?ref=%s", strings.TrimSuffix(a.GitLabURL, "/"), p.PathWithNamespace, branch), nil
+}
+
+// SetProjectVariable creates or updates a CI variable in the project scope.
+// On 404 (variable does not exist), it falls back to CreateVariable so that
+// the caller can inject new variables, not only update existing ones.
+func (a *Attacker) SetProjectVariable(ctx context.Context, projectID any, key, value string, unprotected, masked bool, environmentScope string) (*gitlab.ProjectVariable, *gitlab.Response, error) {
+	opts := &gitlab.UpdateProjectVariableOptions{
+		Value:     new(value),
+		Protected: new(!unprotected),
+		Masked:    new(masked),
+	}
+	if environmentScope != "" {
+		opts.EnvironmentScope = new(environmentScope)
+	}
+	v, resp, err := a.Client.GL.ProjectVariables.UpdateVariable(projectID, key, opts, gitlab.WithContext(ctx))
+	if err == nil {
+		return v, resp, nil
+	}
+	// 404 means the variable doesn't exist — try creating it.
+	if resp != nil && resp.StatusCode == 404 {
+		createOpts := &gitlab.CreateProjectVariableOptions{
+			Key:    &key,
+			Value:  &value,
+			Masked: new(masked),
+		}
+		if !unprotected {
+			createOpts.Protected = new(true)
+		}
+		if environmentScope != "" {
+			createOpts.EnvironmentScope = new(environmentScope)
+		}
+		return a.Client.GL.ProjectVariables.CreateVariable(projectID, createOpts, gitlab.WithContext(ctx))
+	}
+	return v, resp, err
+}
+
+// SetGroupVariable creates or updates a CI variable in the group scope.
+// On 404 (variable does not exist), it falls back to CreateVariable so that
+// the caller can inject new variables, not only update existing ones.
+func (a *Attacker) SetGroupVariable(ctx context.Context, groupID, key, value string, unprotected, masked bool, environmentScope string) (*gitlab.GroupVariable, *gitlab.Response, error) {
+	opts := &gitlab.UpdateGroupVariableOptions{
+		Value:     new(value),
+		Protected: new(!unprotected),
+		Masked:    new(masked),
+	}
+	if environmentScope != "" {
+		opts.EnvironmentScope = new(environmentScope)
+	}
+	v, resp, err := a.Client.GL.GroupVariables.UpdateVariable(groupID, key, opts, gitlab.WithContext(ctx))
+	if err == nil {
+		return v, resp, nil
+	}
+	// 404 means the variable doesn't exist — try creating it.
+	if resp != nil && resp.StatusCode == 404 {
+		createOpts := &gitlab.CreateGroupVariableOptions{
+			Key:    &key,
+			Value:  &value,
+			Masked: new(masked),
+		}
+		if !unprotected {
+			createOpts.Protected = new(true)
+		}
+		if environmentScope != "" {
+			createOpts.EnvironmentScope = new(environmentScope)
+		}
+		return a.Client.GL.GroupVariables.CreateVariable(groupID, createOpts, gitlab.WithContext(ctx))
+	}
+	return v, resp, err
 }
