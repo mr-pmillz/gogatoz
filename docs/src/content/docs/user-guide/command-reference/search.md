@@ -32,6 +32,10 @@ Filters:
 - --membership         Only projects the authenticated user is a member of
 - --visibility         Filter by visibility: public|internal|private
 - --archived-only      Only archived projects
+- --language           Filter by programming language (comma-separated)
+- --topic              Filter by project topics/tags (comma-separated)
+- --path-exists        Only projects containing a specific file (e.g., `.gitlab-ci.yml`)
+- --path-pattern       Glob pattern for repo file paths (e.g., `scripts/*.sh`)
 
 Advanced (per-project code content filter):
 - --code-content       Additional content query to run against each matched project's repository (scope=blobs)
@@ -40,7 +44,9 @@ Advanced (per-project code content filter):
 - --code-max-pages     Max pages to fetch per project (default: 1)
 - --code-concurrency   Concurrency for per-project code searches (default: GOMAXPROCS; capped at 64)
 
-Output and global flags:
+Output:
+- --output             Write output to file (default: stdout)
+- --format             Output format: text|json|jsonl (default respects --json)
 - --json               Output JSON instead of text
 - --verbose, -v        Verbose logging
 - --gitlab-url         GitLab base URL (default: https://gitlab.com)
@@ -82,6 +88,31 @@ Output and global flags:
 ./gogatoz search -q "runner" --code-content "tags: self-hosted" --code-per-page 10 --json
 ```
 
+### Search for hardcoded tokens in code
+
+```bash
+gogatoz search --code-content "glpat-" --json
+```
+
+### Only CI-enabled projects
+
+```bash
+gogatoz search -q "" --path-exists ".gitlab-ci.yml" --json
+```
+
+### Filter by language
+
+```bash
+gogatoz search -q "" --language python --membership --json
+```
+
+### Save results to file for pipeline into enumerate
+
+```bash
+gogatoz search --json --output targets.json
+gogatoz enumerate -i targets.json --json > findings.json
+```
+
 ## Output
 
 - Text: prints one line per project: `path_with_namespace<TAB>http_url_to_repo`
@@ -96,5 +127,5 @@ Tip: Pipe JSON output into jq to generate an input file for enumerate:
 
 ## Notes
 
-- This command uses GitLab REST API v4 ListProjects with a simple project Search. It also supports optional per-project code content filtering via the GitLab code search endpoint (scope=blobs) using --code-content. Path and language filters, plus GraphQL metadata enrichment, are planned.
+- This command uses GitLab REST API v4 ListProjects with a simple project Search. It also supports optional per-project code content filtering via the GitLab code search endpoint (scope=blobs) using --code-content. Path filtering (`--path-exists`, `--path-pattern`), language filtering (`--language`), and topic filtering (`--topic`) are available for targeted discovery.
 - Respect rate limits using the global flags (--rate-rps/--rate-burst/--retry-max, HTTP pool/timeouts).
