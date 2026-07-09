@@ -62,6 +62,11 @@ git push -u origin release/v0.8.0
 Only release-blocking fixes go on the release branch — no new features.
 CI runs on every push to `release/**`.
 
+The `changelog.yml` workflow automatically regenerates `CHANGELOG.md` on each
+push to the release branch, so the changelog lands on `main` as part of the
+release merge — not as a separate post-merge commit that would break CI
+coverage baselines.
+
 ### 4. Open a PR into `main`
 
 ```bash
@@ -89,10 +94,9 @@ the full automation chain:
    - `git-cliff` generates release notes from conventional commits.
    - A GitHub Release is published with the binaries and changelog.
    - Build provenance is attested for both archives and container images.
-3. A follow-up **changelog** job regenerates the full `CHANGELOG.md` and
-   commits it to `main`.
-4. The changelog commit triggers **`docs.yml`**, which rebuilds and redeploys
-   the documentation site.
+
+Note that `CHANGELOG.md` is already on `main` at this point — it was committed
+to the release branch by `changelog.yml` and merged as part of the PR.
 
 ### 6. Back-merge `main` into `develop`
 
