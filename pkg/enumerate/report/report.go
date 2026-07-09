@@ -101,6 +101,7 @@ type Report struct {
 	LogFindingsTotal int
 	Attacks          []AttackView
 	AttackSummary    AttackSummary
+	Score            *analyze.ScoreResult `json:"score,omitempty"`
 }
 
 // Build constructs a Report from raw enumeration results.

@@ -60,10 +60,18 @@ var (
 	webhookHeaders []string
 	webhookTimeout string
 	// output formatting
-	enumFormat     string // text|json|jsonl (default respects --json)
+	enumFormat     string // text|json|jsonl|sarif|glsast (default respects --json)
 	enumOutputPath string
+	// SARIF/GLSAST direct file output
+	sarifOutputPath  string
+	glsastOutputPath string
 	// false positive filtering
 	enumFilterFP bool
+	// compliance scoring
+	enumScore bool
+	// MR comment and badge
+	enumMRComment int64
+	enumBadge     bool
 )
 
 var enumerateFunc = enumerate.EnumerateProjects
@@ -244,6 +252,8 @@ var enumerateCmd = &cobra.Command{
 		opts.LogMaxJobs = logMaxJobs
 		// Redaction (off by default: findings show real secret values)
 		opts.Redact = enumRedact
+		// Pass analysis controls from config file
+		opts.Controls = controlsCfg
 		if strings.TrimSpace(remoteAllowlist) != "" {
 			parts := strings.SplitSeq(remoteAllowlist, ",")
 			for p := range parts {
@@ -309,6 +319,7 @@ var enumerateCmd = &cobra.Command{
 			}
 		}
 
+		scanStart := time.Now()
 		results, err := enumerateFunc(ctx, client, idents, opts)
 		if err != nil {
 			// Non-fatal: still print any results gathered
@@ -411,17 +422,62 @@ var enumerateCmd = &cobra.Command{
 			}
 			return nil
 		}
+		// Compute score if requested
+		var scoreResult *analyze.ScoreResult
+		if enumScore {
+			var allFindings []analyze.Finding
+			for _, r := range results {
+				allFindings = append(allFindings, r.Findings...)
+			}
+			sr := analyze.ComputeScore(allFindings)
+			scoreResult = &sr
+		}
+
+		// SARIF format
+		if fmtSel == fmtSARIF {
+			return WriteSARIF(w, collectFindings(results), version)
+		}
+		// GitLab SAST format
+		if fmtSel == fmtGLSAST {
+			return WriteGLSAST(w, collectFindings(results), version, scanStart, time.Now())
+		}
+		// Write sidecar SARIF/GLSAST files if requested (alongside primary output)
+		if p := strings.TrimSpace(sarifOutputPath); p != "" {
+			if sErr := writeSidecarSARIF(p, collectFindings(results), version); sErr != nil {
+				fmt.Fprintf(cmd.ErrOrStderr(), "warning: failed to write SARIF: %v\n", sErr)
+			}
+		}
+		if p := strings.TrimSpace(glsastOutputPath); p != "" {
+			if sErr := writeSidecarGLSAST(p, collectFindings(results), version, scanStart); sErr != nil {
+				fmt.Fprintf(cmd.ErrOrStderr(), "warning: failed to write GLSAST: %v\n", sErr)
+			}
+		}
 		// html via report renderer
 		if fmtSel == fmtHTML {
 			repOpts := report.Options{OnlyFindings: onlyFindings}
 			rep := report.Build(results, repOpts)
+			rep.Score = scoreResult
 			return report.RenderHTML(w, rep, version)
 		}
 		// text via pterm report renderer
 		repOpts := report.Options{OnlyFindings: onlyFindings}
 		rep := report.Build(results, repOpts)
+		rep.Score = scoreResult
 		if err := report.RenderPTerm(w, rep); err != nil {
 			return err
+		}
+		// Post-analysis: MR comment (requires single-project scan with known project ID)
+		if enumMRComment > 0 && len(results) > 0 && results[0].ProjectID > 0 {
+			commentBody := report.BuildMRCommentBody(rep, scoreResult)
+			if mrErr := upsertMRComment(cmd.Context(), client, results[0].ProjectID, enumMRComment, commentBody); mrErr != nil {
+				fmt.Fprintf(cmd.ErrOrStderr(), "warning: MR comment failed: %v\n", mrErr)
+			}
+		}
+		// Post-analysis: Badge (requires single-project scan with known project ID + score)
+		if enumBadge && scoreResult != nil && len(results) == 1 && results[0].ProjectID > 0 {
+			if badgeErr := client.UpsertComplianceBadge(cmd.Context(), results[0].ProjectID, scoreResult.Score, gitlabURL); badgeErr != nil {
+				fmt.Fprintf(cmd.ErrOrStderr(), "warning: badge update failed: %v\n", badgeErr)
+			}
 		}
 		if !outputJSON && verbose {
 			_, err := fmt.Fprintln(cmd.ErrOrStderr())
@@ -475,8 +531,15 @@ func init() {
 	enumerateCmd.Flags().IntVar(&maxRefs, "max-refs", 0, "Maximum number of refs to scan per project (0 = all provided)")
 	// Output controls
 	enumerateCmd.Flags().BoolVar(&enumFilterFP, "filter-false-positives", false, "Automatically identify and mark common false positive patterns")
-	enumerateCmd.Flags().StringVar(&enumFormat, "format", "", "Output format: text|json|jsonl|html (default respects --json)")
+	enumerateCmd.Flags().StringVar(&enumFormat, "format", "", "Output format: text|json|jsonl|html|sarif|glsast (default respects --json)")
 	enumerateCmd.Flags().StringVar(&enumOutputPath, "output", "", "Write output to file (default: stdout)")
+	enumerateCmd.Flags().StringVar(&sarifOutputPath, "sarif-output", "", "Write SARIF 2.1.0 report to file (in addition to primary output)")
+	enumerateCmd.Flags().StringVar(&glsastOutputPath, "glsast-output", "", "Write GitLab SAST report (gl-sast-report.json) to file (in addition to primary output)")
+	// Compliance scoring
+	enumerateCmd.Flags().BoolVar(&enumScore, "score", false, "Compute and display compliance score (A-E letter grade)")
+	// MR comment and badge
+	enumerateCmd.Flags().Int64Var(&enumMRComment, "mr-comment", 0, "Post/update compliance comment on this MR IID (requires api scope token)")
+	enumerateCmd.Flags().BoolVar(&enumBadge, "badge", false, "Create/update compliance badge on the project (requires api scope token)")
 }
 
 // loadIdents reads project identifiers from --input according to --input-format (auto|text|json|jsonl).
@@ -641,4 +704,50 @@ func extractIdent(m map[string]any) string {
 		}
 	}
 	return ""
+}
+
+// collectFindings aggregates all findings from enumerate results into a single slice.
+func collectFindings(results []enumerate.Result) []analyze.Finding {
+	var all []analyze.Finding
+	for _, r := range results {
+		all = append(all, r.Findings...)
+	}
+	return all
+}
+
+// writeSidecarSARIF writes a SARIF report to the specified file path.
+func writeSidecarSARIF(path string, findings []analyze.Finding, toolVersion string) error {
+	f, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	return WriteSARIF(f, findings, toolVersion)
+}
+
+// writeSidecarGLSAST writes a GitLab SAST report to the specified file path.
+func writeSidecarGLSAST(path string, findings []analyze.Finding, toolVersion string, start time.Time) error {
+	f, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	return WriteGLSAST(f, findings, toolVersion, start, time.Now())
+}
+
+// upsertMRComment creates or updates the GoGatoZ compliance comment on a merge request.
+func upsertMRComment(ctx context.Context, client *gitlabx.Client, projectID int64, mrIID int64, body string) error {
+	notes, err := client.ListMergeRequestNotes(ctx, projectID, mrIID)
+	if err != nil {
+		return fmt.Errorf("list MR notes: %w", err)
+	}
+	identifier := report.MRCommentIdentifier()
+	for _, note := range notes {
+		if strings.Contains(note.Body, identifier) {
+			_, err = client.UpdateMergeRequestNote(ctx, projectID, mrIID, note.ID, body)
+			return err
+		}
+	}
+	_, err = client.CreateMergeRequestNote(ctx, projectID, mrIID, body)
+	return err
 }

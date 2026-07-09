@@ -7,6 +7,7 @@ import (
 	"runtime/debug"
 	"strings"
 
+	"github.com/mr-pmillz/gogatoz/pkg/config"
 	"github.com/mr-pmillz/gogatoz/pkg/store"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -57,6 +58,9 @@ var (
 	dbPath   string
 	noDB     bool
 	cliStore *store.Store
+
+	// Analysis controls (populated from config file controls: section)
+	controlsCfg *config.ControlsConfig
 )
 
 // rootCmd represents the base command when called without any subcommands
@@ -268,6 +272,12 @@ func initConfig() error {
 	}
 	// Normalize relative paths if needed (future use)
 	_ = filepath.Base(viper.ConfigFileUsed())
+
+	// Unmarshal analysis controls section if present
+	var c config.ControlsConfig
+	if err := viper.UnmarshalKey("controls", &c); err == nil {
+		controlsCfg = &c
+	}
 	return nil
 }
 

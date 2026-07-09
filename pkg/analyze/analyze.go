@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/mr-pmillz/gogatoz/pkg/config"
 	"github.com/mr-pmillz/gogatoz/pkg/pipeline"
 )
 
@@ -48,6 +49,7 @@ var ErrPartial = errors.New("partial analysis")
 // runConfig holds optional behavior toggles for Run.
 type runConfig struct {
 	redactSecrets bool
+	controls      *config.ControlsConfig
 }
 
 // Option configures Run behavior.
@@ -58,6 +60,12 @@ type Option func(*runConfig)
 // By default Run leaves these values unredacted.
 func WithRedactedSecrets() Option {
 	return func(c *runConfig) { c.redactSecrets = true }
+}
+
+// WithControls injects per-detection configuration into the analysis engine.
+// A nil value is safe and means "use hardcoded defaults".
+func WithControls(cfg *config.ControlsConfig) Option {
+	return func(c *runConfig) { c.controls = cfg }
 }
 
 // Run executes core checks against the parsed CI document.
@@ -282,70 +290,53 @@ func Run(doc *pipeline.Document, opts ...Option) ([]Finding, error) {
 	// 17) Downstream trigger chain abuse in MR-triggered jobs
 	findings = append(findings, detectTriggerChainRisk(doc)...)
 
+	// 18) CI debug trace / debug services enabled (secret exposure)
+	findings = append(findings, detectDebugTrace(doc, cfg.controls)...)
+
+	// 19) Unverified script execution (base64|bash, download-then-exec)
+	findings = append(findings, detectUnverifiedScriptExec(doc)...)
+
+	// 20) Unpinned package installs (supply chain risk)
+	findings = append(findings, detectUnpinnedPackageInstall(doc)...)
+
+	// 21) Pipeline governance (mutable include refs, weakened security jobs)
+	findings = append(findings, detectGovernance(doc, cfg.controls)...)
+
+	// 22) Docker-in-Docker detection (container escape risk)
+	findings = append(findings, detectDinD(doc)...)
+
+	// 23) Container image supply chain (mutable tags, missing digest pins)
+	findings = append(findings, detectImageIssues(doc, cfg.controls)...)
+
+	// 24) Script obfuscation (zero-width chars, bidi overrides)
+	findings = append(findings, detectScriptObfuscation(doc)...)
+
+	// Filter disabled rules
+	if cfg.controls != nil {
+		var filtered []Finding
+		for _, f := range findings {
+			if !cfg.controls.IsRuleDisabled(f.ID) {
+				filtered = append(filtered, f)
+			}
+		}
+		findings = filtered
+	}
+
 	// Attach basic recommendations
 	findings = withRecommendations(findings)
 	return findings, nil
 }
 
-// withRecommendations attaches a simple recommendation string based on Finding ID.
+// withRecommendations attaches a recommendation string from the codes registry.
 func withRecommendations(in []Finding) []Finding {
 	for i := range in {
 		if strings.TrimSpace(in[i].Recommendation) != "" {
 			continue
 		}
-		switch in[i].ID {
-		case IncludeRemoteID:
-			in[i].Recommendation = "Avoid remote includes; prefer project includes pinned to a commit. If remote is necessary, allowlist hosts and pin exact versions. See: https://docs.gitlab.com/ee/ci/yaml/includes.html#includeremote"
-		case "INCLUDE_PROJECT_UNPINNED":
-			in[i].Recommendation = "Pin project includes to a tag or commit to prevent upstream changes from silently altering your pipeline. See: https://docs.gitlab.com/ee/ci/yaml/includes.html#syntax-for-include"
-		case "INCLUDE_COMPONENT":
-			in[i].Recommendation = "Use trusted components and pin explicit versions; review inputs for injection risks. See: https://docs.gitlab.com/ee/ci/components/"
-		case "SELF_HOSTED_EXPOSED":
-			in[i].Recommendation = "Tighten job rules/only conditions, restrict to protected branches, and limit access to sensitive runner tags. See: https://docs.gitlab.com/ee/user/project/protected_branches/ and https://docs.gitlab.com/runner/"
-		case "MR_TAGGED_RUNNER":
-			in[i].Recommendation = "Restrict MR-triggered jobs on tagged runners to protected branches or require approvals; disable fork MR pipelines if unsafe. See: https://docs.gitlab.com/ee/ci/pipelines/merge_request_pipelines.html and https://docs.gitlab.com/ee/user/project/protected_branches/"
-		case "RISKY_REMOTE_SCRIPT":
-			in[i].Recommendation = "Avoid piping network content into shells; vendor scripts or pin by checksum/version before execution. See: https://docs.gitlab.com/ee/ci/yaml/"
-		case "ARTIFACTS_NO_EXPIRE":
-			in[i].Recommendation = "Set artifacts:expire_in to a bounded period and avoid exposing sensitive artifacts. See: https://docs.gitlab.com/ee/ci/yaml/#artifacts"
-		case "PLAINTEXT_SECRET", "PLAINTEXT_SECRET_JOB":
-			in[i].Recommendation = "Move secrets into masked/protected CI variables or a secrets manager; rotate any exposed credentials. See: https://docs.gitlab.com/ee/ci/variables/"
-		case "FORK_MR_UNPROTECTED":
-			in[i].Recommendation = "Enable fork MR protections (protected branches, approvals, or disable fork MR pipelines). See: https://docs.gitlab.com/ee/ci/pipelines/merge_request_pipelines.html#enable-or-disable-pipelines-for-merge-requests and https://docs.gitlab.com/ee/user/project/protected_branches/"
-		case "DISPATCH_TOCTOU_RISK":
-			in[i].Recommendation = "Constrain manual/triggered jobs and verify upstream state before use. Consider approvals and environment protections. See: https://docs.gitlab.com/ee/ci/yaml/#whenmanual and https://docs.gitlab.com/ee/ci/yaml/#needs"
-		case "PWN_REQUEST_DEPLOYMENT":
-			in[i].Recommendation = "Protect deployments (protected environments, approvals) and restrict MR-triggered deploys. See: https://docs.gitlab.com/ee/ci/environments/protected_environments.html and https://docs.gitlab.com/ee/user/project/merge_requests/approvals/"
-		case "PRIVILEGED_RUNNER_RISK":
-			in[i].Recommendation = "Avoid docker-in-docker or privileged context on MR-triggered jobs; prefer rootless or buildkit alternatives and hardened runners. See: https://docs.gitlab.com/ee/ci/docker/using_docker_build.html#use-docker-in-docker-workflow-with-dind and https://docs.gitlab.com/runner/security/"
-		case "RUNNER_EXECUTOR_RISK":
-			in[i].Recommendation = "Use docker or kubernetes executors with non-privileged configuration; restrict shell executors to isolated hosts with protected branch triggers. See: https://docs.gitlab.com/runner/executors/"
-		case "VARIABLE_INJECTION":
-			in[i].Recommendation = "Sanitize or avoid attacker-controllable CI variables (e.g., CI_MERGE_REQUEST_TITLE, CI_COMMIT_MESSAGE) in scripts; use fixed values or validated inputs instead of interpolating user-supplied data. See: https://docs.gitlab.com/ee/ci/variables/ and https://docs.gitlab.com/ee/ci/yaml/script.html"
-		case "FORK_SCRIPT_EXECUTION":
-			in[i].Recommendation = "Avoid executing repo-local scripts in MR-triggered jobs from forks. Use inline scripts, pin script checksums, or add fork protection rules (source project == target project). See: https://docs.gitlab.com/ee/ci/pipelines/merge_request_pipelines.html"
-		case "AI_PROMPT_INJECTION":
-			in[i].Recommendation = "Do not run AI code review tools on untrusted fork MR content. Isolate AI workflows to trusted branches, use read-only permissions, validate AI outputs before committing, and never pass MR descriptions or untrusted file content as prompts. See: https://www.stepsecurity.io/blog/hackerbot-claw-github-actions-exploitation"
-		case "ARTIFACT_POISONING_RISK":
-			in[i].Recommendation = "Avoid consuming artifacts from MR-triggered jobs in privileged downstream stages; use dependencies keyword to limit artifact scope, require approvals for artifact-producing MR pipelines, or validate artifact integrity before use. See: https://docs.gitlab.com/ee/ci/yaml/#dependencies and https://docs.gitlab.com/ee/ci/pipelines/merge_request_pipelines.html"
-		case "WORKFLOW_BROAD_RULES":
-			in[i].Recommendation = "Restrict top-level workflow rules to specific branches, tags, or pipeline sources rather than using 'when: always'; gate pipelines with protected branch or approval requirements. See: https://docs.gitlab.com/ee/ci/yaml/workflow.html" //nolint:gosec // G602: i bounded by range
-		case "SCRIPT_INJECTION_RISK":
-			in[i].Recommendation = "Avoid executing repo-local scripts in MR-triggered jobs; use inline script commands, pin script checksums, or move scripts to a trusted project include. Add fork protection rules to prevent untrusted modifications. See: https://docs.gitlab.com/ee/ci/pipelines/merge_request_pipelines.html" //nolint:gosec // G602: i bounded by range
-		case "SELF_MERGE_POSSIBLE":
-			in[i].Recommendation = "Require at least 2 approvals for merge requests and enable 'Prevent approval by author' in project settings. Use CODEOWNERS to enforce reviews for CI config and scripts. See: https://docs.gitlab.com/ee/user/project/merge_requests/approvals/ and https://docs.gitlab.com/ee/user/project/codeowners/" //nolint:gosec // G602: i bounded by range
-		case "CACHE_POISONING_RISK":
-			in[i].Recommendation = "Set cache policy to 'pull' for MR-triggered jobs to prevent cache writes from untrusted pipelines. Use separate cache keys per branch or pipeline source. See: https://docs.gitlab.com/ee/ci/caching/#cache-policy" //nolint:gosec // G602: i bounded by range
-		case "LOTP_TOOL_EXEC":
-			in[i].Recommendation = "Restrict MR-triggered jobs that run build/lint tools to protected branches, or use fork protection rules (CI_MERGE_REQUEST_SOURCE_PROJECT_PATH == CI_MERGE_REQUEST_TARGET_PROJECT_PATH). Consider moving tool config out of the repository or validating config file integrity before execution. See: https://boostsecurityio.github.io/lotp/ and https://docs.gitlab.com/ee/ci/pipelines/merge_request_pipelines.html" //nolint:gosec // G602: i bounded by range
-		case "CACHE_KEY_INJECTION":
-			in[i].Recommendation = "Avoid using attacker-controllable CI variables (e.g., CI_MERGE_REQUEST_TITLE, CI_COMMIT_MESSAGE) in cache keys. Use static keys or variables derived from pipeline source/branch that are not attacker-controllable. See: https://docs.gitlab.com/ee/ci/caching/#use-the-files-keyword-to-create-a-cache-key-based-on-specific-files" //nolint:gosec // G602: i bounded by range
-		case "OIDC_TOKEN_MR_RISK":
-			in[i].Recommendation = "Do not issue OIDC tokens in MR-triggered jobs — fork authors can harvest these tokens to authenticate against cloud providers (AWS, GCP, Azure). Restrict id_tokens to protected branch pipelines only. See: https://docs.gitlab.com/ee/ci/secrets/id_token_authentication.html and https://docs.gitlab.com/ee/ci/pipelines/merge_request_pipelines.html" //nolint:gosec // G602: i bounded by range
-		case "TRIGGER_CHAIN_RISK":
-			in[i].Recommendation = "Avoid triggering downstream pipelines from MR-triggered jobs. If required, ensure the downstream project restricts who can trigger pipelines and does not inherit parent secrets. Use strategy:mirror carefully and prefer strategy:depend only on protected pipelines. See: https://docs.gitlab.com/ee/ci/yaml/#trigger and https://docs.gitlab.com/ee/ci/pipelines/downstream_pipelines.html" //nolint:gosec // G602: i bounded by range
-		default:
-			in[i].Recommendation = "Review and harden configuration; apply least privilege and restrict triggers/inputs." //nolint:gosec // G602: i bounded by range
+		if info := LookupFinding(in[i].ID); info != nil {
+			in[i].Recommendation = info.Remediation
+		} else {
+			in[i].Recommendation = defaultRemediation //nolint:gosec // G602: i bounded by range
 		}
 	}
 	return in
