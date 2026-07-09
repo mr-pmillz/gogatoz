@@ -1,0 +1,185 @@
+{
+  "schema": {
+    "name": "GoGatoZ_CICD",
+    "display_name": "GitLab CI/CD Attack Surface (GoGatoZ)",
+    "version": "v1.0.0",
+    "namespace": "CICD"
+  },
+  "node_kinds": [
+    {
+      "name": "CICD_GitLabInstance",
+      "display_name": "GitLab Instance",
+      "description": "A GitLab server instance",
+      "is_display_kind": true,
+      "icon": "server",
+      "color": "#FC6D26"
+    },
+    {
+      "name": "CICD_Group",
+      "display_name": "GitLab Group",
+      "description": "A GitLab group or subgroup",
+      "is_display_kind": true,
+      "icon": "folder",
+      "color": "#6B4FBB"
+    },
+    {
+      "name": "CICD_Project",
+      "display_name": "GitLab Project",
+      "description": "A GitLab repository project",
+      "is_display_kind": true,
+      "icon": "code-branch",
+      "color": "#1F75CB"
+    },
+    {
+      "name": "CICD_Runner",
+      "display_name": "CI/CD Runner",
+      "description": "A self-hosted GitLab runner",
+      "is_display_kind": true,
+      "icon": "microchip",
+      "color": "#E24329"
+    },
+    {
+      "name": "CICD_CIConfig",
+      "display_name": "CI Configuration",
+      "description": "A .gitlab-ci.yml pipeline config",
+      "is_display_kind": true,
+      "icon": "file-code",
+      "color": "#2E7D32"
+    },
+    {
+      "name": "CICD_Job",
+      "display_name": "CI/CD Job",
+      "description": "A job within a CI/CD pipeline",
+      "is_display_kind": true,
+      "icon": "gear",
+      "color": "#0288D1"
+    },
+    {
+      "name": "CICD_Finding",
+      "display_name": "Security Finding",
+      "description": "A CI/CD security vulnerability finding",
+      "is_display_kind": true,
+      "icon": "bug",
+      "color": "#D32F2F"
+    },
+    {
+      "name": "CICD_Secret",
+      "display_name": "CI/CD Secret",
+      "description": "A CI/CD variable or secret",
+      "is_display_kind": true,
+      "icon": "key",
+      "color": "#F57C00"
+    },
+    {
+      "name": "CICD_Pipeline",
+      "display_name": "Pipeline",
+      "description": "A CI/CD pipeline execution",
+      "is_display_kind": true,
+      "icon": "play",
+      "color": "#7B1FA2"
+    },
+    {
+      "name": "CICD_Credential",
+      "display_name": "Credential",
+      "description": "A harvested credential from pivot operations",
+      "is_display_kind": true,
+      "icon": "id-badge",
+      "color": "#C62828"
+    }
+  ],
+  "relationship_kinds": [
+    {
+      "name": "CICD_Contains",
+      "description": "Structural containment (Group->Project, Project->CIConfig, CIConfig->Job)",
+      "is_traversable": false
+    },
+    {
+      "name": "CICD_MemberOf",
+      "description": "Project belongs to Group",
+      "is_traversable": false
+    },
+    {
+      "name": "CICD_IncludesProject",
+      "description": "CI config includes another project's config file",
+      "is_traversable": true
+    },
+    {
+      "name": "CICD_IncludesRemote",
+      "description": "CI config includes a remote URL",
+      "is_traversable": true
+    },
+    {
+      "name": "CICD_IncludesTemplate",
+      "description": "CI config includes a GitLab template",
+      "is_traversable": false
+    },
+    {
+      "name": "CICD_IncludesComponent",
+      "description": "CI config includes a CI/CD component",
+      "is_traversable": true
+    },
+    {
+      "name": "CICD_IncludesLocal",
+      "description": "CI config includes a local file",
+      "is_traversable": false
+    },
+    {
+      "name": "CICD_RunsOn",
+      "description": "Job executes on a specific runner",
+      "is_traversable": true
+    },
+    {
+      "name": "CICD_HasFinding",
+      "description": "Project has a security finding",
+      "is_traversable": false
+    },
+    {
+      "name": "CICD_HasSecret",
+      "description": "Project has a CI/CD secret or variable",
+      "is_traversable": false
+    },
+    {
+      "name": "CICD_Exploited",
+      "description": "Attack successfully targeted project",
+      "is_traversable": true
+    },
+    {
+      "name": "CICD_PivotsTo",
+      "description": "Credential used to pivot to project",
+      "is_traversable": true
+    },
+    {
+      "name": "CICD_DependsOn",
+      "description": "Transitive dependency through include chains",
+      "is_traversable": true
+    },
+    {
+      "name": "CICD_TriggersDownstream",
+      "description": "Project triggers downstream pipeline",
+      "is_traversable": true
+    },
+    {
+      "name": "CICD_SharedRunner",
+      "description": "Projects share the same runner",
+      "is_traversable": true
+    }
+  ],
+  "environments": [
+    {
+      "environment_kind": "CICD_GitLabInstance",
+      "source_kind": "CICD",
+      "principal_kinds": [
+        "CICD_Group",
+        "CICD_Project",
+        "CICD_Runner",
+        "CICD_CIConfig",
+        "CICD_Job",
+        "CICD_Finding",
+        "CICD_Secret",
+        "CICD_Pipeline",
+        "CICD_Credential"
+      ]
+    }
+  ],
+  "relationship_findings": []
+}

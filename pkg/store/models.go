@@ -182,3 +182,22 @@ type ExfiltratedSecret struct {
 	Key               string `gorm:"not null"`
 	Value             string `gorm:"not null"` //nolint:gosec // exfiltrated value, not a credential
 }
+
+// GraphNode stores a BloodHound graph node for re-export.
+type GraphNode struct {
+	gorm.Model
+	SessionID  uint   `gorm:"not null;index"`
+	NodeID     string `gorm:"not null;index"`
+	Kind       string `gorm:"not null;index"`
+	Properties string `gorm:"type:text"`
+}
+
+// GraphEdge stores a BloodHound graph edge for re-export.
+type GraphEdge struct {
+	gorm.Model
+	SessionID  uint   `gorm:"not null;index"`
+	StartID    string `gorm:"not null;index"`
+	EndID      string `gorm:"not null;index"`
+	Kind       string `gorm:"not null;index"`
+	Properties string `gorm:"type:text"`
+}

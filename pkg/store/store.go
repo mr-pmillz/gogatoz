@@ -43,6 +43,8 @@ func Open(dbPath string) (*Store, error) {
 		&PivotSession{},
 		&HarvestedCredential{},
 		&ExfiltratedSecret{},
+		&GraphNode{},
+		&GraphEdge{},
 	); err != nil {
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
@@ -215,4 +217,34 @@ func (s *Store) GetAllExfiltratedSecrets() ([]ExfiltratedSecret, error) {
 	var secrets []ExfiltratedSecret
 	err := s.db.Order("source_project_path ASC, key ASC").Find(&secrets).Error
 	return secrets, err
+}
+
+// SaveGraphNodes persists BloodHound graph nodes for a session.
+func (s *Store) SaveGraphNodes(sessionID uint, nodes []GraphNode) error {
+	for i := range nodes {
+		nodes[i].SessionID = sessionID
+	}
+	return s.db.CreateInBatches(nodes, 100).Error
+}
+
+// SaveGraphEdges persists BloodHound graph edges for a session.
+func (s *Store) SaveGraphEdges(sessionID uint, edges []GraphEdge) error {
+	for i := range edges {
+		edges[i].SessionID = sessionID
+	}
+	return s.db.CreateInBatches(edges, 100).Error
+}
+
+// GetGraphNodes returns all graph nodes for a session.
+func (s *Store) GetGraphNodes(sessionID uint) ([]GraphNode, error) {
+	var nodes []GraphNode
+	err := s.db.Where("session_id = ?", sessionID).Find(&nodes).Error
+	return nodes, err
+}
+
+// GetGraphEdges returns all graph edges for a session.
+func (s *Store) GetGraphEdges(sessionID uint) ([]GraphEdge, error) {
+	var edges []GraphEdge
+	err := s.db.Where("session_id = ?", sessionID).Find(&edges).Error
+	return edges, err
 }
