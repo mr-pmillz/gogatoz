@@ -1,0 +1,81 @@
+name: Tag Release
+
+# When a release/* or hotfix/* branch is merged into main, derive the semver
+# from the branch name and push an annotated tag.  The tag push triggers the
+# release.yml workflow (GoReleaser + GHCR + GitHub Release).
+#
+# Uses a GitHub App token so the tag-push event re-triggers other workflows
+# (GITHUB_TOKEN-created events are intentionally ignored by Actions).
+#
+# Prerequisites:
+#   - Repository secrets GOGATOZ_APP_ID and GOGATOZ_APP_PRIVATE_KEY for a
+#     GitHub App with Contents: write permission on this repo.
+#   - The App must be on the branch/tag protection bypass list so it can push
+#     tags to protected branches.
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  tag:
+    name: tag
+    if: >-
+      github.event.pull_request.merged == true &&
+      (startsWith(github.event.pull_request.head.ref, 'release/') ||
+       startsWith(github.event.pull_request.head.ref, 'hotfix/'))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@df432ceedc7162793a195dd1713ff69aefc7379e # ratchet:actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.GOGATOZ_APP_ID }}
+          private-key: ${{ secrets.GOGATOZ_APP_PRIVATE_KEY }}
+
+      - name: Derive version and push tag
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          BRANCH: ${{ github.event.pull_request.head.ref }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          # Strip the release/ or hotfix/ prefix and optional leading "v".
+          version="${BRANCH#release/}"
+          version="${version#hotfix/}"
+          version="${version#v}"
+
+          # Validate semver (X.Y.Z with optional pre-release / build metadata).
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?(\+[a-zA-Z0-9.]+)?$ ]]; then
+            echo "❌ Could not extract a valid semver from branch '$BRANCH' (got '$version')"
+            exit 1
+          fi
+
+          tag="v${version}"
+          echo "Derived tag: $tag"
+
+          # Idempotent: if the tag already exists, exit cleanly.
+          if git rev-parse "$tag" >/dev/null 2>&1; then
+            echo "✅ Tag $tag already exists — nothing to do"
+            exit 0
+          fi
+
+          # Create annotated tag and push via the App token so the push event
+          # re-triggers release.yml (GITHUB_TOKEN pushes do not).
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "$tag" -m "Release $tag (PR #${PR_NUMBER})"
+
+          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git"
+          git push origin "$tag"
+          echo "✅ Pushed tag $tag"

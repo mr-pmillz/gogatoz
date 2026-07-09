@@ -28,6 +28,7 @@ docs/.astro/
 ./test/
 *.xml
 public/
+!docs/public/
 Plans/
 .mcp.json
 

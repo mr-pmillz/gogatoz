@@ -31,10 +31,14 @@ go test -run TestName ./pkg/package/...  # Run a single test
 
 ### Continuous Integration & Release
 
-The project uses GitHub Actions (workflows in `.github/workflows/`). The old `.gitlab-ci.yml` pipeline has been removed.
+The project uses GitHub Actions (workflows in `.github/workflows/`) and follows a **gitflow** branching model. The old `.gitlab-ci.yml` pipeline has been removed.
 
-- **`ci.yml`** — runs on pull requests and pushes to `main`: a `build` job, a `lint` job (`golangci-lint run -c .golangci-lint.yml ./...`, golangci-lint v2 via golangci-lint-action@v9), and a `test` job (`gotestsum` race+coverage, coverage summary to the job summary, HTML/JSON coverage artifacts, `dorny/test-reporter`). Go version is read from `go.mod` via `setup-go` (`go-version-file: go.mod`).
-- **`release.yml`** — runs on `v*` tags: git-cliff generates `RELEASE_CHANGELOG.md` (full changelog on the first tag, latest-section thereafter), then goreleaser publishes cross-platform binaries + a source archive + a GitHub Release and pushes multi-arch (amd64/arm64) container images to GHCR (`ghcr.io/mr-pmillz/gogatoz`) via `dockers_v2` (QEMU + buildx). `actions/attest-build-provenance` attests both `checksums.txt` and `digests.txt`. Auth uses the built-in `GITHUB_TOKEN` — no extra secrets.
+**Branch model:** `main` (production, tagged releases) ← `develop` (integration) ← `feature/*`, `fix/*` (daily work). Releases cut via `release/vX.Y.Z` branches; urgent fixes via `hotfix/vX.Y.Z`. Version lives in the branch name — no version constant to bump.
+
+- **`branch-policy.yml`** — validates every PR: only `develop`, `release/*`, or `hotfix/*` may target `main`; feature/fix branches must target `develop`.
+- **`ci.yml`** — runs on pushes to `main`, `develop`, `release/**`, `hotfix/**` and PRs targeting `main` or `develop`: a `build` job, a `lint` job (`golangci-lint run -c .golangci-lint.yml ./...`, golangci-lint v2 via golangci-lint-action@v9), and a `test` job (`gotestsum` race+coverage, coverage summary to the job summary, HTML/JSON coverage artifacts, `dorny/test-reporter`). Go version is read from `go.mod` via `setup-go` (`go-version-file: go.mod`).
+- **`tag-release.yml`** — fires when a `release/*` or `hotfix/*` PR is merged into `main`: extracts semver from the branch name, creates an annotated `vX.Y.Z` tag, and pushes it via a GitHub App token (so the push re-triggers `release.yml`). Requires secrets `GOGATOZ_APP_ID` and `GOGATOZ_APP_PRIVATE_KEY`.
+- **`release.yml`** — runs on `v*` tags: git-cliff generates `RELEASE_CHANGELOG.md`, then goreleaser publishes cross-platform binaries + a source archive + a GitHub Release and pushes multi-arch (amd64/arm64) container images to GHCR (`ghcr.io/mr-pmillz/gogatoz`) via `dockers_v2` (QEMU + buildx). `actions/attest-build-provenance` attests both `checksums.txt` and `digests.txt`. A follow-up `changelog` job regenerates `CHANGELOG.md` and commits it to `main` via the GitHub App token.
 - **`docs.yml`** — builds the Astro Starlight docs (`npm ci` + `astro build`) and deploys to the repository's GitHub Pages site (root-served at the assigned `*.pages.github.io` URL; no `base` subpath).
 
 GitHub Actions are **SHA-pinned** with `# ratchet:owner/action@vX` trailer comments. When changing an action version, re-pin with `ratchet pin .github/workflows/*.yml` (then `ratchet lint`); validate with `actionlint`.
@@ -199,7 +203,7 @@ golangci-lint v2 config in `.golangci-lint.yml`. Key enabled linters: bodyclose,
 ## Git Conventions
 
 Commit messages use lowercase, no trailing period (e.g., "update changelog", "fixed golang alpine image in Dockerfile").
-Branch naming: `feat/description` for feature branches.
+Branch naming: `feature/description` or `fix/description` for daily work, `release/vX.Y.Z` for releases, `hotfix/vX.Y.Z` for urgent fixes. Feature/fix branches target `develop`; release/hotfix branches target `main`. See `docs/src/content/docs/contributing/release-process.md` for the full gitflow model.
 
 ## Code Review Notes
 
