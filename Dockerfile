@@ -1,6 +1,6 @@
 # Multi-stage Dockerfile for GoGatoZ
 # Build stage
-FROM golang:1.26.3-alpine AS builder
+FROM golang:1.26.4-alpine AS builder
 WORKDIR /src
 RUN apk add --no-cache git ca-certificates && update-ca-certificates
 # Cache deps
