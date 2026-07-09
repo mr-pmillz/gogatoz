@@ -116,16 +116,21 @@ func TestClientRunCypher(t *testing.T) {
 
 func TestClientCreateSavedQuery(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost || r.URL.Path != "/api/v2/saved-queries" {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v2/saved-queries":
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(map[string]any{"data": []any{}})
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v2/saved-queries":
+			var sq SavedQuery
+			json.NewDecoder(r.Body).Decode(&sq)
+			if sq.Name != "Test Query" {
+				t.Errorf("name = %q, want 'Test Query'", sq.Name)
+			}
+			w.WriteHeader(http.StatusCreated)
+			json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{"id": 1}})
+		default:
 			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
 		}
-		var sq SavedQuery
-		json.NewDecoder(r.Body).Decode(&sq)
-		if sq.Name != "Test Query" {
-			t.Errorf("name = %q, want 'Test Query'", sq.Name)
-		}
-		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{"id": 1}})
 	}))
 	defer srv.Close()
 

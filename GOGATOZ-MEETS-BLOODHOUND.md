@@ -1,6 +1,6 @@
 # GoGatoZ Meets BloodHound-CE: Dependency Pwnage Matrix
 
-## Status: IMPLEMENTED (30 tests passing, lint clean)
+## Status: VERIFIED END-TO-END (30 tests passing, lint clean, BH-CE v9.4.0 verified)
 
 ## Overview
 
@@ -52,7 +52,10 @@ This feature integrates GoGatoZ with BloodHound-CE via the OpenGraph API, mappin
 - [x] 30 unit tests passing
 - [x] Lint clean (0 issues)
 - [x] Full project builds
-- [ ] End-to-end upload test against BH-CE instance
+- [x] End-to-end: enumerated 30 CTF lab projects, uploaded 194 nodes/272 edges to BH-CE v9.4.0
+- [x] All 10 Cypher queries return data via API
+- [x] Graph visualization verified in BloodHound-CE UI (Playwright screenshots)
+- [x] Bug fixes: path-to-nodeID resolution, BH-CE Cypher compatibility, delete-before-create for saved queries
 
 ## Usage
 

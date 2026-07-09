@@ -162,7 +162,10 @@ func (c *Client) RunCypher(ctx context.Context, query string) (map[string]any, e
 }
 
 // CreateSavedQuery creates or replaces a saved Cypher query.
+// If a query with the same name exists, it is deleted first.
 func (c *Client) CreateSavedQuery(ctx context.Context, sq SavedQuery) error {
+	c.deleteQueryByName(ctx, sq.Name)
+
 	body, err := json.Marshal(sq)
 	if err != nil {
 		return err
@@ -178,6 +181,32 @@ func (c *Client) CreateSavedQuery(ctx context.Context, sq SavedQuery) error {
 		return c.readError(resp, "create saved query")
 	}
 	return nil
+}
+
+func (c *Client) deleteQueryByName(ctx context.Context, name string) {
+	resp, err := c.doRequest(ctx, http.MethodGet, savedQueriesPath, nil, "")
+	if err != nil {
+		return
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return
+	}
+
+	var result savedQueryListResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return
+	}
+	for _, q := range result.Data {
+		if q.Name == name {
+			delPath := fmt.Sprintf("%s/%d", savedQueriesPath, q.ID)
+			delResp, err := c.doRequest(ctx, http.MethodDelete, delPath, nil, "")
+			if err == nil {
+				delResp.Body.Close()
+			}
+			return
+		}
+	}
 }
 
 // ImportQueries bulk-imports saved queries as a JSON array.

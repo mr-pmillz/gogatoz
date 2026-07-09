@@ -15,14 +15,16 @@ import (
 // Builder accumulates scan data and converts it into BloodHound graph
 // nodes and edges for the CI/CD attack surface.
 type Builder struct {
-	gitlabURL string
+	gitlabURL  string
 	instanceID string
-	nodes     map[string]*Node
-	edges     []*Edge
+	nodes      map[string]*Node
+	edges      []*Edge
 	// cross-project dependency tracking for transitive resolution
 	projectIncludes map[string][]string // projectPath -> included project paths
 	// runner tag -> project IDs for shared runner detection
 	runnerTagProjects map[string][]string // runnerTag -> list of project node IDs
+	// path -> node ID lookup so include evidence resolves to known projects
+	pathToNodeID map[string]string
 }
 
 // NewBuilder creates a builder for the given GitLab instance URL.
@@ -35,6 +37,7 @@ func NewBuilder(gitlabURL string) *Builder {
 		edges:             make([]*Edge, 0),
 		projectIncludes:   make(map[string][]string),
 		runnerTagProjects: make(map[string][]string),
+		pathToNodeID:      make(map[string]string),
 	}
 	b.addNode(&Node{
 		ID:    instID,
@@ -108,6 +111,7 @@ func (b *Builder) AddEnumerateResults(results []enumerate.Result) {
 		b.addEdge(NewEdge(b.instanceID, projNodeID, EdgeContains))
 
 		if r.ProjectPathWithNS != "" {
+			b.pathToNodeID[r.ProjectPathWithNS] = projNodeID
 			b.addGroupChainFromPath(r.ProjectPathWithNS, projNodeID)
 		}
 
@@ -252,8 +256,8 @@ func (b *Builder) BuildTransitiveDependencies() {
 			}
 			visited[depPath] = true
 
-			srcID := projectNodeIDByPath(srcPath)
-			depID := projectNodeIDByPath(depPath)
+			srcID := b.resolveProjectByPath(srcPath)
+			depID := b.resolveProjectByPath(depPath)
 			b.addEdge(NewEdge(srcID, depID, EdgeDependsOn))
 
 			for _, transitive := range b.projectIncludes[depPath] {
@@ -373,7 +377,7 @@ func (b *Builder) extractIncludeDependencies(r *enumerate.Result, f *analyze.Fin
 	case "INCLUDE_PROJECT_UNPINNED":
 		if m := reProjectInclude.FindStringSubmatch(f.Evidence); len(m) > 1 {
 			depPath := m[1]
-			depProjID := projectNodeIDByPath(depPath)
+			depProjID := b.resolveProjectByPath(depPath)
 			b.addNode(&Node{
 				ID:    depProjID,
 				Kinds: []string{KindProject},
@@ -420,7 +424,7 @@ func (b *Builder) extractIncludeDependencies(r *enumerate.Result, f *analyze.Fin
 	case "TRIGGER_CHAIN_RISK":
 		if m := reTriggerProject.FindStringSubmatch(f.Evidence); len(m) > 1 {
 			depPath := m[1]
-			depProjID := projectNodeIDByPath(depPath)
+			depProjID := b.resolveProjectByPath(depPath)
 			b.addNode(&Node{
 				ID:    depProjID,
 				Kinds: []string{KindProject},
@@ -491,6 +495,15 @@ func extractTagsFromEvidence(evidence string) []string {
 		}
 	}
 	return tags
+}
+
+// resolveProjectByPath returns the node ID for a project path, preferring
+// a known enumerate-based ID over a hash-based fallback.
+func (b *Builder) resolveProjectByPath(path string) string {
+	if id, ok := b.pathToNodeID[path]; ok {
+		return id
+	}
+	return projectNodeIDByPath(path)
 }
 
 // --- node ID constructors ---
