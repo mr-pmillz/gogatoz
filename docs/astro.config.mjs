@@ -11,6 +11,26 @@ export default defineConfig({
 	integrations: [
 		starlight({
 			title: 'GoGatoZ',
+			favicon: '/favicon-32x32.png',
+			head: [
+				{
+					tag: 'link',
+					attrs: {
+						rel: 'icon',
+						href: '/gogatoz/favicon.ico',
+						sizes: '32x32',
+					},
+				},
+				{
+					tag: 'link',
+					attrs: {
+						rel: 'icon',
+						type: 'image/png',
+						href: '/gogatoz/favicon-16x16.png',
+						sizes: '16x16',
+					},
+				},
+			],
 			customCss: ['./src/styles/custom.css'],
 			social: [
 				{ icon: 'x.com', label: 'X/Twitter', href: 'https://x.com/ProOfConcept9' },
@@ -76,7 +96,13 @@ export default defineConfig({
 						},
 					],
 				},
-				{ label: 'CLI Reference', slug: 'reference/cli' },
+				{
+						label: 'Contributing',
+						items: [
+							{ label: 'Release Process', slug: 'contributing/release-process' },
+						],
+					},
+					{ label: 'CLI Reference', slug: 'reference/cli' },
 			],
 		}),
 	],

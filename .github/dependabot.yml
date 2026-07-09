@@ -1,0 +1,66 @@
+# Reference: https://docs.github.com/en/code-security/reference/supply-chain-security/dependabot-options-reference
+#
+# One update stream per package ecosystem actually present in the repo 
+# (GitHub Actions, the goreleaser container image, and the Astro docs site). Within
+# each ecosystem, minor + patch bumps are grouped into a single weekly PR to cut
+# noise; major bumps open individually so breaking changes get a dedicated review.
+# Commit prefixes follow the repo's conventional-commit convention (`chore` / `ci`),
+# and PRs target `develop` (the gitflow integration branch — `main` is updated only
+# via release/hotfix PRs per .github/workflows/branch-policy.yml).
+version: 2
+
+updates:
+  # Go SDK + CLI — root go.mod / go.sum.
+  - package-ecosystem: "gomod"
+    directory: "/"
+    target-branch: "develop"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    groups:
+      go-modules:
+        update-types: ["minor", "patch"]
+
+  # GitHub Actions — Dependabot scans /.github/workflows automatically.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    target-branch: "develop"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "ci"
+      include: "scope"
+    groups:
+      github-actions:
+        update-types: ["minor", "patch"]
+
+  # Release container image — goreleaser.dockerfile at the repo root.
+  # Dependabot's docker fetcher matches any filename containing "dockerfile".
+  - package-ecosystem: "docker"
+    directory: "/"
+    target-branch: "develop"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    groups:
+      docker:
+        update-types: ["minor", "patch"]
+
+  # Docs site — Astro / Starlight (docs/package.json).
+  # Majors (e.g. astro/vite) open individually so the security `overrides`
+  # floors in docs/package.json can be re-verified against a clean build.
+  - package-ecosystem: "npm"
+    directory: "/docs"
+    target-branch: "develop"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    groups:
+      docs-npm:
+        update-types: ["minor", "patch"]
