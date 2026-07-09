@@ -148,7 +148,7 @@ Before this flow works, the repository needs:
    - `GOGATOZ_APP_PRIVATE_KEY` — the App's PEM private key.
 2. **Branch protection bypass** — add the GitHub App to the branch/tag
    protection bypass list so it can push tags and commits to protected `main`.
-3. **Changelog token** — the `GOGATOZ_CHANGELOG_TOKEN` secret (a PAT or App
+3. **Changelog token** — the `${{ steps.app-token.outputs.token }}` secret (a PAT or App
    token) used by `git-cliff` to link PRs and authors in the changelog.
 
 ## CI Pipeline
