@@ -47,3 +47,10 @@ RELEASE_CHANGELOG.md
 coverage/
 
 notes.md
+.hermes/
+CTF-WALKTHROUGH.md
+
+TASKS.md
+.observer.lock
+NEW_FEATURES.md
+.gortex/

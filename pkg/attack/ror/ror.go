@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"sort"
+	"slices"
 	"strings"
 
 	gitlab "gitlab.com/gitlab-org/api/client-go"
@@ -144,7 +144,7 @@ func DiscoverGroupRunnerSharing(ctx context.Context, client *gitlabx.Client, gro
 		for id := range projectSet {
 			ids = append(ids, id)
 		}
-		sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
+		slices.Sort(ids)
 
 		tags := make([]string, len(details.TagList))
 		copy(tags, details.TagList)

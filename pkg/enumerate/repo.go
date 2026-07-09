@@ -28,7 +28,7 @@ func FileExists(ctx context.Context, cl *gitlabx.Client, projectID any, ref, pat
 	if path == "" {
 		return false, fmt.Errorf("path is required")
 	}
-	_, resp, err := cl.GL.RepositoryFiles.GetFile(projectID, path, &gitlab.GetFileOptions{Ref: gitlab.Ptr(ref)}, gitlab.WithContext(ctx))
+	_, resp, err := cl.GL.RepositoryFiles.GetFile(projectID, path, &gitlab.GetFileOptions{Ref: new(ref)}, gitlab.WithContext(ctx))
 	if err != nil {
 		if resp != nil && resp.StatusCode == 404 {
 			return false, nil

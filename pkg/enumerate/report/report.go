@@ -101,6 +101,7 @@ type Report struct {
 	LogFindingsTotal int
 	Attacks          []AttackView
 	AttackSummary    AttackSummary
+	Score            *analyze.ScoreResult `json:"score,omitempty"`
 }
 
 // Build constructs a Report from raw enumeration results.
@@ -135,11 +136,13 @@ func Build(results []enumerate.Result, opts Options) Report {
 		}
 		pv := ProjectView{Project: r}
 		pv.FindingCount = len(r.Findings)
+		fpCount := 0
 		for _, f := range r.Findings {
 			// Track FP stats
 			if filterFP && f.FalsePositive {
 				rep.Summary.FP.FalsePositives++
 				rep.Summary.FP.ByReason[f.FalsePositiveReason]++
+				fpCount++
 				continue // skip FP findings from severity/infra counts
 			}
 
@@ -186,6 +189,9 @@ func Build(results []enumerate.Result, opts Options) Report {
 				rep.Pipelines.Components++
 			}
 		}
+		if filterFP {
+			pv.FindingCount -= fpCount
+		}
 		if r.HasCIPipeline {
 			rep.Pipelines.ProjectsWithCI++
 		}
@@ -197,9 +203,10 @@ func Build(results []enumerate.Result, opts Options) Report {
 		// Aggregate log findings count (if any)
 		rep.LogFindingsTotal += r.LogFindingsCount
 		rep.Projects = append(rep.Projects, pv)
-		if len(r.Findings) > 0 {
+		adjustedCount := pv.FindingCount
+		if adjustedCount > 0 {
 			rep.Summary.WithFindings++
-			rep.Summary.Findings += len(r.Findings)
+			rep.Summary.Findings += adjustedCount
 		}
 		// Count distinct projects with exploitable findings
 		for _, f := range r.Findings {
@@ -215,8 +222,8 @@ func Build(results []enumerate.Result, opts Options) Report {
 
 	// Finalize FP summary
 	if filterFP {
-		rep.Summary.FP.RawFindings = rep.Summary.Findings
-		rep.Summary.FP.AdjustedFindings = rep.Summary.Findings - rep.Summary.FP.FalsePositives
+		rep.Summary.FP.RawFindings = rep.Summary.Findings + rep.Summary.FP.FalsePositives
+		rep.Summary.FP.AdjustedFindings = rep.Summary.Findings
 	}
 	// Sort projects by findings desc, then name
 	sort.Slice(rep.Projects, func(i, j int) bool {

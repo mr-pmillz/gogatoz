@@ -7,6 +7,7 @@ import (
 	"runtime/debug"
 	"strings"
 
+	"github.com/mr-pmillz/gogatoz/pkg/config"
 	"github.com/mr-pmillz/gogatoz/pkg/store"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -57,6 +58,9 @@ var (
 	dbPath   string
 	noDB     bool
 	cliStore *store.Store
+
+	// Analysis controls (populated from config file controls: section)
+	controlsCfg *config.ControlsConfig
 )
 
 // rootCmd represents the base command when called without any subcommands
@@ -249,6 +253,7 @@ func versionString() string {
 func initConfig() error {
 	// Determine config file to read
 	file := viper.GetString("config")
+	explicit := file != ""
 	if file == "" {
 		// Use ./.gogatoz.yaml if present
 		if _, err := os.Stat(".gogatoz.yaml"); err == nil {
@@ -261,13 +266,18 @@ func initConfig() error {
 		return nil // no config, nothing to do
 	}
 	if err := viper.ReadInConfig(); err != nil {
-		// If file not found, ignore; otherwise return error
-		if !os.IsNotExist(err) {
-			return fmt.Errorf("read config: %w", err)
+		if explicit {
+			return fmt.Errorf("read config %q: %w", file, err)
 		}
 	}
 	// Normalize relative paths if needed (future use)
 	_ = filepath.Base(viper.ConfigFileUsed())
+
+	// Unmarshal analysis controls section if present
+	var c config.ControlsConfig
+	if err := viper.UnmarshalKey("controls", &c); err == nil {
+		controlsCfg = &c
+	}
 	return nil
 }
 

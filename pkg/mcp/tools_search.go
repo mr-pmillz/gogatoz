@@ -146,13 +146,13 @@ func listProjects(ctx context.Context, cl *gitlabx.Client, input searchInput) ([
 		ListOptions: gitlab.ListOptions{Page: 1, PerPage: perPage},
 	}
 	if q := strings.TrimSpace(input.Query); q != "" {
-		listOpts.Search = gitlab.Ptr(q)
+		listOpts.Search = new(q)
 	}
 	if input.Owned {
-		listOpts.Owned = gitlab.Ptr(true)
+		listOpts.Owned = new(true)
 	}
 	if input.Membership {
-		listOpts.Membership = gitlab.Ptr(true)
+		listOpts.Membership = new(true)
 	}
 	if v := strings.ToLower(strings.TrimSpace(input.Visibility)); v != "" {
 		var vv gitlab.VisibilityValue
@@ -240,7 +240,7 @@ func applyPathExistsFilter(ctx context.Context, cl *gitlabx.Client, projects []*
 		if ref == "" {
 			return false
 		}
-		_, resp, err := cl.GL.RepositoryFiles.GetFile(p.ID, strings.TrimLeft(pe, "/"), &gitlab.GetFileOptions{Ref: gitlab.Ptr(ref)}, gitlab.WithContext(ctx))
+		_, resp, err := cl.GL.RepositoryFiles.GetFile(p.ID, strings.TrimLeft(pe, "/"), &gitlab.GetFileOptions{Ref: new(ref)}, gitlab.WithContext(ctx))
 		return err == nil && resp != nil && resp.StatusCode >= 200 && resp.StatusCode < 300
 	})
 }
@@ -249,7 +249,7 @@ func applyPathExistsFilter(ctx context.Context, cl *gitlabx.Client, projects []*
 
 func parseCSV(s string) map[string]struct{} {
 	m := make(map[string]struct{})
-	for _, v := range strings.Split(s, ",") {
+	for v := range strings.SplitSeq(s, ",") {
 		v = strings.ToLower(strings.TrimSpace(v))
 		if v != "" {
 			m[v] = struct{}{}
@@ -261,10 +261,7 @@ func parseCSV(s string) map[string]struct{} {
 type filterFn func(ctx context.Context, cl *gitlabx.Client, p *gitlab.Project) bool
 
 func filterConcurrent(ctx context.Context, cl *gitlabx.Client, projects []*gitlab.Project, fn filterFn) []*gitlab.Project {
-	conc := runtime.GOMAXPROCS(0)
-	if conc > 64 {
-		conc = 64
-	}
+	conc := min(runtime.GOMAXPROCS(0), 64)
 
 	type job struct{ p *gitlab.Project }
 	type result struct {
@@ -275,7 +272,7 @@ func filterConcurrent(ctx context.Context, cl *gitlabx.Client, projects []*gitla
 	out := make(chan result)
 	var wg sync.WaitGroup
 	wg.Add(conc)
-	for i := 0; i < conc; i++ {
+	for range conc {
 		go func() {
 			defer wg.Done()
 			for j := range in {

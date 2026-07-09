@@ -140,18 +140,18 @@ var searchCmd = &cobra.Command{
 			ListOptions: gitlab.ListOptions{Page: 1, PerPage: perPage},
 		}
 		if strings.TrimSpace(searchQuery) != "" {
-			opts.Search = gitlab.Ptr(searchQuery)
+			opts.Search = new(searchQuery)
 		}
 
 		// Apply simple filters
 		if owned {
-			opts.Owned = gitlab.Ptr(true)
+			opts.Owned = new(true)
 		}
 		if membership {
-			opts.Membership = gitlab.Ptr(true)
+			opts.Membership = new(true)
 		}
 		if archivedOnly {
-			opts.Archived = gitlab.Ptr(true)
+			opts.Archived = new(true)
 		}
 		if v := strings.ToLower(strings.TrimSpace(visibility)); v != "" {
 			var vv gitlab.VisibilityValue
@@ -208,7 +208,7 @@ var searchCmd = &cobra.Command{
 		// Optional topic filter (simple contains-any on project topics)
 		if strings.TrimSpace(topics) != "" && len(projObjs) > 0 {
 			wantTopics := map[string]struct{}{}
-			for _, t := range strings.Split(topics, ",") {
+			for t := range strings.SplitSeq(topics, ",") {
 				t = strings.ToLower(strings.TrimSpace(t))
 				if t != "" {
 					wantTopics[t] = struct{}{}
@@ -250,7 +250,7 @@ var searchCmd = &cobra.Command{
 		// Optional language filter using per-project /languages endpoint (any-of, case-insensitive)
 		if strings.TrimSpace(languages) != "" && len(projObjs) > 0 {
 			wantLangs := map[string]struct{}{}
-			for _, t := range strings.Split(languages, ",") {
+			for t := range strings.SplitSeq(languages, ",") {
 				t = strings.ToLower(strings.TrimSpace(t))
 				if t != "" {
 					wantLangs[t] = struct{}{}
@@ -344,7 +344,7 @@ var searchCmd = &cobra.Command{
 				if ref == "" {
 					continue
 				}
-				_, resp, err := client.GL.RepositoryFiles.GetFile(p.ID, strings.TrimLeft(pathExists, "/"), &gitlab.GetFileOptions{Ref: gitlab.Ptr(ref)}, gitlab.WithContext(ctx))
+				_, resp, err := client.GL.RepositoryFiles.GetFile(p.ID, strings.TrimLeft(pathExists, "/"), &gitlab.GetFileOptions{Ref: new(ref)}, gitlab.WithContext(ctx))
 				if err == nil && resp != nil && resp.StatusCode >= 200 && resp.StatusCode < 300 {
 					filtered = append(filtered, p)
 				}

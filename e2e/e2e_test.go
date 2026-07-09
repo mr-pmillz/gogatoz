@@ -62,6 +62,13 @@ const (
 	// LOTP attack targets
 	vulnLOTPNpm         = "MrPMillz/vuln-lotp-npm"
 	vulnLOTPGYP         = "MrPMillz/vuln-gyp-inject"
+
+	// New Phase 4 attack targets
+	vulnMemoryDump    = "MrPMillz/vuln-memory-dump"
+	vulnWorm          = "MrPMillz/vuln-worm"
+	vulnEscape        = "MrPMillz/vuln-escape"
+	vulnVarInject     = "MrPMillz/vuln-var-inject"
+	vulnC2            = "MrPMillz/vuln-c2"
 )
 
 // testGitlabURL returns the base URL; override with TEST_GITLAB_URL.

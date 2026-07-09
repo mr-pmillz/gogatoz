@@ -11,6 +11,7 @@ import (
 
 	"github.com/mr-pmillz/gogatoz/pkg/analyze"
 	"github.com/mr-pmillz/gogatoz/pkg/attack/secretsdump"
+	"github.com/mr-pmillz/gogatoz/pkg/config"
 	"github.com/mr-pmillz/gogatoz/pkg/gitlabx"
 	"github.com/mr-pmillz/gogatoz/pkg/pipeline"
 	gitlab "gitlab.com/gitlab-org/api/client-go"
@@ -70,8 +71,9 @@ type Options struct {
 	LogMaxPipelines int  // cap pipelines per ref
 	LogMaxJobs      int  // cap jobs per pipeline
 	// Analysis
-	SkipAnalyze bool // when true, parse and summarize but skip analyzer passes
-	Redact      bool // when true, mask plaintext secret values in findings (default: unredacted)
+	SkipAnalyze bool                   // when true, parse and summarize but skip analyzer passes
+	Redact      bool                   // when true, mask plaintext secret values in findings (default: unredacted)
+	Controls    *config.ControlsConfig // per-detection configuration (nil = use defaults)
 	// Progress, if set, is called once per completed project result.
 	Progress func(Result)
 }
@@ -295,7 +297,7 @@ func scanOne(ctx context.Context, cl *gitlabx.Client, ident string, opts Options
 		return r
 	}
 
-	file, resp, err := cl.GL.RepositoryFiles.GetFile(proj.ID, ".gitlab-ci.yml", &gitlab.GetFileOptions{Ref: gitlab.Ptr(refToUse)}, gitlab.WithContext(ctx))
+	file, resp, err := cl.GL.RepositoryFiles.GetFile(proj.ID, ".gitlab-ci.yml", &gitlab.GetFileOptions{Ref: new(refToUse)}, gitlab.WithContext(ctx))
 	if err != nil {
 		if resp != nil && resp.Response != nil && resp.StatusCode == 404 {
 			r.CISummary = "no .gitlab-ci.yml"
@@ -418,6 +420,9 @@ func scanOne(ctx context.Context, cl *gitlabx.Client, ident string, opts Options
 	var aopts []analyze.Option
 	if opts.Redact {
 		aopts = append(aopts, analyze.WithRedactedSecrets())
+	}
+	if opts.Controls != nil {
+		aopts = append(aopts, analyze.WithControls(opts.Controls))
 	}
 	findings, ferr := analyze.Run(ciDocResolved, aopts...)
 	if ferr != nil && !errors.Is(ferr, analyze.ErrPartial) {

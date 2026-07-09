@@ -68,7 +68,7 @@ func ParseScanners(csv string) ([]*Scanner, error) {
 	}
 
 	var scanners []*Scanner
-	for _, name := range strings.Split(csv, ",") {
+	for name := range strings.SplitSeq(csv, ",") {
 		name = strings.TrimSpace(strings.ToLower(name))
 		if name == "" {
 			continue

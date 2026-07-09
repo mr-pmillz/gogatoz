@@ -49,13 +49,13 @@ func normalizeBaseURL(in string) (string, error) {
 	// Clean path: strip trailing slashes and any trailing /api or /api/v4 segments
 	p := strings.TrimRight(u.Path, "/")
 	for {
-		if strings.HasSuffix(p, "/api/v4") {
-			p = strings.TrimSuffix(p, "/api/v4")
+		if before, ok := strings.CutSuffix(p, "/api/v4"); ok {
+			p = before
 			p = strings.TrimRight(p, "/")
 			continue
 		}
-		if strings.HasSuffix(p, "/api") {
-			p = strings.TrimSuffix(p, "/api")
+		if before, ok := strings.CutSuffix(p, "/api"); ok {
+			p = before
 			p = strings.TrimRight(p, "/")
 			continue
 		}

