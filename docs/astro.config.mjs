@@ -1,6 +1,7 @@
 // @ts-check
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
+import mermaid from 'astro-mermaid';
 
 // https://astro.build/config
 export default defineConfig({
@@ -9,6 +10,7 @@ export default defineConfig({
 	site: 'https://mr-pmillz.github.io/gogatoz',
 	base: '/gogatoz',
 	integrations: [
+		mermaid({ autoTheme: true }),
 		starlight({
 			title: 'GoGatoZ',
 			favicon: '/favicon-32x32.png',
