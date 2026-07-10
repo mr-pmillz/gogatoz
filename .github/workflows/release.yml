@@ -36,6 +36,13 @@ jobs:
         run: |
           echo "GOPATH=$(go env GOPATH)/bin" >> $GITHUB_ENV
 
+      - name: Generate GitHub App token
+        uses: actions/create-github-app-token@df432ceedc7162793a195dd1713ff69aefc7379e # ratchet:actions/create-github-app-token@v2
+        id: app-token
+        with:
+          app-id: ${{ secrets.GOGATOZ_APP_ID }}
+          private-key: ${{ secrets.GOGATOZ_APP_PRIVATE_KEY }}
+
       - name: Generate changelog
         uses: orhun/git-cliff-action@f50e11560dce63f7c33227798f90b924471a88b5 # ratchet:orhun/git-cliff-action@v4
         with:
@@ -44,7 +51,7 @@ jobs:
         env:
           OUTPUT: RELEASE_CHANGELOG.md
           GITHUB_REPO: ${{ github.repository }}
-          GITHUB_TOKEN: ${{ secrets.GOGATOZ_CHANGELOG_TOKEN }}
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@06116385d9baf250c9f4dcb4858b16962ea869c3 # ratchet:docker/setup-qemu-action@v4

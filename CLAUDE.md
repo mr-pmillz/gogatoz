@@ -31,10 +31,15 @@ go test -run TestName ./pkg/package/...  # Run a single test
 
 ### Continuous Integration & Release
 
-The project uses GitHub Actions (workflows in `.github/workflows/`). The old `.gitlab-ci.yml` pipeline has been removed.
+The project uses GitHub Actions (workflows in `.github/workflows/`) and follows a **gitflow** branching model. The old `.gitlab-ci.yml` pipeline has been removed.
 
-- **`ci.yml`** — runs on pull requests and pushes to `main`: a `build` job, a `lint` job (`golangci-lint run -c .golangci-lint.yml ./...`, golangci-lint v2 via golangci-lint-action@v9), and a `test` job (`gotestsum` race+coverage, coverage summary to the job summary, HTML/JSON coverage artifacts, `dorny/test-reporter`). Go version is read from `go.mod` via `setup-go` (`go-version-file: go.mod`).
-- **`release.yml`** — runs on `v*` tags: git-cliff generates `RELEASE_CHANGELOG.md` (full changelog on the first tag, latest-section thereafter), then goreleaser publishes cross-platform binaries + a source archive + a GitHub Release and pushes multi-arch (amd64/arm64) container images to GHCR (`ghcr.io/mr-pmillz/gogatoz`) via `dockers_v2` (QEMU + buildx). `actions/attest-build-provenance` attests both `checksums.txt` and `digests.txt`. Auth uses the built-in `GITHUB_TOKEN` — no extra secrets.
+**Branch model:** `main` (production, tagged releases) ← `develop` (integration) ← `feature/*`, `fix/*` (daily work). Releases cut via `release/vX.Y.Z` branches; urgent fixes via `hotfix/vX.Y.Z`. Version lives in the branch name — no version constant to bump.
+
+- **`branch-policy.yml`** — validates every PR: only `develop`, `release/*`, or `hotfix/*` may target `main`; feature/fix branches must target `develop`.
+- **`ci.yml`** — runs on pushes to `main`, `develop`, `release/**`, `hotfix/**` and PRs targeting `main` or `develop`: a `build` job, a `lint` job (`golangci-lint run -c .golangci-lint.yml ./...`, golangci-lint v2 via golangci-lint-action@v9), and a `test` job (`gotestsum` race+coverage, coverage summary to the job summary, HTML/JSON coverage artifacts, `dorny/test-reporter`). Go version is read from `go.mod` via `setup-go` (`go-version-file: go.mod`).
+- **`tag-release.yml`** — fires when a `release/*` or `hotfix/*` PR is merged into `main`: extracts semver from the branch name, creates an annotated `vX.Y.Z` tag, and pushes it via a GitHub App token (so the push re-triggers `release.yml`). Requires secrets `GOGATOZ_APP_ID` and `GOGATOZ_APP_PRIVATE_KEY`.
+- **`changelog.yml`** — triggers on pushes to `release/v*` and `hotfix/v*` branches. Derives the release version from the branch name, regenerates `CHANGELOG.md` via `git-cliff --tag vX.Y.Z`, and commits it to the release branch. This ensures the changelog lands on `main` as part of the release merge (not as a post-merge commit that would break CI coverage baselines).
+- **`release.yml`** — runs on `v*` tags: git-cliff generates `RELEASE_CHANGELOG.md` (release notes only), then goreleaser publishes cross-platform binaries + a source archive + a GitHub Release and pushes multi-arch (amd64/arm64) container images to GHCR (`ghcr.io/mr-pmillz/gogatoz`) via `dockers_v2` (QEMU + buildx). `actions/attest-build-provenance` attests both `checksums.txt` and `digests.txt`.
 - **`docs.yml`** — builds the Astro Starlight docs (`npm ci` + `astro build`) and deploys to the repository's GitHub Pages site (root-served at the assigned `*.pages.github.io` URL; no `base` subpath).
 
 GitHub Actions are **SHA-pinned** with `# ratchet:owner/action@vX` trailer comments. When changing an action version, re-pin with `ratchet pin .github/workflows/*.yml` (then `ratchet lint`); validate with `actionlint`.
@@ -49,7 +54,7 @@ Tool distribution targets GitHub only (`github.com/mr-pmillz/gogatoz`, GHCR, Git
 
 ### Package Layout
 
-- **`cmd/`** — Cobra CLI commands (root, search, enumerate, attack, pivot, parse, api, report, notify). Global flags and Viper config binding in `root.go`. Shared pterm UI helpers in `ui.go`. The `parse` command overrides `PersistentPreRunE` to skip token/config init.
+- **`cmd/`** — Cobra CLI commands (root, search, enumerate, attack, pivot, parse, api, report, notify, bloodhound). Global flags and Viper config binding in `root.go`. Shared pterm UI helpers in `ui.go`. The `parse` and `bloodhound` commands override `PersistentPreRunE` to skip token/config init.
 - **`pkg/gitlabx/`** — GitLab API client wrapper with token-bucket rate limiting, exponential backoff retry (429/5xx), configurable TLS, and HTTP connection pooling.
 - **`pkg/pipeline/`** — `.gitlab-ci.yml` parser. Handles YAML parsing (`parser.go`), recursive include resolution for all 5 types — local, project, remote, template, component (`resolve.go`), and job merging with extends/anchors (`merge.go`). Tracks provenance of each job origin.
 - **`pkg/analyze/`** — Vulnerability analysis engine. Multi-pass rule evaluation covering 26 finding IDs: include risks, runner exposure, MR-triggered jobs on self-hosted runners, variable injection, artifact poisoning, plaintext secrets, fork MR risks, workflow broad rules, supply chain (script injection, self-merge, cache poisoning), dispatch/TOCTOU, Pwn Request deployments, AI prompt injection, LOTP tool execution (`LOTP_TOOL_EXEC`), cache key injection (`CACHE_KEY_INJECTION`), GitLab OIDC token exposure (`OIDC_TOKEN_MR_RISK`), and downstream trigger chain abuse (`TRIGGER_CHAIN_RISK`). All script analysis uses `effectiveScripts()` to cover before_script/after_script phases. LOTP catalog in `lotp.go` covers 60+ tools from https://boostsecurityio.github.io/lotp/
@@ -59,7 +64,8 @@ Tool distribution targets GitHub only (`github.com/mr-pmillz/gogatoz`, GHCR, Git
 - **`pkg/notify/`** — Notification system for shipping CI/CD analysis findings to external systems. Supports raw webhook POSTs (`Notifier`), Apprise API (`AppriseSender`), and direct Discord webhooks (`DiscordSender`) with rich embed formatting. Formats `enumerate.Result` slices into severity-colored Discord embeds or Apprise markdown via `FormatDiscordMessages()` and `FormatAppriseMarkdown()`.
 - **`pkg/pathutil/`** — Glob-to-regex utility. Compiles simple glob patterns (`*`, `**`, `?`) into compiled regexps for path matching in search filters.
 - **`pkg/pivot/`** — Automated lateral movement engine. BFS pivot loop: enumerate → filter exploitable → attack (secrets exfil via HTTP callback) → decrypt (RSA+AES) → extract tokens → validate → repeat with new credentials. Includes callback server, credential store, and per-token client caching.
-- **`pkg/store/`** — SQLite-backed persistence for MCP scan results using GORM. Models: `ScanSession`, `SearchResult`, `EnumerateResult`, `Finding`, `PivotSession`, `HarvestedCredential`. Auto-migrates on open, WAL mode enabled.
+- **`pkg/bloodhound/`** — BloodHound-CE OpenGraph integration. Maps CI/CD attack surface as a navigable graph with 10 node kinds and 15 edge kinds (`CICD_` namespace). StreamingWriter for OpenGraph JSON, ZIP exporter, HMAC-SHA256 + Bearer API client, graph builder for all scan data types, and 10 pre-built Cypher attack path queries. Dependency pwnage matrix: recursive walking of cross-project includes and trigger chains for transitive `CICD_DependsOn` edges.
+- **`pkg/store/`** — SQLite-backed persistence for MCP scan results using GORM. Models: `ScanSession`, `SearchResult`, `EnumerateResult`, `Finding`, `PivotSession`, `HarvestedCredential`, `GraphNode`, `GraphEdge`. Auto-migrates on open, WAL mode enabled.
 - **`pkg/models/`** — Shared data models (secrets, runners, repos).
 - **`pkg/api/`** — HTTP API server exposing enumeration, auth, and search via JSON REST endpoints with NDJSON streaming support.
 - **`e2e/`** — End-to-end tests (`//go:build e2e`) that run against a live GitLab instance. Build tag `e2e` required. Tests cover search, enumerate, attack (commit-ci, deconflict, secrets extraction, payload generation), and piped workflows.
@@ -192,6 +198,9 @@ golangci-lint v2 config in `.golangci-lint.yml`. Key enabled linters: bodyclose,
 | `DISCORD_WEBHOOK`    | Discord webhook URL for notify command (fallback for `--discord-webhook`) |
 | `DATABASE_URL`       | Flagserver: PostgreSQL connection URL (default: `postgres://ctf:ctf_secret@localhost:5432/ctf?sslmode=disable`) |
 | `JWT_SECRET`         | Flagserver: JWT signing key (auto-generates random if unset)           |
+| `GOGATOZ_BH_URL`     | BloodHound-CE instance URL for upload/queries                         |
+| `GOGATOZ_BH_TOKEN_ID` | BloodHound-CE API token ID (HMAC auth)                               |
+| `GOGATOZ_BH_TOKEN_KEY` | BloodHound-CE API token key (HMAC auth)                             |
 | `TEST_API_PAT`       | E2E: GitLab token (fallback: `GITLAB_TOKEN`, `CI_JOB_TOKEN`)          |
 | `TEST_GITLAB_URL`    | E2E: GitLab instance URL (default: https://gitlab.com)                 |
 | `TEST_RUNNER_TAG`    | E2E: Runner tag for executable jobs (default: shell_executor)          |
@@ -199,7 +208,7 @@ golangci-lint v2 config in `.golangci-lint.yml`. Key enabled linters: bodyclose,
 ## Git Conventions
 
 Commit messages use lowercase, no trailing period (e.g., "update changelog", "fixed golang alpine image in Dockerfile").
-Branch naming: `feat/description` for feature branches.
+Branch naming: `feature/description` or `fix/description` for daily work, `release/vX.Y.Z` for releases, `hotfix/vX.Y.Z` for urgent fixes. Feature/fix branches target `develop`; release/hotfix branches target `main`. See `docs/src/content/docs/contributing/release-process.md` for the full gitflow model.
 
 ## Code Review Notes
 

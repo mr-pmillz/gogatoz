@@ -1,0 +1,36 @@
+name: Branch Policy
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  check-branch-policy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate PR branches
+        env:
+          BASE: ${{ github.base_ref }}
+          HEAD: ${{ github.head_ref }}
+        run: |
+          echo "PR from: $HEAD → $BASE"
+
+          # Rule 1: only release/*, hotfix/*, or develop (back-merge) may PR into main.
+          # This routes production releases through release/hotfix branches (gitflow);
+          # release/* and hotfix/* merges are auto-tagged + released by tag-release.yml.
+          if [[ "$BASE" == "main" ]]; then
+            if [[ "$HEAD" == "develop" || "$HEAD" == release/* || "$HEAD" == hotfix/* ]]; then
+              echo "✅ Branch policy check passed ($HEAD → main allowed)"
+              exit 0
+            fi
+            echo "❌ Error: only 'develop', 'release/*', or 'hotfix/*' branches may be merged into 'main'"
+            echo "   Current PR: $HEAD → main"
+            echo "   Cut a release branch from develop (e.g. release/v0.8.0) and PR that into main."
+            exit 1
+          fi
+
+          # Rule 2: 'develop' accepts everything — feature/* and fix/* branches,
+          # 'main' post-release sync, and release/* | hotfix/* back-merges.
+          echo "✅ Branch policy check passed"

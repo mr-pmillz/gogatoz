@@ -1,0 +1,93 @@
+{
+  "metadata": {
+    "source_kind": "CICD"
+  },
+  "graph": {
+    "nodes": [
+      {
+        "id": "gogatoz-seed-node-00000001",
+        "kinds": ["CICD_GitLabInstance"],
+        "properties": {
+          "name": "GoGatoZ Seed Node (ignore)"
+        }
+      }
+    ],
+    "edges": [
+      {
+        "kind": "CICD_Contains",
+        "start": { "value": "gogatoz-seed-node-00000001" },
+        "end": { "value": "gogatoz-seed-node-00000001" }
+      },
+      {
+        "kind": "CICD_MemberOf",
+        "start": { "value": "gogatoz-seed-node-00000001" },
+        "end": { "value": "gogatoz-seed-node-00000001" }
+      },
+      {
+        "kind": "CICD_IncludesProject",
+        "start": { "value": "gogatoz-seed-node-00000001" },
+        "end": { "value": "gogatoz-seed-node-00000001" }
+      },
+      {
+        "kind": "CICD_IncludesRemote",
+        "start": { "value": "gogatoz-seed-node-00000001" },
+        "end": { "value": "gogatoz-seed-node-00000001" }
+      },
+      {
+        "kind": "CICD_IncludesTemplate",
+        "start": { "value": "gogatoz-seed-node-00000001" },
+        "end": { "value": "gogatoz-seed-node-00000001" }
+      },
+      {
+        "kind": "CICD_IncludesComponent",
+        "start": { "value": "gogatoz-seed-node-00000001" },
+        "end": { "value": "gogatoz-seed-node-00000001" }
+      },
+      {
+        "kind": "CICD_IncludesLocal",
+        "start": { "value": "gogatoz-seed-node-00000001" },
+        "end": { "value": "gogatoz-seed-node-00000001" }
+      },
+      {
+        "kind": "CICD_RunsOn",
+        "start": { "value": "gogatoz-seed-node-00000001" },
+        "end": { "value": "gogatoz-seed-node-00000001" }
+      },
+      {
+        "kind": "CICD_HasFinding",
+        "start": { "value": "gogatoz-seed-node-00000001" },
+        "end": { "value": "gogatoz-seed-node-00000001" }
+      },
+      {
+        "kind": "CICD_HasSecret",
+        "start": { "value": "gogatoz-seed-node-00000001" },
+        "end": { "value": "gogatoz-seed-node-00000001" }
+      },
+      {
+        "kind": "CICD_Exploited",
+        "start": { "value": "gogatoz-seed-node-00000001" },
+        "end": { "value": "gogatoz-seed-node-00000001" }
+      },
+      {
+        "kind": "CICD_PivotsTo",
+        "start": { "value": "gogatoz-seed-node-00000001" },
+        "end": { "value": "gogatoz-seed-node-00000001" }
+      },
+      {
+        "kind": "CICD_DependsOn",
+        "start": { "value": "gogatoz-seed-node-00000001" },
+        "end": { "value": "gogatoz-seed-node-00000001" }
+      },
+      {
+        "kind": "CICD_TriggersDownstream",
+        "start": { "value": "gogatoz-seed-node-00000001" },
+        "end": { "value": "gogatoz-seed-node-00000001" }
+      },
+      {
+        "kind": "CICD_SharedRunner",
+        "start": { "value": "gogatoz-seed-node-00000001" },
+        "end": { "value": "gogatoz-seed-node-00000001" }
+      }
+    ]
+  }
+}

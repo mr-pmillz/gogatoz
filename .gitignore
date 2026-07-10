@@ -28,6 +28,7 @@ docs/.astro/
 ./test/
 *.xml
 public/
+!docs/public/
 Plans/
 .mcp.json
 
@@ -54,3 +55,4 @@ TASKS.md
 .observer.lock
 NEW_FEATURES.md
 .gortex/
+.playwright-mcp/
