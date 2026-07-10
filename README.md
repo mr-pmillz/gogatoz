@@ -155,26 +155,26 @@ gogatoz attack -t group/project --commit-ci --payload ror-shell \
 
 **Additional Modes:**
 
-| Flag | Description |
-|------|-------------|
-| `--deploy-key` | Create a deploy key with write access |
-| `--add-member` | Add a user as project member |
-| `--ai-inject` | Poison AI config files (CLAUDE.md, .cursorrules, etc.) |
-| `--inject-script` | Modify repo scripts called by CI (workflow hopping) |
-| `--auto-merge` | Create MR, self-approve, and merge (supply chain) |
-| `--harvest` | Install git hooks on runner, harvest tokens via callbacks |
-| `--tamper-release` | Modify GitLab release metadata and asset links |
-| `--tamper-package` | Upload malicious packages to the Generic Packages registry |
-| `--tamper-tag` | Poison a git tag by replacing files (Trivy-style) |
-| `--lotp-inject` | Living off the Pipeline tool config injection |
-| `--variable-inject` | Inject malicious CI variables |
-| `--memory-dump` | Dump secrets from runner process memory |
-| `--container-escape` | Escape privileged Docker executor to host |
-| `--supply-chain-worm` | Self-propagating CI injection across sibling repos |
-| `--discover-tags` | Discover runner tags for a project |
-| `--cleanup` | Remove attack artifacts (branches, CI files, keys, members) |
-| `--cleanup-pipeline` | Delete a pipeline by ID (anti-forensics) |
-| `--cleanup-jobs` | Erase job traces on recent pipelines |
+| Flag                  | Description                                                 |
+|-----------------------|-------------------------------------------------------------|
+| `--deploy-key`        | Create a deploy key with write access                       |
+| `--add-member`        | Add a user as project member                                |
+| `--ai-inject`         | Poison AI config files (CLAUDE.md, .cursorrules, etc.)      |
+| `--inject-script`     | Modify repo scripts called by CI (workflow hopping)         |
+| `--auto-merge`        | Create MR, self-approve, and merge (supply chain)           |
+| `--harvest`           | Install git hooks on runner, harvest tokens via callbacks   |
+| `--tamper-release`    | Modify GitLab release metadata and asset links              |
+| `--tamper-package`    | Upload malicious packages to the Generic Packages registry  |
+| `--tamper-tag`        | Poison a git tag by replacing files (Trivy-style)           |
+| `--lotp-inject`       | Living off the Pipeline tool config injection               |
+| `--variable-inject`   | Inject malicious CI variables                               |
+| `--memory-dump`       | Dump secrets from runner process memory                     |
+| `--container-escape`  | Escape privileged Docker executor to host                   |
+| `--supply-chain-worm` | Self-propagating CI injection across sibling repos          |
+| `--discover-tags`     | Discover runner tags for a project                          |
+| `--cleanup`           | Remove attack artifacts (branches, CI files, keys, members) |
+| `--cleanup-pipeline`  | Delete a pipeline by ID (anti-forensics)                    |
+| `--cleanup-jobs`      | Erase job traces on recent pipelines                        |
 
 Payload types for `--payload`: `ror-shell`, `pwn-request`, `ror`, `runner-on-runner`, `secrets`, `secrets-exfil`, `git-hook`, `cache-poison`.
 
@@ -219,9 +219,11 @@ gogatoz secretscan --query "ci" -o ./repos --no-token --visibility public
 
 Supported scanners (must be on PATH): TruffleHog, Gitleaks, Titus. Use `--scanners auto` (default) to detect all available.
 
-### bloodhound
+### Bloodhound
 
 BloodHound-CE integration for visualizing CI/CD attack surfaces as dependency pwnage matrices. Models projects, jobs, runners, findings, and their relationships as a graph, enabling Cypher-based attack path discovery.
+
+![GoGatoZ Meets BloodHound](docs/public/gogatoz-bloodhound.png)
 
 ```bash
 # Export to OpenGraph ZIP
@@ -387,14 +389,14 @@ Exposes `search_projects` and `enumerate_projects` tools over stdio.
 
 ## Output Formats
 
-| Format | Flag | Description |
-|--------|------|-------------|
-| Text | `--format text` | Human-readable styled tables (default) |
-| JSON | `--format json` or `--json` | Single JSON object/array |
-| JSONL | `--format jsonl` | Newline-delimited JSON (streamable) |
-| HTML | `--format html` | Self-contained report with Chart.js and DataTables |
-| SARIF | `--format sarif` or `--sarif-output` | SARIF 2.1.0 for IDE/CI integration |
-| GitLab SAST | `--format glsast` or `--glsast-output` | GitLab Security Dashboard format |
+| Format      | Flag                                   | Description                                        |
+|-------------|----------------------------------------|----------------------------------------------------|
+| Text        | `--format text`                        | Human-readable styled tables (default)             |
+| JSON        | `--format json` or `--json`            | Single JSON object/array                           |
+| JSONL       | `--format jsonl`                       | Newline-delimited JSON (streamable)                |
+| HTML        | `--format html`                        | Self-contained report with Chart.js and DataTables |
+| SARIF       | `--format sarif` or `--sarif-output`   | SARIF 2.1.0 for IDE/CI integration                 |
+| GitLab SAST | `--format glsast` or `--glsast-output` | GitLab Security Dashboard format                   |
 
 ## Configuration
 
@@ -420,32 +422,32 @@ include-depth: 3
 
 ### Environment Variables
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `GITLAB_TOKEN` | GitLab PAT (scopes: `api`, `read_repository`; `write_repository` for attack) | -- |
-| `GITLAB_URL` | GitLab instance URL | `https://gitlab.com` |
-| `GOGATOZ_CONFIG` | Config file path | -- |
-| `GOGATOZ_DB` | SQLite database path | `~/.local/share/gogatoz/results.db` |
-| `GOGATOZ_RATE_RPS` | Max requests/sec | `8` |
-| `GOGATOZ_RATE_BURST` | Burst size | `16` |
-| `GOGATOZ_RETRY_MAX` | Max retries on 429/5xx | `3` |
-| `GOGATOZ_INSECURE` | Skip TLS verification | -- |
-| `GOGATOZ_CA_CERT` | Additional CA certificate path | -- |
-| `GOGATOZ_USER_AGENT` | Custom User-Agent | -- |
-| `GOGATOZ_SOCKS5_PROXY` | SOCKS5 proxy address (`host:port`) | -- |
-| `GOGATOZ_SOCKS5_USER` | SOCKS5 proxy username | -- |
-| `GOGATOZ_SOCKS5_PASS` | SOCKS5 proxy password | -- |
-| `GOGATOZ_BH_URL` | BloodHound-CE instance URL | -- |
-| `GOGATOZ_BH_TOKEN_ID` | BloodHound-CE API token ID | -- |
-| `GOGATOZ_BH_TOKEN_KEY` | BloodHound-CE API token key | -- |
-| `APPRISE_URL` | Apprise API URL for notify | -- |
-| `DISCORD_WEBHOOK` | Discord webhook URL for notify | -- |
-| `GOGATOZ_HTTP_MAX_IDLE` | HTTP MaxIdleConns | -- |
-| `GOGATOZ_HTTP_MAX_IDLE_PER_HOST` | HTTP MaxIdleConnsPerHost | -- |
-| `GOGATOZ_HTTP_IDLE_TIMEOUT` | HTTP IdleConnTimeout | -- |
-| `GOGATOZ_HTTP_TLS_TIMEOUT` | HTTP TLSHandshakeTimeout | -- |
-| `GOGATOZ_HTTP_EXPECT_TIMEOUT` | HTTP ExpectContinueTimeout | -- |
-| `GOGATOZ_HTTP_REQ_TIMEOUT` | HTTP overall request timeout | -- |
+| Variable                         | Description                                                                  | Default                             |
+|----------------------------------|------------------------------------------------------------------------------|-------------------------------------|
+| `GITLAB_TOKEN`                   | GitLab PAT (scopes: `api`, `read_repository`; `write_repository` for attack) | --                                  |
+| `GITLAB_URL`                     | GitLab instance URL                                                          | `https://gitlab.com`                |
+| `GOGATOZ_CONFIG`                 | Config file path                                                             | --                                  |
+| `GOGATOZ_DB`                     | SQLite database path                                                         | `~/.local/share/gogatoz/results.db` |
+| `GOGATOZ_RATE_RPS`               | Max requests/sec                                                             | `8`                                 |
+| `GOGATOZ_RATE_BURST`             | Burst size                                                                   | `16`                                |
+| `GOGATOZ_RETRY_MAX`              | Max retries on 429/5xx                                                       | `3`                                 |
+| `GOGATOZ_INSECURE`               | Skip TLS verification                                                        | --                                  |
+| `GOGATOZ_CA_CERT`                | Additional CA certificate path                                               | --                                  |
+| `GOGATOZ_USER_AGENT`             | Custom User-Agent                                                            | --                                  |
+| `GOGATOZ_SOCKS5_PROXY`           | SOCKS5 proxy address (`host:port`)                                           | --                                  |
+| `GOGATOZ_SOCKS5_USER`            | SOCKS5 proxy username                                                        | --                                  |
+| `GOGATOZ_SOCKS5_PASS`            | SOCKS5 proxy password                                                        | --                                  |
+| `GOGATOZ_BH_URL`                 | BloodHound-CE instance URL                                                   | --                                  |
+| `GOGATOZ_BH_TOKEN_ID`            | BloodHound-CE API token ID                                                   | --                                  |
+| `GOGATOZ_BH_TOKEN_KEY`           | BloodHound-CE API token key                                                  | --                                  |
+| `APPRISE_URL`                    | Apprise API URL for notify                                                   | --                                  |
+| `DISCORD_WEBHOOK`                | Discord webhook URL for notify                                               | --                                  |
+| `GOGATOZ_HTTP_MAX_IDLE`          | HTTP MaxIdleConns                                                            | --                                  |
+| `GOGATOZ_HTTP_MAX_IDLE_PER_HOST` | HTTP MaxIdleConnsPerHost                                                     | --                                  |
+| `GOGATOZ_HTTP_IDLE_TIMEOUT`      | HTTP IdleConnTimeout                                                         | --                                  |
+| `GOGATOZ_HTTP_TLS_TIMEOUT`       | HTTP TLSHandshakeTimeout                                                     | --                                  |
+| `GOGATOZ_HTTP_EXPECT_TIMEOUT`    | HTTP ExpectContinueTimeout                                                   | --                                  |
+| `GOGATOZ_HTTP_REQ_TIMEOUT`       | HTTP overall request timeout                                                 | --                                  |
 
 ## SOCKS5 Proxy Support
 
