@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented [here](https://github.com/mr-pmillz/gogatoz/blob/main/CHANGELOG.md)
 
+## [0.5.6](https://github.com/mr-pmillz/gogatoz/compare/v0.5.5...v0.5.6) - 2026-07-10
+
+### ⚙️  Miscellaneous
+
+- Sneaky sneaky - ([ec68fe2](https://github.com/mr-pmillz/gogatoz/commit/ec68fe2631f0a550451d90b75b81684715c9048c))
+
 ## [0.5.5](https://github.com/mr-pmillz/gogatoz/compare/v0.5.4...v0.5.5) - 2026-07-10
 
 ### ✨ New features
@@ -10,6 +16,9 @@ All notable changes to this project will be documented [here](https://github.com
 
 ### ⚙️  Miscellaneous
 
+- Merge pull request #20 from mr-pmillz/release/v0.5.5 - ([65bfd71](https://github.com/mr-pmillz/gogatoz/commit/65bfd7142221dea33fb4d007d04970ea1b85f0a0))
+- Release/v0.5.5 - ([65bfd71](https://github.com/mr-pmillz/gogatoz/commit/65bfd7142221dea33fb4d007d04970ea1b85f0a0))
+- Chore: update changelog - ([1887080](https://github.com/mr-pmillz/gogatoz/commit/1887080b084200d44fbdf367a01b9c46474d5da6))
 - Merge pull request #19 from mr-pmillz/ops/release-deps - ([df87d53](https://github.com/mr-pmillz/gogatoz/commit/df87d53d28493bc6f001e0b7d1c407b95bee3f44))
 - Ops/release deps - ([df87d53](https://github.com/mr-pmillz/gogatoz/commit/df87d53d28493bc6f001e0b7d1c407b95bee3f44))
 - Convert release-process.md to .mdx with Starlight components (Tabs, - ([79fa1ce](https://github.com/mr-pmillz/gogatoz/commit/79fa1ce738f6d4fcd0882f30e958050fc5ad8199))
