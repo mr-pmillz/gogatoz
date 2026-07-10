@@ -2,10 +2,26 @@
 
 All notable changes to this project will be documented [here](https://github.com/mr-pmillz/gogatoz/blob/main/CHANGELOG.md)
 
+## [0.5.7](https://github.com/mr-pmillz/gogatoz/compare/v0.5.6...v0.5.7) - 2026-07-10
+
+### 🛠 Improvements
+
+- Update readme - ([fe130d0](https://github.com/mr-pmillz/gogatoz/commit/fe130d07431c3d04d167646da6cd831a418338e0))
+- Update readme - ([42bdde9](https://github.com/mr-pmillz/gogatoz/commit/42bdde94e61f490da9e8bb8fea07e15c28b0c5c4))
+
+### ⚙️  Miscellaneous
+
+- Merge pull request #23 from mr-pmillz/docs/update-readme - ([fe130d0](https://github.com/mr-pmillz/gogatoz/commit/fe130d07431c3d04d167646da6cd831a418338e0))
+- Merge pull request #22 from mr-pmillz/main - ([07f1402](https://github.com/mr-pmillz/gogatoz/commit/07f14026a518ed43fdd667774caf8ac59a2fa883))
+- Sync main back 2 develop - ([07f1402](https://github.com/mr-pmillz/gogatoz/commit/07f14026a518ed43fdd667774caf8ac59a2fa883))
+
 ## [0.5.6](https://github.com/mr-pmillz/gogatoz/compare/v0.5.5...v0.5.6) - 2026-07-10
 
 ### ⚙️  Miscellaneous
 
+- Merge pull request #21 from mr-pmillz/hotfix/v0.5.6 - ([dc3b37d](https://github.com/mr-pmillz/gogatoz/commit/dc3b37d30bc31e622367b6f0ff70c218ec871d22))
+- Sneaky sneaky - ([dc3b37d](https://github.com/mr-pmillz/gogatoz/commit/dc3b37d30bc31e622367b6f0ff70c218ec871d22))
+- Chore: update changelog - ([403f43d](https://github.com/mr-pmillz/gogatoz/commit/403f43d273c06f57d4283a3f21cbdffd959c8f68))
 - Sneaky sneaky - ([ec68fe2](https://github.com/mr-pmillz/gogatoz/commit/ec68fe2631f0a550451d90b75b81684715c9048c))
 
 ## [0.5.5](https://github.com/mr-pmillz/gogatoz/compare/v0.5.4...v0.5.5) - 2026-07-10
