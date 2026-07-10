@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented [here](https://github.com/mr-pmillz/gogatoz/blob/main/CHANGELOG.md)
 
+## [0.5.8](https://github.com/mr-pmillz/gogatoz/compare/v0.5.7...v0.5.8) - 2026-07-10
+
+### ⚙️  Miscellaneous
+
+- Merge pull request #26 from mr-pmillz/fix/release_action_2 - ([58ff1dd](https://github.com/mr-pmillz/gogatoz/commit/58ff1ddbebdba48873239343d93d371a5619eaa4))
+- Plz work - ([58ff1dd](https://github.com/mr-pmillz/gogatoz/commit/58ff1ddbebdba48873239343d93d371a5619eaa4))
+- Plz work - ([82ddceb](https://github.com/mr-pmillz/gogatoz/commit/82ddcebbbbe5ae4b00a2bf9a6d610c14aee9c198))
+- Merge pull request #25 from mr-pmillz/main - ([09a00aa](https://github.com/mr-pmillz/gogatoz/commit/09a00aad5a0ef6ceb5b29a8cabb99086101630f9))
+- Sync main back 2 develop - ([09a00aa](https://github.com/mr-pmillz/gogatoz/commit/09a00aad5a0ef6ceb5b29a8cabb99086101630f9))
+
 ## [0.5.7](https://github.com/mr-pmillz/gogatoz/compare/v0.5.6...v0.5.7) - 2026-07-10
 
 ### 🛠 Improvements
@@ -11,6 +21,9 @@ All notable changes to this project will be documented [here](https://github.com
 
 ### ⚙️  Miscellaneous
 
+- Merge pull request #24 from mr-pmillz/release/v0.5.7 - ([c50306e](https://github.com/mr-pmillz/gogatoz/commit/c50306ed087caf68b683dd6c789d54a96708a246))
+- Release/v0.5.7 - ([c50306e](https://github.com/mr-pmillz/gogatoz/commit/c50306ed087caf68b683dd6c789d54a96708a246))
+- Chore: update changelog - ([8aca2dd](https://github.com/mr-pmillz/gogatoz/commit/8aca2dd55ef004dab4c2658137c909f0c2b5238b))
 - Merge pull request #23 from mr-pmillz/docs/update-readme - ([fe130d0](https://github.com/mr-pmillz/gogatoz/commit/fe130d07431c3d04d167646da6cd831a418338e0))
 - Merge pull request #22 from mr-pmillz/main - ([07f1402](https://github.com/mr-pmillz/gogatoz/commit/07f14026a518ed43fdd667774caf8ac59a2fa883))
 - Sync main back 2 develop - ([07f1402](https://github.com/mr-pmillz/gogatoz/commit/07f14026a518ed43fdd667774caf8ac59a2fa883))
