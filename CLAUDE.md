@@ -54,7 +54,7 @@ Tool distribution targets GitHub only (`github.com/mr-pmillz/gogatoz`, GHCR, Git
 
 ### Package Layout
 
-- **`cmd/`** — Cobra CLI commands (root, search, enumerate, attack, pivot, parse, api, report, notify). Global flags and Viper config binding in `root.go`. Shared pterm UI helpers in `ui.go`. The `parse` command overrides `PersistentPreRunE` to skip token/config init.
+- **`cmd/`** — Cobra CLI commands (root, search, enumerate, attack, pivot, parse, api, report, notify, bloodhound). Global flags and Viper config binding in `root.go`. Shared pterm UI helpers in `ui.go`. The `parse` and `bloodhound` commands override `PersistentPreRunE` to skip token/config init.
 - **`pkg/gitlabx/`** — GitLab API client wrapper with token-bucket rate limiting, exponential backoff retry (429/5xx), configurable TLS, and HTTP connection pooling.
 - **`pkg/pipeline/`** — `.gitlab-ci.yml` parser. Handles YAML parsing (`parser.go`), recursive include resolution for all 5 types — local, project, remote, template, component (`resolve.go`), and job merging with extends/anchors (`merge.go`). Tracks provenance of each job origin.
 - **`pkg/analyze/`** — Vulnerability analysis engine. Multi-pass rule evaluation covering 26 finding IDs: include risks, runner exposure, MR-triggered jobs on self-hosted runners, variable injection, artifact poisoning, plaintext secrets, fork MR risks, workflow broad rules, supply chain (script injection, self-merge, cache poisoning), dispatch/TOCTOU, Pwn Request deployments, AI prompt injection, LOTP tool execution (`LOTP_TOOL_EXEC`), cache key injection (`CACHE_KEY_INJECTION`), GitLab OIDC token exposure (`OIDC_TOKEN_MR_RISK`), and downstream trigger chain abuse (`TRIGGER_CHAIN_RISK`). All script analysis uses `effectiveScripts()` to cover before_script/after_script phases. LOTP catalog in `lotp.go` covers 60+ tools from https://boostsecurityio.github.io/lotp/
@@ -64,7 +64,8 @@ Tool distribution targets GitHub only (`github.com/mr-pmillz/gogatoz`, GHCR, Git
 - **`pkg/notify/`** — Notification system for shipping CI/CD analysis findings to external systems. Supports raw webhook POSTs (`Notifier`), Apprise API (`AppriseSender`), and direct Discord webhooks (`DiscordSender`) with rich embed formatting. Formats `enumerate.Result` slices into severity-colored Discord embeds or Apprise markdown via `FormatDiscordMessages()` and `FormatAppriseMarkdown()`.
 - **`pkg/pathutil/`** — Glob-to-regex utility. Compiles simple glob patterns (`*`, `**`, `?`) into compiled regexps for path matching in search filters.
 - **`pkg/pivot/`** — Automated lateral movement engine. BFS pivot loop: enumerate → filter exploitable → attack (secrets exfil via HTTP callback) → decrypt (RSA+AES) → extract tokens → validate → repeat with new credentials. Includes callback server, credential store, and per-token client caching.
-- **`pkg/store/`** — SQLite-backed persistence for MCP scan results using GORM. Models: `ScanSession`, `SearchResult`, `EnumerateResult`, `Finding`, `PivotSession`, `HarvestedCredential`. Auto-migrates on open, WAL mode enabled.
+- **`pkg/bloodhound/`** — BloodHound-CE OpenGraph integration. Maps CI/CD attack surface as a navigable graph with 10 node kinds and 15 edge kinds (`CICD_` namespace). StreamingWriter for OpenGraph JSON, ZIP exporter, HMAC-SHA256 + Bearer API client, graph builder for all scan data types, and 10 pre-built Cypher attack path queries. Dependency pwnage matrix: recursive walking of cross-project includes and trigger chains for transitive `CICD_DependsOn` edges.
+- **`pkg/store/`** — SQLite-backed persistence for MCP scan results using GORM. Models: `ScanSession`, `SearchResult`, `EnumerateResult`, `Finding`, `PivotSession`, `HarvestedCredential`, `GraphNode`, `GraphEdge`. Auto-migrates on open, WAL mode enabled.
 - **`pkg/models/`** — Shared data models (secrets, runners, repos).
 - **`pkg/api/`** — HTTP API server exposing enumeration, auth, and search via JSON REST endpoints with NDJSON streaming support.
 - **`e2e/`** — End-to-end tests (`//go:build e2e`) that run against a live GitLab instance. Build tag `e2e` required. Tests cover search, enumerate, attack (commit-ci, deconflict, secrets extraction, payload generation), and piped workflows.
@@ -197,6 +198,9 @@ golangci-lint v2 config in `.golangci-lint.yml`. Key enabled linters: bodyclose,
 | `DISCORD_WEBHOOK`    | Discord webhook URL for notify command (fallback for `--discord-webhook`) |
 | `DATABASE_URL`       | Flagserver: PostgreSQL connection URL (default: `postgres://ctf:ctf_secret@localhost:5432/ctf?sslmode=disable`) |
 | `JWT_SECRET`         | Flagserver: JWT signing key (auto-generates random if unset)           |
+| `GOGATOZ_BH_URL`     | BloodHound-CE instance URL for upload/queries                         |
+| `GOGATOZ_BH_TOKEN_ID` | BloodHound-CE API token ID (HMAC auth)                               |
+| `GOGATOZ_BH_TOKEN_KEY` | BloodHound-CE API token key (HMAC auth)                             |
 | `TEST_API_PAT`       | E2E: GitLab token (fallback: `GITLAB_TOKEN`, `CI_JOB_TOKEN`)          |
 | `TEST_GITLAB_URL`    | E2E: GitLab instance URL (default: https://gitlab.com)                 |
 | `TEST_RUNNER_TAG`    | E2E: Runner tag for executable jobs (default: shell_executor)          |

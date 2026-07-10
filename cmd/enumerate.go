@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/mr-pmillz/gogatoz/pkg/analyze"
+	"github.com/mr-pmillz/gogatoz/pkg/bloodhound"
 	"github.com/mr-pmillz/gogatoz/pkg/enumerate"
 	enumorg "github.com/mr-pmillz/gogatoz/pkg/enumerate/org"
 	report "github.com/mr-pmillz/gogatoz/pkg/enumerate/report"
@@ -72,6 +73,8 @@ var (
 	// MR comment and badge
 	enumMRComment int64
 	enumBadge     bool
+	// bloodhound export
+	enumBHExport string
 )
 
 var enumerateFunc = enumerate.EnumerateProjects
@@ -340,6 +343,21 @@ var enumerateCmd = &cobra.Command{
 		// Persist results to SQLite (non-fatal)
 		persistEnumerateResults(results, strings.TrimSpace(gitlabURL))
 
+		// BloodHound export (non-fatal)
+		if bhPath := strings.TrimSpace(enumBHExport); bhPath != "" {
+			bhBuilder := bloodhound.NewBuilder(strings.TrimSpace(gitlabURL))
+			bhBuilder.AddEnumerateResults(results)
+			bhBuilder.BuildTransitiveDependencies()
+			bhBuilder.BuildSharedRunnerEdges()
+			if err := bloodhound.Export(bhBuilder, bhPath); err != nil {
+				fmt.Fprintf(cmd.ErrOrStderr(), "warning: bloodhound export failed: %v\n", err)
+			} else {
+				nodes := bhBuilder.Nodes()
+				edges := bhBuilder.Edges()
+				fmt.Fprintf(cmd.ErrOrStderr(), "[bloodhound] exported %d nodes, %d edges to %s\n", len(nodes), len(edges), bhPath)
+			}
+		}
+
 		// Optional notifications: post each finding to a webhook if configured
 		if strings.TrimSpace(webhookURL) != "" {
 			var to time.Duration
@@ -540,6 +558,8 @@ func init() {
 	// MR comment and badge
 	enumerateCmd.Flags().Int64Var(&enumMRComment, "mr-comment", 0, "Post/update compliance comment on this MR IID (requires api scope token)")
 	enumerateCmd.Flags().BoolVar(&enumBadge, "badge", false, "Create/update compliance badge on the project (requires api scope token)")
+	// BloodHound export
+	enumerateCmd.Flags().StringVar(&enumBHExport, "bloodhound-export", "", "Export results as BloodHound-CE OpenGraph ZIP (path to output .zip)")
 }
 
 // loadIdents reads project identifiers from --input according to --input-format (auto|text|json|jsonl).
