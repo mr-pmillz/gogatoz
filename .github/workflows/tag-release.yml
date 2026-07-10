@@ -39,7 +39,7 @@ jobs:
 
       - name: Generate GitHub App token
         id: app-token
-        uses: actions/create-github-app-token@df432ceedc7162793a195dd1713ff69aefc7379e # ratchet:actions/create-github-app-token@v2
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # ratchet:actions/create-github-app-token@v3
         with:
           app-id: ${{ secrets.GOGATOZ_APP_ID }}
           private-key: ${{ secrets.GOGATOZ_APP_PRIVATE_KEY }}

@@ -14,7 +14,7 @@ jobs:
         env:
           BASE: ${{ github.base_ref }}
           HEAD: ${{ github.head_ref }}
-        run: |
+        run: |-
           echo "PR from: $HEAD → $BASE"
 
           # Rule 1: only release/*, hotfix/*, or develop (back-merge) may PR into main.
