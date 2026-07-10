@@ -2,6 +2,35 @@
 
 All notable changes to this project will be documented [here](https://github.com/mr-pmillz/gogatoz/blob/main/CHANGELOG.md)
 
+## [0.5.6](https://github.com/mr-pmillz/gogatoz/compare/v0.5.5...v0.5.6) - 2026-07-10
+
+### ⚙️  Miscellaneous
+
+- Sneaky sneaky - ([ec68fe2](https://github.com/mr-pmillz/gogatoz/commit/ec68fe2631f0a550451d90b75b81684715c9048c))
+
+## [0.5.5](https://github.com/mr-pmillz/gogatoz/compare/v0.5.4...v0.5.5) - 2026-07-10
+
+### ✨ New features
+
+- Docs: add mermaid diagrams and GitHub UI/CLI tabs to release process - ([79fa1ce](https://github.com/mr-pmillz/gogatoz/commit/79fa1ce738f6d4fcd0882f30e958050fc5ad8199))
+
+### ⚙️  Miscellaneous
+
+- Merge pull request #20 from mr-pmillz/release/v0.5.5 - ([65bfd71](https://github.com/mr-pmillz/gogatoz/commit/65bfd7142221dea33fb4d007d04970ea1b85f0a0))
+- Release/v0.5.5 - ([65bfd71](https://github.com/mr-pmillz/gogatoz/commit/65bfd7142221dea33fb4d007d04970ea1b85f0a0))
+- Chore: update changelog - ([1887080](https://github.com/mr-pmillz/gogatoz/commit/1887080b084200d44fbdf367a01b9c46474d5da6))
+- Merge pull request #19 from mr-pmillz/ops/release-deps - ([df87d53](https://github.com/mr-pmillz/gogatoz/commit/df87d53d28493bc6f001e0b7d1c407b95bee3f44))
+- Ops/release deps - ([df87d53](https://github.com/mr-pmillz/gogatoz/commit/df87d53d28493bc6f001e0b7d1c407b95bee3f44))
+- Convert release-process.md to .mdx with Starlight components (Tabs, - ([79fa1ce](https://github.com/mr-pmillz/gogatoz/commit/79fa1ce738f6d4fcd0882f30e958050fc5ad8199))
+- Steps, Aside) providing synced GitHub UI / CLI toggle for every - ([79fa1ce](https://github.com/mr-pmillz/gogatoz/commit/79fa1ce738f6d4fcd0882f30e958050fc5ad8199))
+- Actionable step. Add astro-mermaid integration with three diagrams: - ([79fa1ce](https://github.com/mr-pmillz/gogatoz/commit/79fa1ce738f6d4fcd0882f30e958050fc5ad8199))
+- Git flow overview, gitGraph branch topology, and auto-tag sequence - ([79fa1ce](https://github.com/mr-pmillz/gogatoz/commit/79fa1ce738f6d4fcd0882f30e958050fc5ad8199))
+- Diagram. Add sections for combining multiple PRs and hotfix process - ([79fa1ce](https://github.com/mr-pmillz/gogatoz/commit/79fa1ce738f6d4fcd0882f30e958050fc5ad8199))
+- With the same toggle pattern. - ([79fa1ce](https://github.com/mr-pmillz/gogatoz/commit/79fa1ce738f6d4fcd0882f30e958050fc5ad8199))
+- Ratchet upgrade pinned hash versions for workflow actions - ([0770f42](https://github.com/mr-pmillz/gogatoz/commit/0770f4289bb23a38480c566267577d981cb8bfcf))
+- Merge pull request #18 from mr-pmillz/main - ([1ad37ed](https://github.com/mr-pmillz/gogatoz/commit/1ad37edc5ac7df7c8883880e83489213d0a591cd))
+- Sync main back 2 develop - ([1ad37ed](https://github.com/mr-pmillz/gogatoz/commit/1ad37edc5ac7df7c8883880e83489213d0a591cd))
+
 ## [0.5.4](https://github.com/mr-pmillz/gogatoz/compare/v0.5.3...v0.5.4) - 2026-07-10
 
 ### ✨ New features
@@ -28,6 +57,9 @@ All notable changes to this project will be documented [here](https://github.com
 
 ### ⚙️  Miscellaneous
 
+- Merge pull request #14 from mr-pmillz/release/v0.5.4 - ([b64e0f8](https://github.com/mr-pmillz/gogatoz/commit/b64e0f8c2b9abb609a029c1e45723631dde901c7))
+- Release/v0.5.4 - ([b64e0f8](https://github.com/mr-pmillz/gogatoz/commit/b64e0f8c2b9abb609a029c1e45723631dde901c7))
+- Chore: update changelog - ([eb89a0a](https://github.com/mr-pmillz/gogatoz/commit/eb89a0a5f5ce67374e5a74792bda888142fd3f18))
 - Merge pull request #13 from mr-pmillz/feat/bloodhound - ([d34c93d](https://github.com/mr-pmillz/gogatoz/commit/d34c93d76cf5bc54eef291d7589e043de8d7b969))
 - Feat/bloodhound - ([d34c93d](https://github.com/mr-pmillz/gogatoz/commit/d34c93d76cf5bc54eef291d7589e043de8d7b969))
 - New `--payload nested-runner` downloads the gitlab-runner binary onto a - ([676f84f](https://github.com/mr-pmillz/gogatoz/commit/676f84f8735aea49b101fd27a670f51b68db28f4))

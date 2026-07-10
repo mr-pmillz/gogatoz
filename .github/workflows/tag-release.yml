@@ -26,8 +26,8 @@ jobs:
     name: tag
     if: >-
       github.event.pull_request.merged == true &&
-      (startsWith(github.event.pull_request.head.ref, 'release/') ||
-       startsWith(github.event.pull_request.head.ref, 'hotfix/'))
+      (startsWith(github.event.pull_request.head.ref, 'release/v') ||
+       startsWith(github.event.pull_request.head.ref, 'hotfix/v'))
     runs-on: ubuntu-latest
     permissions:
       contents: write
