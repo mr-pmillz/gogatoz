@@ -8,7 +8,7 @@ name: Tag Release
 # (GITHUB_TOKEN-created events are intentionally ignored by Actions).
 #
 # Prerequisites:
-#   - Repository secrets GOGATOZ_APP_ID and GOGATOZ_APP_PRIVATE_KEY for a
+#   - Repository secrets GOGATOZ_APP_CLIENT_ID and GOGATOZ_APP_PRIVATE_KEY for a
 #     GitHub App with Contents: write permission on this repo.
 #   - The App must be on the branch/tag protection bypass list so it can push
 #     tags to protected branches.
@@ -23,59 +23,60 @@ permissions:
 
 jobs:
   tag:
-    name: tag
+    name: Tag release on merge
     if: >-
       github.event.pull_request.merged == true &&
-      (startsWith(github.event.pull_request.head.ref, 'release/v') ||
-       startsWith(github.event.pull_request.head.ref, 'hotfix/v'))
+      (startsWith(github.event.pull_request.head.ref, 'release/') ||
+       startsWith(github.event.pull_request.head.ref, 'hotfix/'))
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
-      - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v7
-        with:
-          fetch-depth: 0
-
       - name: Generate GitHub App token
         id: app-token
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # ratchet:actions/create-github-app-token@v3
         with:
-          app-id: ${{ secrets.GOGATOZ_APP_ID }}
+          client-id: ${{ secrets.GOGATOZ_APP_CLIENT_ID }}
           private-key: ${{ secrets.GOGATOZ_APP_PRIVATE_KEY }}
+
+      - name: Get GitHub App User ID
+        id: get-user-id
+        run: echo "user-id=$(gh api "/users/${{ steps.app-token.outputs.app-slug }}[bot]" --jq .id)" >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+
+      - name: Checkout main
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v7
+        with:
+          fetch-depth: 0
+          ref: main
+          token: ${{ steps.app-token.outputs.token }}
 
       - name: Derive version and push tag
         env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
-          BRANCH: ${{ github.event.pull_request.head.ref }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          # Strip the release/ or hotfix/ prefix and optional leading "v".
-          version="${BRANCH#release/}"
-          version="${version#hotfix/}"
-          version="${version#v}"
+          set -euo pipefail
 
-          # Validate semver (X.Y.Z with optional pre-release / build metadata).
-          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?(\+[a-zA-Z0-9.]+)?$ ]]; then
-            echo "❌ Could not extract a valid semver from branch '$BRANCH' (got '$version')"
+          # Strip the release/ or hotfix/ prefix and an optional leading "v".
+          VERSION="${HEAD_REF#release/}"
+          VERSION="${VERSION#hotfix/}"
+          VERSION="${VERSION#v}"
+          TAG="v${VERSION}"
+
+          # Validate semver (X.Y.Z with optional -prerelease / +build / .N suffix).
+          if ! printf '%s' "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+([-.+][0-9A-Za-z.-]+)?$'; then
+            echo "::error::Could not derive a semver tag from branch '$HEAD_REF' (parsed '$VERSION'). Use release/vX.Y.Z or hotfix/vX.Y.Z."
             exit 1
           fi
 
-          tag="v${version}"
-          echo "Derived tag: $tag"
-
-          # Idempotent: if the tag already exists, exit cleanly.
-          if git rev-parse "$tag" >/dev/null 2>&1; then
-            echo "✅ Tag $tag already exists — nothing to do"
+          if git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
+            echo "::notice::Tag ${TAG} already exists; nothing to do."
             exit 0
           fi
 
-          # Create annotated tag and push via the App token so the push event
-          # re-triggers release.yml (GITHUB_TOKEN pushes do not).
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -a "$tag" -m "Release $tag (PR #${PR_NUMBER})"
+          git config user.name '${{ steps.app-token.outputs.app-slug }}[bot]'
+          git config user.email '${{ steps.get-user-id.outputs.user-id }}+${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com'
 
-          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git"
-          git push origin "$tag"
-          echo "✅ Pushed tag $tag"
+          git tag -a "${TAG}" -m "Release ${TAG} (PR #${PR_NUMBER})"
+          git push origin "${TAG}"
+          echo "::notice::Pushed ${TAG}; release.yml will build and publish the release."
