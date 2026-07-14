@@ -1561,9 +1561,14 @@ var attackCmd = &cobra.Command{
 			}
 
 			// Wait for callbacks from infected repos
-			if listener != nil && result.Promoted > 0 {
+			if listener != nil {
 				listenTimeout := 3 * time.Minute
-				renderInfo(cmd.OutOrStdout(), fmt.Sprintf("Waiting for %d callback(s) (timeout: %s)...", result.Promoted, listenTimeout))
+				expected := result.Promoted
+				if expected > 0 {
+					renderInfo(cmd.OutOrStdout(), fmt.Sprintf("Waiting for %d callback(s) (timeout: %s)...", expected, listenTimeout))
+				} else {
+					renderInfo(cmd.OutOrStdout(), fmt.Sprintf("Listening for callbacks (timeout: %s)...", listenTimeout))
+				}
 				results, werr := listener.WaitFor(ctx, listenTimeout)
 				_ = listener.Stop(ctx)
 				if werr != nil {
@@ -1597,8 +1602,6 @@ var attackCmd = &cobra.Command{
 				} else {
 					renderWarning(cmd.OutOrStdout(), "No callbacks received — pipelines may still be queued")
 				}
-			} else if listener != nil {
-				_ = listener.Stop(ctx)
 			}
 			return nil
 		}
