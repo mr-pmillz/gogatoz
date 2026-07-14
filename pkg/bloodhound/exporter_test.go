@@ -40,12 +40,12 @@ func TestExportToWriter(t *testing.T) {
 		fileNames[f.Name] = true
 	}
 
-	if !fileNames["seed_data.json"] {
-		t.Error("ZIP missing seed_data.json")
-	}
 	if !fileNames["cicd-data.json"] {
 		t.Error("ZIP missing cicd-data.json")
 	}
+	// seed_data.json is only included when the graph has no real edges
+	// (used to bootstrap kind registry in BH-CE). When real data exists,
+	// it is omitted to avoid polluting the graph with a junk instance node.
 
 	// Validate cicd-data.json is valid OpenGraph JSON
 	for _, f := range zr.File {

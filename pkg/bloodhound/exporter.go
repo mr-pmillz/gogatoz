@@ -22,9 +22,13 @@ func Export(b *Builder, outputPath string) error {
 func ExportToWriter(b *Builder, w io.Writer) error {
 	zw := zip.NewWriter(w)
 
-	if err := writeSeedData(zw); err != nil {
-		zw.Close()
-		return err
+	// Only include seed data if the real graph is empty (bootstraps kind registry).
+	// When real data exists, the seed node pollutes the graph with a junk instance.
+	if len(b.Edges()) == 0 {
+		if err := writeSeedData(zw); err != nil {
+			zw.Close()
+			return err
+		}
 	}
 
 	if err := writeGraphData(zw, b); err != nil {
