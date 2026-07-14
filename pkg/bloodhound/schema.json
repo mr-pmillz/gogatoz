@@ -19,7 +19,7 @@
       "display_name": "GitLab Group",
       "description": "A GitLab group or subgroup",
       "is_display_kind": true,
-      "icon": "folder",
+      "icon": "layer-group",
       "color": "#6B4FBB"
     },
     {
@@ -27,7 +27,7 @@
       "display_name": "GitLab Project",
       "description": "A GitLab repository project",
       "is_display_kind": true,
-      "icon": "code-branch",
+      "icon": "cat",
       "color": "#1F75CB"
     },
     {
@@ -51,7 +51,7 @@
       "display_name": "CI/CD Job",
       "description": "A job within a CI/CD pipeline",
       "is_display_kind": true,
-      "icon": "gear",
+      "icon": "gears",
       "color": "#0288D1"
     },
     {
@@ -59,7 +59,7 @@
       "display_name": "Security Finding",
       "description": "A CI/CD security vulnerability finding",
       "is_display_kind": true,
-      "icon": "bug",
+      "icon": "triangle-exclamation",
       "color": "#D32F2F"
     },
     {
@@ -75,7 +75,7 @@
       "display_name": "Pipeline",
       "description": "A CI/CD pipeline execution",
       "is_display_kind": true,
-      "icon": "play",
+      "icon": "diagram-project",
       "color": "#7B1FA2"
     },
     {
