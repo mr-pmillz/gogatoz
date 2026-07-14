@@ -359,16 +359,21 @@ func discoverSiblings(ctx context.Context, client *gitlab.Client, groupPath, tar
 
 var stagesInlineRe = regexp.MustCompile(`(?m)^stages:\s*\[([^\]]+)\]`)
 var stagesBlockRe = regexp.MustCompile(`(?m)^stages:\s*\n\s*-\s*(\S+)`)
+var safeStageRe = regexp.MustCompile(`^[a-zA-Z0-9_.-]+$`)
 
 func detectFirstStage(ciContent string) string {
+	var candidate string
 	if m := stagesInlineRe.FindStringSubmatch(ciContent); len(m) > 1 {
 		parts := strings.Split(m[1], ",")
-		if s := strings.TrimSpace(parts[0]); s != "" {
-			return s
+		candidate = strings.TrimSpace(parts[0])
+	}
+	if candidate == "" {
+		if m := stagesBlockRe.FindStringSubmatch(ciContent); len(m) > 1 {
+			candidate = strings.TrimSpace(m[1])
 		}
 	}
-	if m := stagesBlockRe.FindStringSubmatch(ciContent); len(m) > 1 {
-		return strings.TrimSpace(m[1])
+	if candidate != "" && safeStageRe.MatchString(candidate) {
+		return candidate
 	}
 	return "build"
 }

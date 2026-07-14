@@ -168,7 +168,7 @@ func buildMemoryDumpScript(o MemoryDumpOptions) string {
   if [ -s "$_d/worker_mem/raw_mem.bin" ]; then
     strings -n 8 "$_d/worker_mem/raw_mem.bin" > "$_d/worker_mem/strings.txt" 2>/dev/null || true
     # Extract known token patterns
-    grep -Eo '(glpat-[A-Za-z0-9_-]{16,}|ghp_[A-Za-z0-9_]{36}|ghs_[A-Za-z0-9_]{36}|AKIA[0-9A-Z]{16}|sk-[A-Za-z0-9]{20,}|xoxb-[0-9]+-[A-Za-z0-9]+|FLAG+[^+]++)' \
+    grep -Eo '(glpat-[A-Za-z0-9_-]{16,}|ghp_[A-Za-z0-9_]{36}|ghs_[A-Za-z0-9_]{36}|AKIA[0-9A-Z]{16}|sk-[A-Za-z0-9]{20,}|xoxb-[0-9]+-[A-Za-z0-9]+|FLAG[+][^+]+[+])' \
       "$_d/worker_mem/strings.txt" 2>/dev/null | sort -u >> "$_d/worker_mem/tokens.txt" 2>/dev/null || true
     # Extract KEY=VALUE patterns that look like secrets
     grep -E '^[A-Z_]{2,}=.{8,}' "$_d/worker_mem/strings.txt" 2>/dev/null | \
