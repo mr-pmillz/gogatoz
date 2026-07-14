@@ -166,6 +166,7 @@ func TestScriptInjectionRisk_WithForkProtection_MediumSeverity(t *testing.T) {
 	}
 	if found == nil {
 		t.Fatalf("expected SCRIPT_INJECTION_RISK finding")
+		return
 	}
 	if found.Severity != SeverityMedium {
 		t.Fatalf("expected MEDIUM severity with fork protection, got: %v", found.Severity)

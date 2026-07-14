@@ -176,6 +176,7 @@ func TestBuildGLSAST_SolutionFallsBackToRegistry(t *testing.T) {
 	info := analyze.LookupFinding("INCLUDE_REMOTE")
 	if info == nil {
 		t.Fatal("INCLUDE_REMOTE not found in registry")
+		return
 	}
 	if v.Solution != info.Remediation {
 		t.Errorf("solution = %q, want registry remediation %q", v.Solution, info.Remediation)
