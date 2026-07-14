@@ -221,7 +221,7 @@ func bhAuth() (bloodhound.Authenticator, error) {
 
 func buildGraphFromInputs(sessionID uint, inputPath string) (*bloodhound.Builder, error) {
 	glURL := strings.TrimSpace(viper.GetString("gitlab-url"))
-	if glURL == "" || glURL == "https://gitlab.com" {
+	if glURL == "" {
 		if dbURL := inferGitLabURLFromDB(); dbURL != "" {
 			glURL = dbURL
 		} else if glURL == "" {
