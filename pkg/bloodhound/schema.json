@@ -28,7 +28,7 @@
       "description": "A GitLab repository project",
       "is_display_kind": true,
       "icon": "cat",
-      "color": "#1F75CB"
+      "color": "#E24329"
     },
     {
       "name": "CICD_Runner",
@@ -51,7 +51,7 @@
       "display_name": "CI/CD Job",
       "description": "A job within a CI/CD pipeline",
       "is_display_kind": true,
-      "icon": "gears",
+      "icon": "faucet-drip",
       "color": "#0288D1"
     },
     {
