@@ -3,6 +3,7 @@ package bloodhound
 import (
 	"crypto/sha256"
 	"fmt"
+	"maps"
 	"regexp"
 	"strings"
 
@@ -276,7 +277,7 @@ func (b *Builder) BuildSharedRunnerEdges() {
 		if len(projectIDs) < 2 {
 			continue
 		}
-		for i := 0; i < len(projectIDs); i++ {
+		for i := range projectIDs {
 			for j := i + 1; j < len(projectIDs); j++ {
 				b.addEdge(NewEdge(projectIDs[i], projectIDs[j], EdgeSharedRunner))
 			}
@@ -302,9 +303,7 @@ func (b *Builder) Edges() []*Edge {
 
 func (b *Builder) addNode(n *Node) {
 	if existing, ok := b.nodes[n.ID]; ok {
-		for k, v := range n.Properties {
-			existing.Properties[k] = v
-		}
+		maps.Copy(existing.Properties, n.Properties)
 		return
 	}
 	b.nodes[n.ID] = n
@@ -559,7 +558,7 @@ func runnerNodeIDByTag(tag string) string {
 }
 
 func pipelineNodeID(path, mode string, pipeID int64) string {
-	h := sha256.Sum256([]byte(fmt.Sprintf("%s|%s|%d", path, mode, pipeID)))
+	h := sha256.Sum256(fmt.Appendf(nil, "%s|%s|%d", path, mode, pipeID))
 	return fmt.Sprintf("cicd-pipeline-%x", h[:8])
 }
 
