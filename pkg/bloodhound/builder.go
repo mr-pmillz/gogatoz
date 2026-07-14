@@ -43,10 +43,10 @@ func NewBuilder(gitlabURL string) *Builder {
 		ID:    instID,
 		Kinds: []string{KindGitLabInstance},
 		Properties: map[string]any{
-			"name":           gitlabURL,
-			"url":            gitlabURL,
-			"environmentid":  instID,
-			"collected":      true,
+			"name":          gitlabURL,
+			"url":           gitlabURL,
+			"environmentid": instID,
+			"collected":     true,
 		},
 	})
 	return b
@@ -65,13 +65,13 @@ func (b *Builder) AddSearchResults(results []map[string]any) {
 			ID:    nodeID,
 			Kinds: []string{KindProject},
 			Properties: map[string]any{
-				"name":             path,
-				"project_id":       projID,
-				"web_url":          m["web_url"],
-				"visibility":       m["visibility"],
-				"default_branch":   m["default_branch"],
-				"star_count":       toInt64(m["star_count"]),
-				"environmentid":    b.instanceID,
+				"name":           path,
+				"project_id":     projID,
+				"web_url":        m["web_url"],
+				"visibility":     m["visibility"],
+				"default_branch": m["default_branch"],
+				"star_count":     toInt64(m["star_count"]),
+				"environmentid":  b.instanceID,
 			},
 		})
 		b.addEdge(NewEdge(b.instanceID, nodeID, EdgeContains))
@@ -96,16 +96,16 @@ func (b *Builder) AddEnumerateResults(results []enumerate.Result) {
 			ID:    projNodeID,
 			Kinds: []string{KindProject},
 			Properties: map[string]any{
-				"name":             r.ProjectPathWithNS,
-				"project_id":       r.ProjectID,
-				"web_url":          r.WebURL,
-				"default_branch":   r.DefaultBranch,
-				"star_count":       r.StarCount,
-				"has_ci_pipeline":  r.HasCIPipeline,
-				"runners_total":    r.RunnersTotal,
-				"runners_online":   r.RunnersOnline,
-				"findings_count":   len(r.Findings),
-				"environmentid":    b.instanceID,
+				"name":            r.ProjectPathWithNS,
+				"project_id":      r.ProjectID,
+				"web_url":         r.WebURL,
+				"default_branch":  r.DefaultBranch,
+				"star_count":      r.StarCount,
+				"has_ci_pipeline": r.HasCIPipeline,
+				"runners_total":   r.RunnersTotal,
+				"runners_online":  r.RunnersOnline,
+				"findings_count":  len(r.Findings),
+				"environmentid":   b.instanceID,
 			},
 		})
 		b.addEdge(NewEdge(b.instanceID, projNodeID, EdgeContains))
@@ -121,9 +121,9 @@ func (b *Builder) AddEnumerateResults(results []enumerate.Result) {
 				ID:    configNodeID,
 				Kinds: []string{KindCIConfig},
 				Properties: map[string]any{
-					"name":            fmt.Sprintf("%s/.gitlab-ci.yml", r.ProjectPathWithNS),
-					"project_id":      r.ProjectID,
-					"environmentid":   b.instanceID,
+					"name":          fmt.Sprintf("%s/.gitlab-ci.yml", r.ProjectPathWithNS),
+					"project_id":    r.ProjectID,
+					"environmentid": b.instanceID,
 				},
 			})
 			b.addEdge(NewEdge(projNodeID, configNodeID, EdgeContains))
@@ -176,13 +176,13 @@ func (b *Builder) AddPivotData(creds []store.HarvestedCredential, secrets []stor
 			ID:    credID,
 			Kinds: []string{KindCredential},
 			Properties: map[string]any{
-				"name":            fmt.Sprintf("cred-%s (%s)", c.TokenHash[:8], c.TokenType),
-				"token_type":      c.TokenType,
-				"username":        c.Username,
-				"depth":           c.Depth,
-				"is_valid":        c.IsValid,
-				"source_key":      c.SourceKey,
-				"environmentid":   b.instanceID,
+				"name":          fmt.Sprintf("cred-%s (%s)", c.TokenHash[:8], c.TokenType),
+				"token_type":    c.TokenType,
+				"username":      c.Username,
+				"depth":         c.Depth,
+				"is_valid":      c.IsValid,
+				"source_key":    c.SourceKey,
+				"environmentid": b.instanceID,
 			},
 		})
 
@@ -225,13 +225,13 @@ func (b *Builder) AddSecretScanResults(results []store.SecretScanResult) {
 					ID:    sID,
 					Kinds: []string{KindSecret},
 					Properties: map[string]any{
-						"name":           fmt.Sprintf("%s (%s)", f.RuleID, f.File),
-						"scanner":        f.Scanner,
-						"rule_id":        f.RuleID,
-						"file":           f.File,
-						"verified":       f.Verified,
-						"severity":       f.Severity,
-						"environmentid":  b.instanceID,
+						"name":          fmt.Sprintf("%s (%s)", f.RuleID, f.File),
+						"scanner":       f.Scanner,
+						"rule_id":       f.RuleID,
+						"file":          f.File,
+						"verified":      f.Verified,
+						"severity":      f.Severity,
+						"environmentid": b.instanceID,
 					},
 				})
 				b.addEdge(NewEdge(projID, sID, EdgeHasSecret))
@@ -328,8 +328,8 @@ func (b *Builder) addGroupChainFromPath(path, projNodeID string) {
 			ID:    gID,
 			Kinds: []string{KindGroup},
 			Properties: map[string]any{
-				"name":           groupPath,
-				"environmentid":  b.instanceID,
+				"name":          groupPath,
+				"environmentid": b.instanceID,
 			},
 		})
 		b.addEdge(NewEdge(parentID, gID, EdgeContains))
@@ -346,17 +346,17 @@ func (b *Builder) addFinding(r *enumerate.Result, f *analyze.Finding) {
 		ID:    findingID,
 		Kinds: []string{KindFinding},
 		Properties: map[string]any{
-			"name":              fmt.Sprintf("[%s] %s", f.Severity, f.Title),
-			"finding_id":        f.ID,
-			"severity":          string(f.Severity),
-			"title":             f.Title,
-			"description":       f.Description,
-			"evidence":          f.Evidence,
-			"job_name":          f.JobName,
-			"recommendation":    f.Recommendation,
-			"exploitable":       report.IsExploitable(f.ID),
-			"false_positive":    f.FalsePositive,
-			"environmentid":     b.instanceID,
+			"name":           fmt.Sprintf("[%s] %s", f.Severity, f.Title),
+			"finding_id":     f.ID,
+			"severity":       string(f.Severity),
+			"title":          f.Title,
+			"description":    f.Description,
+			"evidence":       f.Evidence,
+			"job_name":       f.JobName,
+			"recommendation": f.Recommendation,
+			"exploitable":    report.IsExploitable(f.ID),
+			"false_positive": f.FalsePositive,
+			"environmentid":  b.instanceID,
 		},
 	})
 	b.addEdge(NewEdge(projNodeID, findingID, EdgeHasFinding))

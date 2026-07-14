@@ -98,7 +98,7 @@ var bhExportCmd = &cobra.Command{
 // --- upload subcommand ---
 
 var bhUploadSession uint
-var bhUploadInput   string
+var bhUploadInput string
 
 var bhUploadCmd = &cobra.Command{
 	Use:   "upload",
