@@ -30,6 +30,7 @@ func TestParse_JobFields_ImageServicesArtifactsCache(t *testing.T) {
 	j1 := find("job_img_services")
 	if j1 == nil {
 		t.Fatalf("missing job_img_services")
+		return
 	}
 	if want, got := "alpine:3.20", j1.Image; want != got {
 		t.Fatalf("job1 image want %s got %s", want, got)
@@ -44,6 +45,7 @@ func TestParse_JobFields_ImageServicesArtifactsCache(t *testing.T) {
 	j2 := find("job_img_map")
 	if j2 == nil {
 		t.Fatalf("missing job_img_map")
+		return
 	}
 	if want, got := "golang:1.22", j2.Image; want != got {
 		t.Fatalf("job2 image want %s got %s", want, got)

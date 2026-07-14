@@ -196,6 +196,7 @@ func TestScriptInjectionRisk_HighSeverity_NoProtection(t *testing.T) {
 	}
 	if found == nil {
 		t.Fatalf("expected SCRIPT_INJECTION_RISK finding")
+		return
 	}
 	if found.Severity != SeverityHigh {
 		t.Fatalf("expected HIGH severity without fork protection, got: %v", found.Severity)
@@ -304,6 +305,7 @@ func TestSelfMergePossible_HighSeverity(t *testing.T) {
 	}
 	if found == nil {
 		t.Fatalf("expected SELF_MERGE_POSSIBLE finding")
+		return
 	}
 	if found.Severity != SeverityHigh {
 		t.Fatalf("expected HIGH severity, got: %v", found.Severity)
@@ -480,6 +482,7 @@ func TestCachePoisoningRisk_WithForkProtection_MediumSeverity(t *testing.T) {
 	}
 	if found == nil {
 		t.Fatalf("expected CACHE_POISONING_RISK finding")
+		return
 	}
 	if found.Severity != SeverityMedium {
 		t.Fatalf("expected MEDIUM severity with fork protection, got: %v", found.Severity)
@@ -514,6 +517,7 @@ func TestCachePoisoningRisk_NoForkProtection_HighSeverity(t *testing.T) {
 	}
 	if found == nil {
 		t.Fatalf("expected CACHE_POISONING_RISK finding")
+		return
 	}
 	if found.Severity != SeverityHigh {
 		t.Fatalf("expected HIGH severity without fork protection, got: %v", found.Severity)

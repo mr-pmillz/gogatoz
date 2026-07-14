@@ -33,6 +33,7 @@ func TestWithSOCKS5Proxy_WithAuth(t *testing.T) {
 	}
 	if cfg.socks5Auth == nil {
 		t.Fatal("socks5Auth should not be nil")
+		return
 	}
 	if cfg.socks5Auth.User != "alice" {
 		t.Errorf("socks5Auth.User = %q, want alice", cfg.socks5Auth.User)
@@ -107,6 +108,7 @@ func TestNew_SOCKS5_ComposesWithTLS(t *testing.T) {
 	}
 	if transport.TLSClientConfig == nil {
 		t.Fatal("expected TLSClientConfig from InsecureTLS")
+		return
 	}
 	if !transport.TLSClientConfig.InsecureSkipVerify {
 		t.Error("expected InsecureSkipVerify=true")
