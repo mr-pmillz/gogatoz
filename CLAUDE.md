@@ -93,6 +93,16 @@ Astro Starlight in `docs/`. Content in `docs/src/content/docs/`, sidebar manuall
 - **Rate limiting**: Token bucket (`golang.org/x/time/rate`) with adaptive backoff and jitter.
 - **Terminal output**: PTerm (`github.com/pterm/pterm`) for styled tables, colored severity, and prefix printers (success/error/info) in text output mode. PTerm auto-strips ANSI when stdout is not a TTY. JSON/JSONL output paths are never styled. Shared helpers in `cmd/ui.go`; enumerate report rendering in `pkg/enumerate/report/pterm.go`.
 - **PTerm writing pattern**: Use `Srender()` (tables/bullet lists) or `Sprint()` (section/header/prefix printers) to get a string, then `fmt.Fprintln(w, s)` to write to Cobra's writer. `Section`/`Header` printers lack `Srender()` — use `Sprint()` only. Never use `Render()` directly (writes to stdout, bypasses Cobra's writer).
+- **Worm listener mode**: `--supply-chain-worm --webhook <url>` starts a built-in HTTP listener (port extracted from URL), auto-generates a curl callback payload, propagates the worm, waits for callbacks with 3-minute timeout, pretty-prints secrets per-project, and persists to DB. The listener reuses `cmd/ror_listener.go` with `Project` field support for `{"project":"...","data":"..."}` JSON format.
+
+### Payload Generator Gotchas
+
+- **YAML block scalar indentation**: Script content inserted into `- |\n` must be indented (use `indentBlock(script, 6)`). GitLab silently rejects unindented content (0 jobs, no `yaml_errors`). Affected: `container_escape.go`, `c2_channels.go`, `variable_injection.go`.
+- **No `set -e` in payload scripts**: Credential sweeps and file-existence checks return non-zero on missing files, killing the entire script. Use `|| true` on fallible commands instead.
+- **Phantom Gyp output routing**: gyp `<!(...)` captures stdout. Payload output must go to stderr via `process.stderr.write(execSync(cmd))` in index.js. The binding.gyp should NOT redirect to `/dev/null`.
+- **Container escape env capture**: Always include `printenv | sort > "$_edir/env_dump.txt"` so CI variables (flags) appear in artifacts. Add `|| true` on the `_ESCAPE` function call.
+- **Worm CI injection**: Don't prepend a separate `stages:` key — use the existing CI's first stage name for the worm job to avoid duplicate-key YAML rejection.
+- **Supply chain worm requires a real GitLab group**: `root` is a user namespace; `ListGroupProjects` fails on user namespaces. The CTF lab uses `worm-labs` group with 5 projects.
 
 ## GitLab SDK Conventions
 
