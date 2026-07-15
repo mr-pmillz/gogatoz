@@ -2357,10 +2357,14 @@ var attackCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		// Try to resolve actual pipeline ID for a better URL
-		pipelineID, waitErr := attack.WaitForPipelineForRef(ctx, client, atkTarget, finalBranch, 0, 2*time.Second, 30*time.Second)
+		// Snapshot the stale pipeline (from branch creation) so we can
+		// wait for the NEW pipeline triggered by the CI file commit.
+		stalePipelineID, _ := attack.WaitForPipelineForRef(ctx, client, atkTarget, finalBranch, 0, 500*time.Millisecond, 5*time.Second)
+		pipelineID, waitErr := attack.WaitForPipelineForRef(ctx, client, atkTarget, finalBranch, stalePipelineID, 2*time.Second, 30*time.Second)
 		if waitErr == nil && pipelineID > 0 {
 			url = fmt.Sprintf("%s/%s/-/pipelines/%d", strings.TrimSuffix(gitlabURL, "/"), atkTarget, pipelineID)
+		} else if stalePipelineID > 0 {
+			url = fmt.Sprintf("%s/%s/-/pipelines/%d", strings.TrimSuffix(gitlabURL, "/"), atkTarget, stalePipelineID)
 		}
 		fmt.Fprintf(cmd.ErrOrStderr(), "[attack] pipeline: %s\n", url)
 
