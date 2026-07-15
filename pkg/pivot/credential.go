@@ -255,10 +255,8 @@ func (s *CredentialStore) IsVisited(tokenHash string, projectID int64) bool {
 func (s *CredentialStore) RecordTokenProject(tokenHash string, projectID int64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for _, pid := range s.ProjectsByToken[tokenHash] {
-		if pid == projectID {
-			return
-		}
+	if slices.Contains(s.ProjectsByToken[tokenHash], projectID) {
+		return
 	}
 	s.ProjectsByToken[tokenHash] = append(s.ProjectsByToken[tokenHash], projectID)
 }
