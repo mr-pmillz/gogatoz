@@ -184,4 +184,3 @@ func (s *Server) handleAttackProject(
 	s.persistAttack(out)
 	return nil, out, nil
 }
-
