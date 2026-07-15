@@ -25,6 +25,7 @@ type Credential struct {
 	Scopes          []string
 	IsValid         bool
 	GitLabURL       string
+	AccessLevel     int // GitLab access level (0=none, 30=developer, 40=maintainer, 50=owner)
 }
 
 // tokenNamePatterns are env var names that likely contain GitLab tokens.
@@ -175,18 +176,28 @@ type visitKey struct {
 	projectID int64
 }
 
+// SortByAccessLevel sorts credentials in descending order of access level
+// (admin > owner > maintainer > developer) for BFS queue prioritization.
+func SortByAccessLevel(creds []*Credential) {
+	slices.SortStableFunc(creds, func(a, b *Credential) int {
+		return b.AccessLevel - a.AccessLevel
+	})
+}
+
 // CredentialStore provides thread-safe credential tracking with visit dedup.
 type CredentialStore struct {
-	mu      sync.RWMutex
-	creds   map[string]*Credential // tokenHash → Credential
-	visited map[visitKey]struct{}
+	mu              sync.RWMutex
+	creds           map[string]*Credential // tokenHash → Credential
+	visited         map[visitKey]struct{}
+	ProjectsByToken map[string][]int64 // tokenHash → project IDs where token was found
 }
 
 // NewCredentialStore creates an empty credential store.
 func NewCredentialStore() *CredentialStore {
 	return &CredentialStore{
-		creds:   make(map[string]*Credential),
-		visited: make(map[visitKey]struct{}),
+		creds:           make(map[string]*Credential),
+		visited:         make(map[visitKey]struct{}),
+		ProjectsByToken: make(map[string][]int64),
 	}
 }
 
@@ -238,4 +249,29 @@ func (s *CredentialStore) IsVisited(tokenHash string, projectID int64) bool {
 	defer s.mu.RUnlock()
 	_, ok := s.visited[visitKey{tokenHash, projectID}]
 	return ok
+}
+
+// RecordTokenProject records that a token was found in a specific project.
+func (s *CredentialStore) RecordTokenProject(tokenHash string, projectID int64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, pid := range s.ProjectsByToken[tokenHash] {
+		if pid == projectID {
+			return
+		}
+	}
+	s.ProjectsByToken[tokenHash] = append(s.ProjectsByToken[tokenHash], projectID)
+}
+
+// ReusedTokens returns tokens found in more than one project.
+func (s *CredentialStore) ReusedTokens() map[string][]int64 {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make(map[string][]int64)
+	for hash, pids := range s.ProjectsByToken {
+		if len(pids) > 1 {
+			out[hash] = pids
+		}
+	}
+	return out
 }

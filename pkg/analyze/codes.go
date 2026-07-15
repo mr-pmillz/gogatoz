@@ -273,6 +273,55 @@ var findingCodeRegistry = map[string]FindingCodeInfo{
 		Description: "CI/CD script contains suspicious Unicode characters (zero-width, bidirectional overrides) that can hide malicious code from human reviewers. This technique has been used in real supply chain attacks (Trojan Source, CVE-2021-42574).",
 		Remediation: "Remove zero-width and bidirectional Unicode characters from CI/CD scripts. Use tools like 'cat -v' or Unicode-aware linters to detect invisible characters. Ensure all script content is visible in plain text review. See: https://trojansource.codes/",
 	},
+	SecretExfilHTTPID: {
+		ID:          SecretExfilHTTPID,
+		Severity:    SeverityCritical,
+		Title:       "Environment secrets exfiltrated via HTTP",
+		Description: "CI/CD job dumps environment variables (printenv, env, /proc/self/environ) and sends them to an external endpoint. This is a hallmark of supply chain exfiltration campaigns (Hades, GhostAction, Megalodon).",
+		Remediation: "Remove the environment dump and HTTP POST from the CI script. Audit project CI variables for exposure. Rotate any secrets that may have been exfiltrated. Use protected branches and require MR approval for CI changes.",
+	},
+	SecretExfilArtifactID: {
+		ID:          SecretExfilArtifactID,
+		Severity:    SeverityHigh,
+		Title:       "Environment dump uploaded as CI artifact",
+		Description: "CI/CD job writes environment variables to a file and uploads it as an artifact. Anyone with project read access can download the artifact and extract secrets.",
+		Remediation: "Remove the environment dump from the CI script. Never upload files containing environment variables as artifacts. Audit existing artifacts for secret exposure and rotate any leaked credentials.",
+	},
+	ScriptEncodedPayloadID: {
+		ID:          ScriptEncodedPayloadID,
+		Severity:    SeverityHigh,
+		Title:       "Encoded or binary payload in CI script",
+		Description: "CI/CD script contains a suspicious encoded payload (base64, hex, or binary magic bytes). This technique is used to smuggle malicious binaries or obfuscated code through CI pipelines.",
+		Remediation: "Review the encoded content and determine its purpose. Remove any payloads that decode to executable binaries or obfuscated shell commands. Prefer transparent, readable CI scripts.",
+	},
+	WhitespaceHidingID: {
+		ID:          WhitespaceHidingID,
+		Severity:    SeverityMedium,
+		Title:       "Script hides code with excessive whitespace",
+		Description: "CI/CD script line contains excessive leading whitespace (40+ spaces) pushing content off-screen in code review diffs. This technique was used in the AsyncAPI supply chain attack to hide obfuscated payloads.",
+		Remediation: "Remove excessive leading whitespace from CI scripts. Ensure all script content is visible in standard code review tools. Use linters that detect abnormally long or padded lines.",
+	},
+	CharcodeObfuscationID: {
+		ID:          CharcodeObfuscationID,
+		Severity:    SeverityMedium,
+		Title:       "Character-code obfuscation in CI script",
+		Description: "CI/CD script constructs strings from character codes (String.fromCharCode, chr(), pack(), printf hex). This technique is used to hide C2 hostnames and malicious URLs from static analysis, as seen in the Injective SDK attack.",
+		Remediation: "Replace character-code constructions with plaintext strings. If the constructed value is a URL or hostname, investigate it as a potential C2 endpoint. Review the script for data exfiltration behavior.",
+	},
+	SuspiciousNetworkID: {
+		ID:          SuspiciousNetworkID,
+		Severity:    SeverityHigh,
+		Title:       "CI script contacts suspicious network target",
+		Description: "CI/CD script makes HTTP requests to suspicious infrastructure: direct IP addresses, .onion domains, paste sites, file-sharing services, or known C2 relay endpoints.",
+		Remediation: "Review the target URL and determine if it is legitimate. Remove connections to suspicious infrastructure. Use an allowlist of approved external hosts in CI pipelines.",
+	},
+	CampaignMatchID: {
+		ID:          CampaignMatchID,
+		Severity:    SeverityCritical,
+		Title:       "CI config matches known supply chain attack campaign",
+		Description: "CI/CD configuration matches the signature of a known supply chain attack campaign. This indicates the pipeline may have been compromised using techniques from documented attacks.",
+		Remediation: "Immediately investigate the CI configuration for unauthorized changes. Compare with the last known-good version in git history. Rotate all CI/CD secrets. Review recent commits for suspicious authors or timing.",
+	},
 }
 
 // LookupFinding returns metadata for a finding code, or nil if unknown.

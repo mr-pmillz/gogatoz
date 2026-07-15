@@ -91,6 +91,17 @@ type AttackSummary struct {
 	ByMode     map[string]int
 }
 
+// SupplyChainView aggregates supply chain risk findings.
+type SupplyChainView struct {
+	ExfilFindings     int `json:"exfil_findings"`
+	EncodedPayloads   int `json:"encoded_payloads"`
+	CampaignMatches   int `json:"campaign_matches"`
+	SuspiciousNetwork int `json:"suspicious_network"`
+	ObfuscationIssues int `json:"obfuscation_issues"`
+	WeakProtection    int `json:"weak_protection"`
+	TotalRisk         int `json:"total_risk"`
+}
+
 // Report root for templates.
 type Report struct {
 	GeneratedAt      time.Time
@@ -98,6 +109,7 @@ type Report struct {
 	Summary          Summary
 	Runners          RunnersView
 	Pipelines        PipelinesView
+	SupplyChain      SupplyChainView `json:"supply_chain,omitempty"`
 	LogFindingsTotal int
 	Attacks          []AttackView
 	AttackSummary    AttackSummary
@@ -233,6 +245,30 @@ func Build(results []enumerate.Result, opts Options) Report {
 		return rep.Projects[i].FindingCount > rep.Projects[j].FindingCount
 	})
 	rep.Summary.Total = len(rep.Projects)
+
+	// Aggregate supply chain risk findings
+	for _, pv := range rep.Projects {
+		for _, f := range pv.Project.Findings {
+			switch f.ID {
+			case "SECRET_EXFIL_HTTP", "SECRET_EXFIL_ARTIFACT":
+				rep.SupplyChain.ExfilFindings++
+			case "SCRIPT_ENCODED_PAYLOAD":
+				rep.SupplyChain.EncodedPayloads++
+			case "CAMPAIGN_MATCH":
+				rep.SupplyChain.CampaignMatches++
+			case "SUSPICIOUS_NETWORK_TARGET":
+				rep.SupplyChain.SuspiciousNetwork++
+			case "SCRIPT_OBFUSCATION", "SCRIPT_WHITESPACE_HIDING", "CHARCODE_OBFUSCATION":
+				rep.SupplyChain.ObfuscationIssues++
+			case "WEAK_BRANCH_PROTECTION":
+				rep.SupplyChain.WeakProtection++
+			}
+		}
+	}
+	rep.SupplyChain.TotalRisk = rep.SupplyChain.ExfilFindings + rep.SupplyChain.EncodedPayloads +
+		rep.SupplyChain.CampaignMatches + rep.SupplyChain.SuspiciousNetwork +
+		rep.SupplyChain.ObfuscationIssues + rep.SupplyChain.WeakProtection
+
 	return rep
 }
 

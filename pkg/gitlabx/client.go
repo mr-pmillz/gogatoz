@@ -505,6 +505,51 @@ func (c *Client) GetCIYMLTemplate(ctx context.Context, name string) (string, err
 	return payload.Content, nil
 }
 
+// BranchProtectionDetail holds access level info for a protected branch.
+type BranchProtectionDetail struct {
+	Name                    string `json:"name"`
+	PushAccessLevel         int    `json:"push_access_level"`
+	MergeAccessLevel        int    `json:"merge_access_level"`
+	AllowForcePush          bool   `json:"allow_force_push"`
+	CodeOwnerApprovalNeeded bool   `json:"code_owner_approval_required"`
+}
+
+// GetProtectedBranchDetails returns access level details for protected branches.
+func (c *Client) GetProtectedBranchDetails(ctx context.Context, projectID any, perPage int64) ([]BranchProtectionDetail, error) {
+	if c == nil || c.GL == nil {
+		return nil, fmt.Errorf("nil gitlab client")
+	}
+	if perPage <= 0 {
+		perPage = 100
+	}
+	opt := &gitlab.ListProtectedBranchesOptions{ListOptions: gitlab.ListOptions{PerPage: perPage, Page: 1}}
+	var out []BranchProtectionDetail
+	for {
+		list, resp, err := c.GL.ProtectedBranches.ListProtectedBranches(projectID, opt, gitlab.WithContext(ctx))
+		if err != nil {
+			return nil, err
+		}
+		for _, b := range list {
+			if b == nil {
+				continue
+			}
+			d := BranchProtectionDetail{Name: b.Name, AllowForcePush: b.AllowForcePush, CodeOwnerApprovalNeeded: b.CodeOwnerApprovalRequired}
+			if len(b.PushAccessLevels) > 0 {
+				d.PushAccessLevel = int(b.PushAccessLevels[0].AccessLevel)
+			}
+			if len(b.MergeAccessLevels) > 0 {
+				d.MergeAccessLevel = int(b.MergeAccessLevels[0].AccessLevel)
+			}
+			out = append(out, d)
+		}
+		if resp == nil || resp.NextPage == 0 || resp.CurrentPage >= resp.TotalPages || len(list) == 0 {
+			break
+		}
+		opt.Page = resp.NextPage
+	}
+	return out, nil
+}
+
 // GetProtectedBranches returns the list of protected branch names for a project.
 // It paginates through all pages starting from the provided page (usually 0 or 1).
 func (c *Client) GetProtectedBranches(ctx context.Context, projectID any, perPage int64, page int64) ([]string, error) {

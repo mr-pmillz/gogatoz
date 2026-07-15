@@ -99,6 +99,35 @@ func (a *Attacker) SetupUser(ctx context.Context) (*gitlab.User, error) {
 	return u, nil
 }
 
+// ImpersonateMaintainer looks up a project maintainer/owner and sets the
+// author identity to theirs. Makes commits harder to attribute to the attacker.
+func (a *Attacker) ImpersonateMaintainer(ctx context.Context, projectID any) error {
+	opts := &gitlab.ListProjectMembersOptions{ListOptions: gitlab.ListOptions{PerPage: 50, Page: 1}}
+	members, _, err := a.Client.GL.ProjectMembers.ListProjectMembers(projectID, opts, gitlab.WithContext(ctx))
+	if err != nil {
+		return fmt.Errorf("list project members: %w", err)
+	}
+	for _, m := range members {
+		if m == nil {
+			continue
+		}
+		if m.AccessLevel >= gitlab.MaintainerPermissions {
+			a.AuthorName = m.Name
+			if a.AuthorEmail == "" && m.Username != "" {
+				a.AuthorEmail = m.Username + "@users.noreply.gitlab.com"
+			}
+			return nil
+		}
+	}
+	if len(members) > 0 && members[0] != nil {
+		a.AuthorName = members[0].Name
+		if a.AuthorEmail == "" && members[0].Username != "" {
+			a.AuthorEmail = members[0].Username + "@users.noreply.gitlab.com"
+		}
+	}
+	return nil
+}
+
 // CreateSnippet creates a personal snippet (GitLab equivalent of a Gist).
 func (a *Attacker) CreateSnippet(ctx context.Context, title, filename, content string, public bool) (*gitlab.Snippet, *gitlab.Response, error) {
 	vis := gitlab.PrivateVisibility

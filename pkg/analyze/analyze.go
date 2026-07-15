@@ -26,7 +26,14 @@ var AllSeverities = []Severity{SeverityCritical, SeverityHigh, SeverityMedium, S
 
 // Finding ID constants.
 const (
-	IncludeRemoteID = "INCLUDE_REMOTE"
+	IncludeRemoteID        = "INCLUDE_REMOTE"
+	SecretExfilHTTPID      = "SECRET_EXFIL_HTTP"     //nolint:gosec // finding ID, not a credential
+	SecretExfilArtifactID  = "SECRET_EXFIL_ARTIFACT" //nolint:gosec // finding ID, not a credential
+	ScriptEncodedPayloadID = "SCRIPT_ENCODED_PAYLOAD"
+	WhitespaceHidingID     = "SCRIPT_WHITESPACE_HIDING"
+	CharcodeObfuscationID  = "CHARCODE_OBFUSCATION"
+	SuspiciousNetworkID    = "SUSPICIOUS_NETWORK_TARGET"
+	CampaignMatchID        = "CAMPAIGN_MATCH"
 )
 
 // Finding represents a single analysis result.
@@ -308,8 +315,20 @@ func Run(doc *pipeline.Document, opts ...Option) ([]Finding, error) {
 	// 23) Container image supply chain (mutable tags, missing digest pins)
 	findings = append(findings, detectImageIssues(doc, cfg.controls)...)
 
-	// 24) Script obfuscation (zero-width chars, bidi overrides)
+	// 24) Script obfuscation (zero-width chars, bidi overrides, whitespace hiding, charcode C2)
 	findings = append(findings, detectScriptObfuscation(doc)...)
+
+	// 25) Secret exfiltration (env dump → HTTP POST or artifact upload)
+	findings = append(findings, detectSecretExfiltration(doc)...)
+
+	// 26) Encoded/binary payload detection (base64, hex blobs, magic bytes)
+	findings = append(findings, detectEncodedPayloads(doc)...)
+
+	// 27) Suspicious network targets (direct IPs, .onion, C2 infrastructure)
+	findings = append(findings, detectSuspiciousNetworkTargets(doc)...)
+
+	// 28) Campaign signature matching (known supply chain attack patterns)
+	findings = append(findings, detectCampaignSignatures(doc)...)
 
 	// Filter disabled rules
 	if cfg.controls != nil {

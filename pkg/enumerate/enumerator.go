@@ -179,12 +179,13 @@ func scanOne(ctx context.Context, cl *gitlabx.Client, ident string, opts Options
 		if list, err := cl.GetProtectedBranches(ctx, proj.ID, 100, 0); err == nil {
 			r.ProtectedBranches = list
 		} else {
-			// Non-fatal; append to error string
 			if r.Error != "" {
 				r.Error += "; "
 			}
 			r.Error += fmt.Sprintf("protected branches: %v", err)
 		}
+		// Branch protection risk analysis
+		r.Findings = append(r.Findings, checkBranchProtection(ctx, cl, proj.ID, proj.DefaultBranch)...)
 	}
 	// Optional: fetch runner summary based on scope
 	var fetchedRunners []gitlabx.RunnerInfo

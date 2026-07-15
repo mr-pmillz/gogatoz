@@ -120,17 +120,26 @@ func detectOIDCTokenMRRisk(doc *pipeline.Document) []Finding {
 			continue
 		}
 		mrTriggered := jobTriggersOnMR(job.Rules) || triggersOnMRViaOnly(job.Only)
-		if !mrTriggered {
-			continue
+		broadly := jobRulesAllowBroad(job.Rules)
+		if mrTriggered {
+			findings = append(findings, Finding{
+				ID:          "OIDC_TOKEN_MR_RISK",
+				Severity:    SeverityHigh,
+				Title:       "OIDC token issued in MR-triggered job",
+				Description: "Job defines id_tokens and is triggered by merge request events. GitLab will issue a signed OIDC token to this job. Fork authors can trigger this job and capture the token to authenticate against cloud providers (AWS, GCP, Azure Workload Identity, etc.).",
+				Evidence:    truncateEvidence("job="+job.Name+" has id_tokens", 200),
+				JobName:     job.Name,
+			})
+		} else if broadly || job.Rules == nil {
+			findings = append(findings, Finding{
+				ID:          "OIDC_TOKEN_MR_RISK",
+				Severity:    SeverityMedium,
+				Title:       "OIDC token issued in broadly-triggered job",
+				Description: "Job defines id_tokens and runs on push events or has broad trigger rules. Anyone with push access can forge valid OIDC provenance by pushing a commit, even without merge request review. Valid provenance from a compromised commit was the AsyncAPI attack pattern.",
+				Evidence:    truncateEvidence("job="+job.Name+" has id_tokens, trigger=push/broad", 200),
+				JobName:     job.Name,
+			})
 		}
-		findings = append(findings, Finding{
-			ID:          "OIDC_TOKEN_MR_RISK",
-			Severity:    SeverityHigh,
-			Title:       "OIDC token issued in MR-triggered job",
-			Description: "Job defines id_tokens and is triggered by merge request events. GitLab will issue a signed OIDC token to this job. Fork authors can trigger this job and capture the token to authenticate against cloud providers (AWS, GCP, Azure Workload Identity, etc.).",
-			Evidence:    truncateEvidence("job="+job.Name+" has id_tokens", 200),
-			JobName:     job.Name,
-		})
 	}
 	return findings
 }
