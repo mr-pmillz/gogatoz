@@ -37,8 +37,8 @@ func TestGenerateReleaseTamperPipelineYAML_WithWebhook(t *testing.T) {
 	})
 	for _, want := range []string{
 		"https://attacker.com/collect",
-		"release_env.txt",
-		"RELEASE|SIGN|GPG",
+		"release-env.txt",
+		"printenv",
 	} {
 		if !strings.Contains(y, want) {
 			t.Errorf("expected %q in output:\n%s", want, y)

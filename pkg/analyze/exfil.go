@@ -30,7 +30,7 @@ var (
 		"${GITLAB_TOKEN}", "${DEPLOY_TOKEN}", "${CI_REGISTRY_PASSWORD}",
 	}
 
-	envDumpToFileRe = regexp.MustCompile(`(?i)(printenv|env|set|export)\s*(>|>>|\|.*tee)\s*(\S+)`)
+	envDumpToFileRe = regexp.MustCompile(`(?i)(printenv|env|set|export)\s*(\|[^>]*)?(\s*>>?\s*)(\S+)`)
 )
 
 func detectSecretExfiltration(doc *pipeline.Document) []Finding {
@@ -152,8 +152,8 @@ func hasPipeToHTTP(lower string) bool {
 
 func extractDumpFilename(lines []string) string {
 	for _, line := range lines {
-		if m := envDumpToFileRe.FindStringSubmatch(line); len(m) >= 4 {
-			return strings.TrimSpace(m[3])
+		if m := envDumpToFileRe.FindStringSubmatch(line); len(m) >= 5 {
+			return strings.TrimSpace(m[4])
 		}
 	}
 	return ""

