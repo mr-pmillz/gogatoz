@@ -211,5 +211,7 @@ func (s *Server) persistSecretScan(out secretScanOutput) {
 		}
 		srs[i] = sr
 	}
-	_ = s.store.SaveSecretScanResults(session.ID, srs)
+	if err := s.store.SaveSecretScanResults(session.ID, srs); err != nil {
+		fmt.Fprintf(os.Stderr, "[mcp] persist secret scan results: %v\n", err)
+	}
 }

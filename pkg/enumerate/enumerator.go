@@ -78,6 +78,26 @@ type Options struct {
 	Progress func(Result)
 }
 
+func appendError(r *Result, msg string) {
+	if r.Error != "" {
+		r.Error += "; "
+	}
+	r.Error += msg
+}
+
+func applyRunnerInfo(r *Result, runs []gitlabx.RunnerInfo) {
+	r.RunnerExecutors = map[string]int{}
+	r.RunnersTotal = len(runs)
+	for _, rn := range runs {
+		if rn.Online {
+			r.RunnersOnline++
+		}
+		if exec := strings.TrimSpace(strings.ToLower(rn.Executor)); exec != "" {
+			r.RunnerExecutors[exec]++
+		}
+	}
+}
+
 // dedup removes duplicate, empty, and comment-prefixed identifiers, preserving order.
 func dedup(idents []string) []string {
 	uniq := make([]string, 0, len(idents))
@@ -126,6 +146,9 @@ func EnumerateProjectsStream(ctx context.Context, cl *gitlabx.Client, idents []s
 					if opts.Progress != nil {
 						opts.Progress(res)
 					}
+					// Serializes emit across workers. EnumerateProjects wraps
+					// emit with its own lock — redundant there but needed for
+					// direct callers of Stream with non-thread-safe callbacks.
 					mu.Lock()
 					emit(res)
 					mu.Unlock()
@@ -179,12 +202,8 @@ func scanOne(ctx context.Context, cl *gitlabx.Client, ident string, opts Options
 		if list, err := cl.GetProtectedBranches(ctx, proj.ID, 100, 0); err == nil {
 			r.ProtectedBranches = list
 		} else {
-			if r.Error != "" {
-				r.Error += "; "
-			}
-			r.Error += fmt.Sprintf("protected branches: %v", err)
+			appendError(&r, fmt.Sprintf("protected branches: %v", err))
 		}
-		// Branch protection risk analysis
 		r.Findings = append(r.Findings, checkBranchProtection(ctx, cl, proj.ID, proj.DefaultBranch)...)
 	}
 	// Optional: fetch runner summary based on scope
@@ -199,91 +218,42 @@ func scanOne(ctx context.Context, cl *gitlabx.Client, ident string, opts Options
 		case defaultRunnerScope:
 			if runs, err := cl.AccumulateProjectRunners(ctx, proj.ID); err == nil {
 				fetchedRunners = runs
-				r.RunnerExecutors = map[string]int{}
-				r.RunnersTotal = len(runs)
-				for _, rn := range runs {
-					if rn.Online {
-						r.RunnersOnline++
-					}
-					if exec := strings.TrimSpace(strings.ToLower(rn.Executor)); exec != "" {
-						r.RunnerExecutors[exec]++
-					}
-				}
+				applyRunnerInfo(&r, runs)
 			} else {
-				if r.Error != "" {
-					r.Error += "; "
-				}
-				r.Error += fmt.Sprintf("runners(project): %v", err)
+				appendError(&r, fmt.Sprintf("runners(project): %v", err))
 			}
 		case "group":
 			var gid any
 			if proj.Namespace != nil {
-				// Try ID first
 				if proj.Namespace.ID != 0 {
 					gid = proj.Namespace.ID
 				} else if strings.TrimSpace(proj.Namespace.FullPath) != "" {
 					if g, _, gerr := cl.GL.Groups.GetGroup(proj.Namespace.FullPath, nil, gitlab.WithContext(ctx)); gerr == nil {
 						gid = g.ID
 					} else {
-						if r.Error != "" {
-							r.Error += "; "
-						}
-						r.Error += fmt.Sprintf("group lookup: %v", gerr)
+						appendError(&r, fmt.Sprintf("group lookup: %v", gerr))
 					}
 				}
 			}
-			if gid == nil || fmt.Sprintf("%v", gid) == "0" {
-				if r.Error != "" {
-					r.Error += "; "
-				}
-				r.Error += "no group namespace for project"
+			if gid == nil || gid == int64(0) {
+				appendError(&r, "no group namespace for project")
 			} else if runs, err := cl.AccumulateGroupRunners(ctx, gid); err == nil {
 				fetchedRunners = runs
-				r.RunnerExecutors = map[string]int{}
-				r.RunnersTotal = len(runs)
-				for _, rn := range runs {
-					if rn.Online {
-						r.RunnersOnline++
-					}
-					if exec := strings.TrimSpace(strings.ToLower(rn.Executor)); exec != "" {
-						r.RunnerExecutors[exec]++
-					}
-				}
+				applyRunnerInfo(&r, runs)
 			} else {
-				if r.Error != "" {
-					r.Error += "; "
-				}
-				r.Error += fmt.Sprintf("runners(group): %v", err)
+				appendError(&r, fmt.Sprintf("runners(group): %v", err))
 			}
 		case "instance":
 			if !opts.AllowAdmin {
-				if r.Error != "" {
-					r.Error += "; "
-				}
-				r.Error += "instance runner listing requires admin and --allow-admin-scope"
+				appendError(&r, "instance runner listing requires admin and --allow-admin-scope")
 			} else if runs, err := cl.AccumulateAllRunners(ctx); err == nil {
 				fetchedRunners = runs
-				r.RunnerExecutors = map[string]int{}
-				r.RunnersTotal = len(runs)
-				for _, rn := range runs {
-					if rn.Online {
-						r.RunnersOnline++
-					}
-					if exec := strings.TrimSpace(strings.ToLower(rn.Executor)); exec != "" {
-						r.RunnerExecutors[exec]++
-					}
-				}
+				applyRunnerInfo(&r, runs)
 			} else {
-				if r.Error != "" {
-					r.Error += "; "
-				}
-				r.Error += fmt.Sprintf("runners(instance): %v", err)
+				appendError(&r, fmt.Sprintf("runners(instance): %v", err))
 			}
 		default:
-			if r.Error != "" {
-				r.Error += "; "
-			}
-			r.Error += fmt.Sprintf("unknown runner scope: %s", scope)
+			appendError(&r, fmt.Sprintf("unknown runner scope: %s", scope))
 		}
 	}
 
@@ -330,11 +300,7 @@ func scanOne(ctx context.Context, cl *gitlabx.Client, ident string, opts Options
 			RemoteCacheTTL:   opts.RemoteCacheTTL,
 		})
 		if ierr != nil {
-			if r.Error != "" {
-				r.Error = r.Error + "; " + ierr.Error()
-			} else {
-				r.Error = ierr.Error()
-			}
+			appendError(&r, ierr.Error())
 		}
 		if merged != nil {
 			ciDocResolved = merged
@@ -405,10 +371,7 @@ func scanOne(ctx context.Context, cl *gitlabx.Client, ident string, opts Options
 		}
 		finds, lerr := secretsdump.ScrapeJobLogs(ctx, cl, proj.ID, refToUse, mp, mj)
 		if lerr != nil {
-			if r.Error != "" {
-				r.Error += "; "
-			}
-			r.Error += fmt.Sprintf("log scrape: %v", lerr)
+			appendError(&r, fmt.Sprintf("log scrape: %v", lerr))
 		} else {
 			r.LogFindingsCount = len(finds)
 		}

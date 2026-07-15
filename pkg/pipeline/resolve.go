@@ -24,9 +24,18 @@ var (
 	remoteCache   = map[string]remoteCacheEntry{}
 )
 
+const maxRemoteCacheEntries = 1000
+
 type remoteCacheEntry struct {
 	doc *Document
 	exp time.Time
+}
+
+// ClearRemoteCache removes all entries from the cross-call remote include cache.
+func ClearRemoteCache() {
+	remoteCacheMu.Lock()
+	clear(remoteCache)
+	remoteCacheMu.Unlock()
 }
 
 // ResolveOptions control include resolution behavior for non-GitLab (remote) sources.
@@ -248,48 +257,59 @@ func ResolveIncludesWithOptions(ctx context.Context, cl *gitlabx.Client, project
 				}
 				remoteCacheMu.Unlock()
 			}
-			// Fetch with timeout and size cap
-			ctxTO, cancel := context.WithTimeout(ctx, remoteTO)
-			defer cancel()
-			req, err := http.NewRequestWithContext(ctxTO, http.MethodGet, u.String(), nil)
-			if err != nil {
-				partials = append(partials, fmt.Sprintf("remote include request build failed: %v", err))
-				return nil
-			}
-			hc := http.DefaultClient
-			if cl != nil && cl.HTTPClient() != nil {
-				hc = cl.HTTPClient()
-			}
-			resp, err := hc.Do(req) //nolint:gosec
-			if err != nil {
-				partials = append(partials, fmt.Sprintf("remote include fetch failed: %v", err))
-				return nil
-			}
-			defer resp.Body.Close()
-			if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-				partials = append(partials, fmt.Sprintf("remote include bad status: %s", resp.Status))
-				return nil
-			}
-			// Size-limited read
-			lim := &io.LimitedReader{R: resp.Body, N: remoteMax + 1}
-			b, rerr := io.ReadAll(lim)
-			if rerr != nil {
-				partials = append(partials, fmt.Sprintf("remote include read failed: %v", rerr))
-				return nil
-			}
-			if int64(len(b)) > remoteMax {
-				partials = append(partials, fmt.Sprintf("remote include exceeds max bytes (%d)", remoteMax))
-				return nil
-			}
-			doc, perr := Parse(strings.NewReader(string(b)))
-			if perr != nil {
-				partials = append(partials, fmt.Sprintf("remote include parse failed: %v", perr))
+			// Fetch with timeout and size cap — wrapped in IIFE so defer
+			// executes per-fetch, not when ResolveIncludesWithOptions returns.
+			doc, fetchErr := func() (*Document, error) {
+				ctxTO, cancel := context.WithTimeout(ctx, remoteTO)
+				defer cancel()
+				req, err := http.NewRequestWithContext(ctxTO, http.MethodGet, u.String(), nil)
+				if err != nil {
+					return nil, fmt.Errorf("remote include request build failed: %w", err)
+				}
+				hc := http.DefaultClient
+				if cl != nil && cl.HTTPClient() != nil {
+					hc = cl.HTTPClient()
+				}
+				resp, err := hc.Do(req) //nolint:gosec
+				if err != nil {
+					return nil, fmt.Errorf("remote include fetch failed: %w", err)
+				}
+				defer resp.Body.Close()
+				if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+					return nil, fmt.Errorf("remote include bad status: %s", resp.Status)
+				}
+				lim := &io.LimitedReader{R: resp.Body, N: remoteMax + 1}
+				b, rerr := io.ReadAll(lim)
+				if rerr != nil {
+					return nil, fmt.Errorf("remote include read failed: %w", rerr)
+				}
+				if int64(len(b)) > remoteMax {
+					return nil, fmt.Errorf("remote include exceeds max bytes (%d)", remoteMax)
+				}
+				d, perr := Parse(strings.NewReader(string(b)))
+				if perr != nil {
+					return nil, fmt.Errorf("remote include parse failed: %w", perr)
+				}
+				return d, nil
+			}()
+			if fetchErr != nil {
+				partials = append(partials, fetchErr.Error())
 				return nil
 			}
 			cache[key] = doc
-			// store in TTL cache if enabled
 			if ropts.RemoteCacheTTL > 0 {
 				remoteCacheMu.Lock()
+				if len(remoteCache) >= maxRemoteCacheEntries {
+					now := time.Now()
+					for k, e := range remoteCache {
+						if now.After(e.exp) {
+							delete(remoteCache, k)
+						}
+					}
+					if len(remoteCache) >= maxRemoteCacheEntries {
+						clear(remoteCache)
+					}
+				}
 				remoteCache[key] = remoteCacheEntry{doc: doc, exp: time.Now().Add(ropts.RemoteCacheTTL)}
 				remoteCacheMu.Unlock()
 			}

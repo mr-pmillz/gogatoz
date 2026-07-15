@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -184,5 +185,7 @@ func (s *Server) persistEnumerate(out enumerateOutput) {
 		}
 		ers[i] = er
 	}
-	_ = s.store.SaveEnumerateResults(session.ID, ers)
+	if err := s.store.SaveEnumerateResults(session.ID, ers); err != nil {
+		fmt.Fprintf(os.Stderr, "[mcp] persist enumerate results: %v\n", err)
+	}
 }

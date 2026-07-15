@@ -3,6 +3,7 @@ package mcpserver
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -166,5 +167,7 @@ func (s *Server) persistPivot(orch *pivot.Orchestrator, stats *pivot.PivotStats)
 		DurationMS:         stats.Duration.Milliseconds(),
 		Status:             "completed",
 	}
-	_ = s.store.SavePivotSession(pivotSess)
+	if err := s.store.SavePivotSession(pivotSess); err != nil {
+		fmt.Fprintf(os.Stderr, "[mcp] persist pivot session: %v\n", err)
+	}
 }

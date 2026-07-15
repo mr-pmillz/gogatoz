@@ -457,7 +457,7 @@ func (b *Builder) trackRunnerTags(r *enumerate.Result, projNodeID string) {
 
 	for _, f := range r.Findings {
 		if (f.ID == "SELF_HOSTED_EXPOSED" || f.ID == "MR_TAGGED_RUNNER") && f.JobName != "" {
-			tags := extractTagsFromEvidence(f.Evidence)
+			tags := report.ExtractTagsFromEvidence(f.Evidence)
 			for _, tag := range tags {
 				runnerID := runnerNodeIDByTag(tag)
 				jID := jobNodeID(r.ProjectID, f.JobName)
@@ -476,24 +476,6 @@ func (b *Builder) trackRunnerTags(r *enumerate.Result, projNodeID string) {
 			}
 		}
 	}
-}
-
-var reTagList = regexp.MustCompile(`tags=\[([^\]]*)\]`)
-
-func extractTagsFromEvidence(evidence string) []string {
-	m := reTagList.FindStringSubmatch(evidence)
-	if len(m) < 2 {
-		return nil
-	}
-	raw := strings.Split(m[1], " ")
-	var tags []string
-	for _, t := range raw {
-		t = strings.TrimSpace(t)
-		if t != "" {
-			tags = append(tags, t)
-		}
-	}
-	return tags
 }
 
 // resolveProjectByPath returns the node ID for a project path, preferring

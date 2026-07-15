@@ -40,7 +40,11 @@ func New(opts Options) (*Notifier, error) {
 	if opts.Client != nil {
 		hc = opts.Client
 	} else {
-		hc = &http.Client{Timeout: opts.Timeout}
+		t := opts.Timeout
+		if t == 0 {
+			t = 30 * time.Second
+		}
+		hc = &http.Client{Timeout: t}
 	}
 	// Copy headers map to avoid external mutation
 	h := map[string]string{}

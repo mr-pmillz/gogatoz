@@ -23,6 +23,8 @@ import (
 	"golang.org/x/time/rate"
 )
 
+const maxResponseBytes = 10 << 20 // 10 MiB safety limit for HTTP response reads
+
 // normalizeBaseURL ensures the provided base URL is suitable for composing GitLab API endpoints.
 // It accepts inputs like:
 //   - gitlab.local

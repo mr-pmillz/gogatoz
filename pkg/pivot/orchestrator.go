@@ -7,6 +7,7 @@ import (
 	"encoding/pem"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -402,36 +403,13 @@ func (o *Orchestrator) emit(event PivotEvent) {
 
 func splitTags(tags string) []string {
 	var out []string
-	for _, t := range splitByComma(tags) {
-		t = trimSpace(t)
+	for _, t := range strings.Split(tags, ",") {
+		t = strings.TrimSpace(t)
 		if t != "" {
 			out = append(out, t)
 		}
 	}
 	return out
-}
-
-func splitByComma(s string) []string {
-	var out []string
-	start := 0
-	for i := range s {
-		if s[i] == ',' {
-			out = append(out, s[start:i])
-			start = i + 1
-		}
-	}
-	out = append(out, s[start:])
-	return out
-}
-
-func trimSpace(s string) string {
-	for len(s) > 0 && (s[0] == ' ' || s[0] == '\t') {
-		s = s[1:]
-	}
-	for len(s) > 0 && (s[len(s)-1] == ' ' || s[len(s)-1] == '\t') {
-		s = s[:len(s)-1]
-	}
-	return s
 }
 
 // Credentials returns the credential store for external access (e.g., store integration).

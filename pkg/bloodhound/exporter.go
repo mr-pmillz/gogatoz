@@ -14,8 +14,12 @@ func Export(b *Builder, outputPath string) error {
 	if err != nil {
 		return fmt.Errorf("create output file: %w", err)
 	}
-	defer f.Close()
-	return ExportToWriter(b, f)
+	if err := ExportToWriter(b, f); err != nil {
+		f.Close()
+		os.Remove(outputPath)
+		return err
+	}
+	return f.Close()
 }
 
 // ExportToWriter writes the BloodHound-CE ZIP to any io.Writer.
