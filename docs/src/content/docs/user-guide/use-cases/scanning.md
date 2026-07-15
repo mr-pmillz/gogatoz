@@ -12,6 +12,8 @@ GoGatoZ scanning typically involves two steps:
 1. Search: discover candidate projects via GitLab APIs
 2. Enumerate: analyze `.gitlab-ci.yml` and includes for misconfigurations
 
+![GoGatoZ enumerate finds a PLAINTEXT_SECRET in a public project's CI config](/images/ctf/02-public-webapp-ci-hardcoded-token.png)
+
 ## Step 1: Search for candidate projects
 
 ```bash

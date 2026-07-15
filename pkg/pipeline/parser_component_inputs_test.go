@@ -31,6 +31,7 @@ job:
 	}
 	if inc.Inputs == nil {
 		t.Fatalf("expected inputs to be captured, got nil")
+		return
 	}
 	if v, ok := inc.Inputs["VAR"].(string); !ok || v != "value" {
 		t.Fatalf("expected inputs.VAR=\"value\", got %#v", inc.Inputs["VAR"])

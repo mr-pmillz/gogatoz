@@ -109,6 +109,7 @@ func TestBuildGLSAST_EmptyFindings(t *testing.T) {
 	report := buildGLSAST(nil, "1.0.0", time.Now(), time.Now())
 	if report.Vulnerabilities == nil {
 		t.Fatal("vulnerabilities should be empty slice, not nil")
+		return
 	}
 	if len(report.Vulnerabilities) != 0 {
 		t.Fatalf("expected 0 vulnerabilities, got %d", len(report.Vulnerabilities))
@@ -176,6 +177,7 @@ func TestBuildGLSAST_SolutionFallsBackToRegistry(t *testing.T) {
 	info := analyze.LookupFinding("INCLUDE_REMOTE")
 	if info == nil {
 		t.Fatal("INCLUDE_REMOTE not found in registry")
+		return
 	}
 	if v.Solution != info.Remediation {
 		t.Errorf("solution = %q, want registry remediation %q", v.Solution, info.Remediation)

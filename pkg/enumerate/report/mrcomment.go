@@ -40,7 +40,7 @@ func BuildMRCommentBody(rep Report, score *analyze.ScoreResult) string {
 		b.WriteString("<details>\n<summary>Top findings by project</summary>\n\n")
 		b.WriteString("| Project | Findings | Critical | High | Medium |\n")
 		b.WriteString("|---------|----------|----------|------|--------|\n")
-		for i := 0; i < maxProjects; i++ {
+		for i := range maxProjects {
 			pv := rep.Projects[i]
 			fmt.Fprintf(&b, "| %s | %d | %d | %d | %d |\n",
 				pv.Project.ProjectPathWithNS, pv.FindingCount, pv.Critical, pv.High, pv.Medium)
@@ -53,7 +53,7 @@ func BuildMRCommentBody(rep Report, score *analyze.ScoreResult) string {
 		b.WriteString("| Finding | Severity | Count | Loss |\n")
 		b.WriteString("|---------|----------|-------|------|\n")
 		maxLosses := min(len(score.CodeLosses), 15)
-		for i := 0; i < maxLosses; i++ {
+		for i := range maxLosses {
 			cl := score.CodeLosses[i]
 			fmt.Fprintf(&b, "| %s | %s | %d | -%.1f |\n", cl.Code, cl.Severity, cl.Count, cl.CappedLoss)
 		}

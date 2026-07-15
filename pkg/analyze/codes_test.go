@@ -6,6 +6,7 @@ func TestLookupFinding(t *testing.T) {
 	info := LookupFinding("VARIABLE_INJECTION")
 	if info == nil {
 		t.Fatal("expected VARIABLE_INJECTION to be registered")
+		return
 	}
 	if info.Title == "" {
 		t.Error("expected non-empty title")
@@ -72,6 +73,7 @@ func TestWithRecommendations_uses_registry(t *testing.T) {
 	info := LookupFinding("VARIABLE_INJECTION")
 	if info == nil {
 		t.Fatal("VARIABLE_INJECTION should be in registry")
+		return
 	}
 	if result[0].Recommendation != info.Remediation {
 		t.Errorf("expected recommendation from registry, got %q", result[0].Recommendation)

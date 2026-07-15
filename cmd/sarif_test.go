@@ -326,6 +326,7 @@ func TestBuildSARIF_RegistryMetadata(t *testing.T) {
 	info := analyze.LookupFinding("PLAINTEXT_SECRET")
 	if info == nil {
 		t.Fatal("PLAINTEXT_SECRET not in registry")
+		return
 	}
 	if rule.ShortDescription.Text != info.Title {
 		t.Errorf("shortDescription = %q, want registry title %q", rule.ShortDescription.Text, info.Title)

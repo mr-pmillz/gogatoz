@@ -40,6 +40,7 @@ func TestVariableInjection_MRTitleInScript(t *testing.T) {
 	}
 	if found == nil {
 		t.Fatalf("VARIABLE_INJECTION finding not found")
+		return
 	}
 	if found.Severity != SeverityHigh {
 		t.Fatalf("expected HIGH severity for MR-triggered injection, got: %v", found.Severity)
@@ -70,6 +71,7 @@ func TestVariableInjection_CommitMessageInSink(t *testing.T) {
 	}
 	if found == nil {
 		t.Fatalf("VARIABLE_INJECTION finding not found")
+		return
 	}
 	if found.Severity != SeverityHigh {
 		t.Fatalf("expected HIGH severity for sink usage, got: %v", found.Severity)
@@ -119,6 +121,7 @@ func TestVariableInjection_MRDescriptionInBash(t *testing.T) {
 	}
 	if found == nil {
 		t.Fatalf("VARIABLE_INJECTION finding not found")
+		return
 	}
 	if found.Severity != SeverityHigh {
 		t.Fatalf("expected HIGH severity for MR+sink, got: %v", found.Severity)
@@ -252,6 +255,7 @@ func TestForkMRRisks_UnprotectedWithTags_HighSeverity(t *testing.T) {
 	}
 	if found == nil {
 		t.Fatalf("expected FORK_MR_UNPROTECTED finding")
+		return
 	}
 	if found.Severity != SeverityHigh {
 		t.Fatalf("expected HIGH severity for self-hosted runner, got: %v", found.Severity)
@@ -338,6 +342,7 @@ func TestArtifactPoisoning_DownstreamWithTags_HighSeverity(t *testing.T) {
 	}
 	if found == nil {
 		t.Fatalf("expected ARTIFACT_POISONING_RISK finding")
+		return
 	}
 	if found.Severity != SeverityHigh {
 		t.Fatalf("expected HIGH severity for downstream with tags, got: %v", found.Severity)
@@ -471,6 +476,7 @@ func TestForkScriptExecution_WithTags_HighSeverity(t *testing.T) {
 	}
 	if found == nil {
 		t.Fatalf("expected FORK_SCRIPT_EXECUTION finding")
+		return
 	}
 	if found.Severity != SeverityHigh {
 		t.Fatalf("expected HIGH severity for self-hosted runner, got: %v", found.Severity)
@@ -622,6 +628,7 @@ func TestAIPromptInjection_WithGitPush_HighSeverity(t *testing.T) {
 	}
 	if found == nil {
 		t.Fatalf("expected AI_PROMPT_INJECTION finding")
+		return
 	}
 	if found.Severity != SeverityHigh {
 		t.Fatalf("expected HIGH severity for AI+git push, got: %v", found.Severity)
@@ -670,6 +677,7 @@ func TestAIPromptInjection_CopilotWithUnsafeVar(t *testing.T) {
 	}
 	if found == nil {
 		t.Fatalf("expected AI_PROMPT_INJECTION finding")
+		return
 	}
 	if found.Severity != SeverityHigh {
 		t.Fatalf("expected HIGH severity for copilot + unsafe var, got: %v", found.Severity)

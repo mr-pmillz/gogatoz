@@ -35,6 +35,7 @@ func TestRemoteIncludeAllowedSuccess(t *testing.T) {
 	}
 	if merged == nil {
 		t.Fatalf("expected merged document, got nil")
+		return
 	}
 	if len(merged.Jobs) != 1 {
 		t.Fatalf("expected 1 job from remote include, got %d", len(merged.Jobs))
@@ -66,6 +67,7 @@ func TestRemoteIncludeDisallowedHost(t *testing.T) {
 	}
 	if merged == nil {
 		t.Fatalf("expected merged document (original), got nil")
+		return
 	}
 	if len(merged.Jobs) != 0 {
 		t.Fatalf("expected 0 jobs since include not fetched, got %d", len(merged.Jobs))

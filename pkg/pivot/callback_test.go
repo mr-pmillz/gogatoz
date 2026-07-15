@@ -23,6 +23,7 @@ func TestGenerateKeyPair(t *testing.T) {
 	}
 	if privKey == nil {
 		t.Fatal("private key is nil")
+		return
 	}
 	if pubPEM == "" {
 		t.Fatal("public PEM is empty")
@@ -32,6 +33,7 @@ func TestGenerateKeyPair(t *testing.T) {
 	block, _ := pem.Decode([]byte(pubPEM))
 	if block == nil {
 		t.Fatal("failed to decode PEM")
+		return
 	}
 	if block.Type != "PUBLIC KEY" {
 		t.Errorf("PEM type = %q, want PUBLIC KEY", block.Type)
@@ -91,6 +93,7 @@ func TestCallbackServerUnencrypted(t *testing.T) {
 	payload := <-done
 	if payload == nil {
 		t.Fatal("no payload received")
+		return
 	}
 	if payload.PipelineID != "42" {
 		t.Errorf("PipelineID = %q, want 42", payload.PipelineID)
@@ -200,6 +203,7 @@ func TestCallbackServerEncrypted(t *testing.T) {
 	payload := <-done
 	if payload == nil {
 		t.Fatal("no payload received")
+		return
 	}
 	if payload.PipelineID != "99" {
 		t.Errorf("PipelineID = %q, want 99", payload.PipelineID)

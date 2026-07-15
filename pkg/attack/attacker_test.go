@@ -15,6 +15,7 @@ func TestNewAttacker(t *testing.T) {
 	att := NewAttacker(nil, "https://gitlab.com", "Test User", "test@example.com", 0)
 	if att == nil {
 		t.Fatal("NewAttacker returned nil")
+		return
 	}
 	if att.GitLabURL != "https://gitlab.com" {
 		t.Errorf("expected GitLabURL=https://gitlab.com, got %s", att.GitLabURL)
@@ -490,6 +491,7 @@ func TestSetupUser_FillsAuthor(t *testing.T) {
 	}
 	if u == nil {
 		t.Fatal("expected non-nil user")
+		return
 	}
 	if u.Username != "testbot" {
 		t.Fatalf("expected username=testbot, got %s", u.Username)
@@ -528,6 +530,7 @@ func TestCreateSnippet_Public(t *testing.T) {
 	}
 	if snip == nil {
 		t.Fatal("expected non-nil snippet")
+		return
 	}
 	if snip.ID != 99 {
 		t.Fatalf("expected snippet ID=99, got %d", snip.ID)
@@ -587,6 +590,7 @@ func TestCreateMergeRequest_Success(t *testing.T) {
 	}
 	if mr == nil {
 		t.Fatal("expected non-nil merge request")
+		return
 	}
 	if mr.IID != 42 {
 		t.Fatalf("expected IID=42, got %d", mr.IID)

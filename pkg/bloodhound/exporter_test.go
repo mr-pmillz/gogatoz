@@ -40,11 +40,11 @@ func TestExportToWriter(t *testing.T) {
 		fileNames[f.Name] = true
 	}
 
-	if !fileNames["seed_data.json"] {
-		t.Error("ZIP missing seed_data.json")
-	}
 	if !fileNames["cicd-data.json"] {
 		t.Error("ZIP missing cicd-data.json")
+	}
+	if fileNames["seed_data.json"] {
+		t.Error("seed_data.json should not be present when real edges exist")
 	}
 
 	// Validate cicd-data.json is valid OpenGraph JSON
