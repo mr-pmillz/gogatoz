@@ -3,7 +3,7 @@ package mcpserver
 import (
 	"context"
 	"fmt"
-	"os"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -168,6 +168,6 @@ func (s *Server) persistPivot(orch *pivot.Orchestrator, stats *pivot.PivotStats)
 		Status:             "completed",
 	}
 	if err := s.store.SavePivotSession(pivotSess); err != nil {
-		fmt.Fprintf(os.Stderr, "[mcp] persist pivot session: %v\n", err)
+		slog.Error("persist pivot session failed", "error", err)
 	}
 }

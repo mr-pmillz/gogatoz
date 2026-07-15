@@ -31,8 +31,10 @@ var (
 	pivotDryRun       bool
 	pivotCleanup      bool
 	pivotBranch       string
-	pivotFollowIncl   bool
-	pivotFetchRunners bool
+	pivotFollowIncl    bool
+	pivotFetchRunners  bool
+	pivotAttackDelay   string
+	pivotReceiveTimeout string
 )
 
 var pivotCmd = &cobra.Command{
@@ -87,6 +89,21 @@ func runPivot(cmd *cobra.Command, _ []string) error {
 	}
 	clOpts = appendSOCKS5Option(clOpts)
 
+	var attackDelay time.Duration
+	if pivotAttackDelay != "" {
+		attackDelay, err = time.ParseDuration(pivotAttackDelay)
+		if err != nil {
+			return fmt.Errorf("parse --attack-delay: %w", err)
+		}
+	}
+	var receiveTimeout time.Duration
+	if pivotReceiveTimeout != "" {
+		receiveTimeout, err = time.ParseDuration(pivotReceiveTimeout)
+		if err != nil {
+			return fmt.Errorf("parse --receive-timeout: %w", err)
+		}
+	}
+
 	opts := pivot.Options{
 		ClientOptions:     clOpts,
 		InitialTargets:    pivotTargets,
@@ -104,6 +121,8 @@ func runPivot(cmd *cobra.Command, _ []string) error {
 		FetchRunners:      pivotFetchRunners,
 		DryRun:            pivotDryRun,
 		Cleanup:           pivotCleanup,
+		AttackDelay:       attackDelay,
+		ReceiveTimeout:    receiveTimeout,
 	}
 
 	// Progress callback for PTerm output
@@ -308,6 +327,8 @@ func init() {
 	pivotCmd.Flags().StringVar(&pivotBranch, "branch", "gogatoz-pivot", "Branch name base for attack")
 	pivotCmd.Flags().BoolVar(&pivotFollowIncl, "follow-includes", false, "Resolve CI include directives transitively")
 	pivotCmd.Flags().BoolVar(&pivotFetchRunners, "fetch-runners", false, "Fetch runner info for severity correlation")
+	pivotCmd.Flags().StringVar(&pivotAttackDelay, "attack-delay", "", "Delay between attack launches (e.g. 2s, 500ms) to avoid abuse detection")
+	pivotCmd.Flags().StringVar(&pivotReceiveTimeout, "receive-timeout", "", "Timeout for waiting for exfil callbacks per depth (default 5m)")
 
 	rootCmd.AddCommand(pivotCmd)
 }

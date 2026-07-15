@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"strings"
 	"time"
@@ -52,7 +53,7 @@ Examples:
 			if dbPath != "" {
 				st, err := store.Open(dbPath)
 				if err != nil {
-					fmt.Fprintf(os.Stderr, "[db] warning: %v\n", err)
+					slog.Warn("database open failed", "error", err)
 				} else {
 					cliStore = st
 				}
@@ -171,7 +172,7 @@ var bhQueriesCmd = &cobra.Command{
 		for _, q := range queries {
 			fmt.Fprintf(cmd.OutOrStdout(), "Installing query: %s\n", q.Name)
 			if err := client.CreateSavedQuery(ctx, q); err != nil {
-				fmt.Fprintf(os.Stderr, "  warning: %v\n", err)
+				slog.Warn("query install failed", "error", err)
 			}
 		}
 
@@ -347,7 +348,7 @@ func persistGraphToDB(b *bloodhound.Builder, sessionID uint) {
 		}
 	}
 	if err := cliStore.SaveGraphNodes(sessionID, gn); err != nil {
-		fmt.Fprintf(os.Stderr, "[db] warning: save graph nodes: %v\n", err)
+		slog.Warn("save graph nodes failed", "error", err)
 	}
 
 	edges := b.Edges()
@@ -362,7 +363,7 @@ func persistGraphToDB(b *bloodhound.Builder, sessionID uint) {
 		}
 	}
 	if err := cliStore.SaveGraphEdges(sessionID, ge); err != nil {
-		fmt.Fprintf(os.Stderr, "[db] warning: save graph edges: %v\n", err)
+		slog.Warn("save graph edges failed", "error", err)
 	}
 }
 

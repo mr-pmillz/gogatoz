@@ -3,6 +3,7 @@ package cmd
 import (
 	"crypto/x509"
 	"fmt"
+	"log/slog"
 	"os"
 	"strings"
 	"time"
@@ -97,10 +98,10 @@ Requires GITLAB_TOKEN environment variable. Optionally set GITLAB_URL
 		}
 
 		if cliStore != nil && dbPath != "" {
-			fmt.Fprintf(os.Stderr, "[mcp] result storage: %s\n", dbPath)
+			slog.Info("result storage enabled", "path", dbPath)
 		}
 
-		fmt.Fprintf(os.Stderr, "[mcp] starting MCP server (gitlab=%s)\n", base)
+		slog.Info("starting MCP server", "gitlab", base)
 
 		srv := mcpserver.New(client, cliStore, base)
 		return srv.Run(cmd.Context())

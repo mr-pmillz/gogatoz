@@ -3,7 +3,7 @@ package mcpserver
 import (
 	"context"
 	"fmt"
-	"os"
+	"log/slog"
 	"runtime"
 	"strings"
 	"sync"
@@ -126,7 +126,7 @@ func (s *Server) persistSearch(out searchOutput) {
 		}
 	}
 	if err := s.store.SaveSearchResults(session.ID, srs); err != nil {
-		fmt.Fprintf(os.Stderr, "[mcp] persist search results: %v\n", err)
+		slog.Error("persist search results failed", "error", err)
 	}
 }
 

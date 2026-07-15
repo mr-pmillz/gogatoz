@@ -462,6 +462,37 @@ func TestUpsertFile_FallbackToCreate(t *testing.T) {
 	}
 }
 
+func TestUpsertFile_DualFailure_JoinsErrors(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/v4/projects/1/repository/files/fail.yml", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPut {
+			w.WriteHeader(http.StatusNotFound)
+			json.NewEncoder(w).Encode(map[string]string{"message": "404 File Not Found"})
+			return
+		}
+		if r.Method == http.MethodPost {
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(map[string]string{"message": "500 Internal Server Error"})
+			return
+		}
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	})
+	att, ts := newMockAttacker(t, mux)
+	defer ts.Close()
+
+	err := att.UpsertFile(context.Background(), "1", "main", "fail.yml", "content", "msg")
+	if err == nil {
+		t.Fatal("expected error when both update and create fail")
+	}
+	errStr := err.Error()
+	if !strings.Contains(errStr, "upsert fail.yml") {
+		t.Errorf("expected 'upsert fail.yml' in error, got: %s", errStr)
+	}
+	if !strings.Contains(errStr, "404") || !strings.Contains(errStr, "500") {
+		t.Errorf("expected both status codes in joined error, got: %s", errStr)
+	}
+}
+
 // --- SetupUser --------------------------------------------------------------
 
 func TestSetupUser_FillsAuthor(t *testing.T) {

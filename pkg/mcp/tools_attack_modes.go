@@ -3,6 +3,7 @@ package mcpserver
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"strconv"
 	"strings"
@@ -175,7 +176,7 @@ func (s *Server) handleAIInject(ctx context.Context, att *attack.Attacker, input
 		out.Error = fmt.Sprintf("upsert file: %s", err)
 		return out
 	}
-	fmt.Fprintf(os.Stderr, "[attack] committed %s to branch %s\n", configFile, finalBranch)
+	slog.Info("committed file", "file", configFile, "branch", finalBranch)
 
 	if input.CreateMR {
 		title := strings.TrimSpace(input.MRTitle)
@@ -191,7 +192,7 @@ func (s *Server) handleAIInject(ctx context.Context, att *attack.Attacker, input
 		}
 		out.MergeRequestURL = mr.WebURL
 		out.MergeRequestIID = mr.IID
-		fmt.Fprintf(os.Stderr, "[attack] merge request: %s\n", mr.WebURL)
+		slog.Info("merge request created", "url", mr.WebURL)
 	}
 
 	return out
@@ -302,7 +303,7 @@ func (s *Server) handleInjectScript(ctx context.Context, att *attack.Attacker, i
 			return out
 		}
 		scriptPath = refs[0].Path
-		fmt.Fprintf(os.Stderr, "[attack] auto-detected script: %s (from job %q)\n", scriptPath, refs[0].JobName)
+		slog.Info("auto-detected script", "path", scriptPath, "job", refs[0].JobName)
 	}
 	out.ScriptPath = scriptPath
 
@@ -347,7 +348,7 @@ func (s *Server) handleInjectScript(ctx context.Context, att *attack.Attacker, i
 		out.Error = fmt.Sprintf("commit injected script: %s", err)
 		return out
 	}
-	fmt.Fprintf(os.Stderr, "[attack] injected payload into %s on branch %s\n", scriptPath, finalBranch)
+	slog.Info("injected payload", "path", scriptPath, "branch", finalBranch)
 	return out
 }
 
@@ -381,7 +382,7 @@ func (s *Server) handleHarvest(ctx context.Context, att *attack.Attacker, input 
 	out.PipelineURL = pipelineURL
 	out.Branch = branch
 	out.Tags = tags
-	fmt.Fprintf(os.Stderr, "[harvest] git-hook payload committed: %s\n", pipelineURL)
+	slog.Info("git-hook payload committed", "pipeline_url", pipelineURL)
 
 	harvestTimeout := 30 * time.Minute
 	if t := strings.TrimSpace(input.HarvestTimeout); t != "" {
@@ -399,7 +400,7 @@ func (s *Server) handleHarvest(ctx context.Context, att *attack.Attacker, input 
 		GitLabURL:  s.gitlabURL,
 		Timeout:    harvestTimeout,
 		Progress: func(e pivot.HarvestEvent) {
-			fmt.Fprintf(os.Stderr, "[harvest] %s: %s\n", e.Type, e.Message)
+			slog.Info("harvest event", "type", e.Type, "message", e.Message)
 		},
 	})
 
@@ -492,7 +493,7 @@ func (s *Server) handleCleanupTraces(ctx context.Context, att *attack.Attacker, 
 			out.Error = fmt.Sprintf("delete pipeline: %s", err)
 			return out
 		}
-		fmt.Fprintf(os.Stderr, "[cleanup] deleted pipeline %d\n", pid)
+		slog.Info("deleted pipeline", "pipeline_id", pid)
 		return out
 	}
 
@@ -509,7 +510,7 @@ func (s *Server) handleCleanupTraces(ctx context.Context, att *attack.Attacker, 
 			return out
 		}
 		out.JobsErased = erased
-		fmt.Fprintf(os.Stderr, "[cleanup] erased %d job traces\n", erased)
+		slog.Info("erased job traces", "count", erased)
 		return out
 	}
 

@@ -188,14 +188,17 @@ func (a *Attacker) UpsertFile(ctx context.Context, projectID any, branch, path, 
 	// Fall back to create: GitLab returns 404 (file path not found) or
 	// 400 "A file with this name doesn't exist" depending on version.
 	if resp != nil && (resp.StatusCode == 404 || resp.StatusCode == 400) {
-		_, _, err = a.Client.GL.RepositoryFiles.CreateFile(projectID, path, &gitlab.CreateFileOptions{
+		_, _, createErr := a.Client.GL.RepositoryFiles.CreateFile(projectID, path, &gitlab.CreateFileOptions{
 			Branch:        branchPtr,
 			Content:       contentPtr,
 			CommitMessage: new(commitMsg),
 			AuthorName:    new(a.AuthorName),
 			AuthorEmail:   new(a.AuthorEmail),
 		}, gitlab.WithContext(ctx))
-		return err
+		if createErr != nil {
+			return fmt.Errorf("upsert %s: %w", path, errors.Join(err, createErr))
+		}
+		return nil
 	}
 	return err
 }
@@ -316,7 +319,7 @@ func (a *Attacker) CommitCIPipeline(ctx context.Context, projectID any, branch, 
 		return "", err
 	}
 	if message == "" {
-		message = "Add malicious CI pipeline via GoGatoZ"
+		message = DefaultCommitMessage
 	}
 	if err := a.UpsertFile(ctx, projectID, branch, ".gitlab-ci.yml", yamlContent, message); err != nil {
 		return "", err

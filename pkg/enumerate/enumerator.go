@@ -17,7 +17,15 @@ import (
 	gitlab "gitlab.com/gitlab-org/api/client-go"
 )
 
-const defaultRunnerScope = "project"
+const (
+	defaultRunnerScope = "project"
+
+	// DefaultConcurrency is the default number of concurrent workers for enumeration.
+	DefaultConcurrency = 8
+
+	// DefaultIncludeDepth is the default recursion depth for transitive includes.
+	DefaultIncludeDepth = 2
+)
 
 // Result captures the outcome for a single project.
 type Result struct {
@@ -120,10 +128,10 @@ func dedup(idents []string) []string {
 // The emit function is called from worker goroutines and is serialized internally.
 func EnumerateProjectsStream(ctx context.Context, cl *gitlabx.Client, idents []string, opts Options, emit func(Result)) error {
 	if opts.Concurrency <= 0 {
-		opts.Concurrency = 8
+		opts.Concurrency = DefaultConcurrency
 	}
 	if opts.IncludeDepth <= 0 {
-		opts.IncludeDepth = 2
+		opts.IncludeDepth = DefaultIncludeDepth
 	}
 	uniq := dedup(idents)
 

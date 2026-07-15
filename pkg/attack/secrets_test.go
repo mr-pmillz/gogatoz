@@ -102,7 +102,7 @@ func TestGenerateExfilCI(t *testing.T) {
 			branchName:   "exfil-branch",
 			pubkey:       "",
 			runnerTags:   nil,
-			wantContains: []string{"stages:", "exfiltrate", "printenv", "secrets.json", "push", "python3", "python -c", "printf '{'"},
+			wantContains: []string{"stages:", "exfiltrate", "printenv", "secrets.json", "push", "python3", "python -c", "perl", "JSON::PP", "printf '{'"},
 		},
 		{
 			name:         "with tags",

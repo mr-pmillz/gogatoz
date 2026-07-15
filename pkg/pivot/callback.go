@@ -100,13 +100,36 @@ func (cb *CallbackServer) Receive(ctx context.Context, timeout time.Duration) (*
 	}
 }
 
+// ReceiveAll drains the incoming channel until the timeout expires or the context
+// is cancelled, returning all payloads received. It returns a nil error even when
+// the timeout fires (that is the normal exit condition). The expected parameter
+// hints how many payloads to expect; when all expected payloads arrive, ReceiveAll
+// returns early without waiting for the full timeout.
+func (cb *CallbackServer) ReceiveAll(ctx context.Context, timeout time.Duration, expected int) ([]*ExfilPayload, error) {
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	var payloads []*ExfilPayload
+	for {
+		if expected > 0 && len(payloads) >= expected {
+			return payloads, nil
+		}
+		select {
+		case p := <-cb.incoming:
+			payloads = append(payloads, p)
+		case <-ctx.Done():
+			return payloads, nil
+		}
+	}
+}
+
 func (cb *CallbackServer) handleCallback(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
-	body, err := io.ReadAll(io.LimitReader(r.Body, 10<<20)) // 10MB max
+	body, err := io.ReadAll(io.LimitReader(r.Body, maxCallbackBody))
 	if err != nil || len(body) == 0 {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return

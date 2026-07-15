@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"runtime"
 	"strings"
@@ -129,10 +130,7 @@ var searchCmd = &cobra.Command{
 		// small ping to validate
 		if verbose {
 			if u, _, err := client.Ping(ctx); err == nil {
-				_, err = fmt.Fprintf(os.Stderr, "Authenticated as %s\n", u.Username)
-				if err != nil {
-					return err
-				}
+				slog.Info("authenticated", "username", u.Username)
 			}
 		}
 

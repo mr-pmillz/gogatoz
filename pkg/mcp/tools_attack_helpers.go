@@ -3,7 +3,7 @@ package mcpserver
 import (
 	"context"
 	"fmt"
-	"os"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -44,14 +44,14 @@ func (s *Server) waitAndLogPipeline(ctx context.Context, input attackInput, out 
 
 	pipelineID, err := attack.WaitForPipelineForRef(ctx, s.client, input.Target, branch, 0, 2*time.Second, timeout)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "[attack] pipeline wait: %s\n", err)
+		slog.Warn("pipeline wait failed", "error", err)
 		return
 	}
 	if pipelineID > 0 {
 		out.PipelineID = pipelineID
 		url := fmt.Sprintf("%s/%s/-/pipelines/%d", strings.TrimSuffix(s.gitlabURL, "/"), input.Target, pipelineID)
 		out.PipelineURL = url
-		fmt.Fprintf(os.Stderr, "[attack] pipeline: %s\n", url)
+		slog.Info("pipeline created", "url", url)
 	}
 }
 
@@ -133,7 +133,7 @@ func deconflictBranch(ctx context.Context, att *attack.Attacker, projectID any, 
 		if !exists {
 			return name, nil
 		}
-		for i := 1; i <= 99; i++ {
+		for i := 1; i <= attack.MaxDeconflictSuffix; i++ {
 			cand := fmt.Sprintf("%s-%d", name, i)
 			e, err := att.BranchExists(ctx, projectID, cand)
 			if err != nil {
@@ -164,7 +164,7 @@ func (s *Server) persistAttack(out attackOutput) {
 		AttackSuccess: boolToInt(out.Status == "success"),
 	}
 	if err := s.store.CreateSession(session); err != nil {
-		fmt.Fprintf(os.Stderr, "[mcp] persist attack session: %v\n", err)
+		slog.Error("persist attack session failed", "error", err)
 		return
 	}
 	ar := store.AttackResult{
@@ -182,7 +182,7 @@ func (s *Server) persistAttack(out attackOutput) {
 		DurationMS:        out.DurationMS,
 	}
 	if err := s.store.SaveAttackResults(session.ID, []store.AttackResult{ar}); err != nil {
-		fmt.Fprintf(os.Stderr, "[mcp] persist attack results: %v\n", err)
+		slog.Error("persist attack results failed", "error", err)
 	}
 }
 

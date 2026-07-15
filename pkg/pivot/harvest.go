@@ -141,7 +141,7 @@ func (h *Harvester) handleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	body, err := io.ReadAll(io.LimitReader(r.Body, 10<<20))
+	body, err := io.ReadAll(io.LimitReader(r.Body, maxCallbackBody))
 	if err != nil || len(body) == 0 {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return

@@ -1,8 +1,7 @@
 package cmd
 
 import (
-	"fmt"
-	"os"
+	"log/slog"
 	"strings"
 
 	"github.com/mr-pmillz/gogatoz/pkg/api"
@@ -34,7 +33,7 @@ var apiCmd = &cobra.Command{
 			cfg.BaseURL = "https://gitlab.com"
 		}
 		srv := api.NewServer(cfg)
-		fmt.Fprintf(os.Stderr, "[api] starting server on %s (base=%s)\n", cfg.ListenAddr, cfg.BaseURL)
+		slog.Info("starting API server", "listen", cfg.ListenAddr, "base", cfg.BaseURL)
 		return srv.Run()
 	},
 }

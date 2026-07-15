@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"strings"
 	"time"
@@ -74,7 +75,7 @@ Results are persisted to the local SQLite database for later querying.`,
 
 			if verbose {
 				if u, _, err := client.Ping(ctx); err == nil {
-					fmt.Fprintf(os.Stderr, "Authenticated as %s\n", u.Username)
+					slog.Info("authenticated", "username", u.Username)
 				}
 			}
 		}
@@ -95,9 +96,9 @@ Results are persisted to the local SQLite database for later querying.`,
 			ScanDir:      scanDir,
 			Progress: func(r secretscan.ScanResult) {
 				if r.Error != "" {
-					fmt.Fprintf(os.Stderr, "[secretscan] %s: error: %s\n", r.PathWithNamespace, r.Error)
+					slog.Error("secret scan error", "project", r.PathWithNamespace, "error", r.Error)
 				} else {
-					fmt.Fprintf(os.Stderr, "[secretscan] %s: %d findings (%dms)\n", r.PathWithNamespace, r.FindingsCount, r.DurationMS)
+					slog.Info("secret scan complete", "project", r.PathWithNamespace, "findings", r.FindingsCount, "duration_ms", r.DurationMS)
 				}
 			},
 		}
