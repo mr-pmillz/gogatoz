@@ -211,7 +211,7 @@ func (p *Persistence) RunAutoMerge(ctx context.Context, projectID any, branch, f
 
 	// Attempt merge — retry with backoff to allow pipeline to finish
 	merged := false
-	for attempt := 0; attempt < 10; attempt++ {
+	for attempt := range 10 {
 		if err := p.MergeMergeRequest(ctx, projectID, mr.IID, true); err != nil {
 			result.MergeErr = err.Error()
 			if attempt < 9 {

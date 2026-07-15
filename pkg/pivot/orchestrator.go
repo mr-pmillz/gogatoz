@@ -293,7 +293,7 @@ func (o *Orchestrator) discoverMemberProjects(ctx context.Context, cl *gitlabx.C
 	for page > 0 {
 		projects, resp, err := cl.GL.Projects.ListProjects(
 			&gitlab.ListProjectsOptions{
-				Membership: gitlab.Ptr(true),
+				Membership: new(true),
 				ListOptions: gitlab.ListOptions{
 					Page:    page,
 					PerPage: 100,
