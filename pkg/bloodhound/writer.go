@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"sync"
 )
 
@@ -194,12 +195,8 @@ func (sw *StreamingWriter) TypeStats() (nodesByKind, edgesByKind map[string]int)
 	sw.mu.Lock()
 	defer sw.mu.Unlock()
 	n := make(map[string]int, len(sw.nodesByKind))
-	for k, v := range sw.nodesByKind {
-		n[k] = v
-	}
+	maps.Copy(n, sw.nodesByKind)
 	e := make(map[string]int, len(sw.edgesByKind))
-	for k, v := range sw.edgesByKind {
-		e[k] = v
-	}
+	maps.Copy(e, sw.edgesByKind)
 	return n, e
 }

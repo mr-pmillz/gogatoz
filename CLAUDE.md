@@ -93,6 +93,16 @@ Astro Starlight in `docs/`. Content in `docs/src/content/docs/`, sidebar manuall
 - **Rate limiting**: Token bucket (`golang.org/x/time/rate`) with adaptive backoff and jitter.
 - **Terminal output**: PTerm (`github.com/pterm/pterm`) for styled tables, colored severity, and prefix printers (success/error/info) in text output mode. PTerm auto-strips ANSI when stdout is not a TTY. JSON/JSONL output paths are never styled. Shared helpers in `cmd/ui.go`; enumerate report rendering in `pkg/enumerate/report/pterm.go`.
 - **PTerm writing pattern**: Use `Srender()` (tables/bullet lists) or `Sprint()` (section/header/prefix printers) to get a string, then `fmt.Fprintln(w, s)` to write to Cobra's writer. `Section`/`Header` printers lack `Srender()` — use `Sprint()` only. Never use `Render()` directly (writes to stdout, bypasses Cobra's writer).
+- **Worm listener mode**: `--supply-chain-worm --webhook <url>` starts a built-in HTTP listener (port extracted from URL), auto-generates a curl callback payload, propagates the worm, waits for callbacks with 3-minute timeout, pretty-prints secrets per-project, and persists to DB. The listener reuses `cmd/ror_listener.go` with `Project` field support for `{"project":"...","data":"..."}` JSON format.
+
+### Payload Generator Gotchas
+
+- **YAML block scalar indentation**: Script content inserted into `- |\n` must be indented (use `indentBlock(script, 6)`). GitLab silently rejects unindented content (0 jobs, no `yaml_errors`). Affected: `container_escape.go`, `c2_channels.go`, `variable_injection.go`.
+- **No `set -e` in payload scripts**: Credential sweeps and file-existence checks return non-zero on missing files, killing the entire script. Use `|| true` on fallible commands instead.
+- **Phantom Gyp output routing**: gyp `<!(...)` captures stdout. Payload output must go to stderr via `process.stderr.write(execSync(cmd))` in index.js. The binding.gyp should NOT redirect to `/dev/null`.
+- **Container escape env capture**: Always include `printenv | sort > "$_edir/env_dump.txt"` so CI variables (flags) appear in artifacts. Add `|| true` on the `_ESCAPE` function call.
+- **Worm CI injection**: Don't prepend a separate `stages:` key — use the existing CI's first stage name for the worm job to avoid duplicate-key YAML rejection.
+- **Supply chain worm requires a real GitLab group**: `root` is a user namespace; `ListGroupProjects` fails on user namespaces. The CTF lab uses `worm-labs` group with 5 projects.
 
 ## GitLab SDK Conventions
 
@@ -220,12 +230,12 @@ Branch naming: `feature/description` or `fix/description` for daily work, `relea
 - CTF runs on local Docker GitLab (`http://gitlab.local:8929`), separate from `gitlab.local` E2E instance
 - Fixed PAT values set via `token.set_token()` in Rails runner: `CTF_CICD_BOT_PAT`, `CTF_DEPLOY_SVC_PAT`, `CTF_ADMIN_BACKUP_PAT`, `CTF_OPSEC_BOT_PAT`, `CTF_PIVOT_SVC_PAT`, `CTF_PIVOT_OPS_PAT`
 - 7 public decoy repos (non-vulnerable) + 2 CTF target repos + 3 supply chain CTF repos + 3 pivot CTF repos + 1 proxy recon repo + 5 LOTP repos + 6 advanced attack repos + ci-templates
-- 26 flags total (9950 pts): Main Chain (7 flags, 250 pts each = 1750 pts) + Supply Chain Track (4 flags, 500 pts each = 2000 pts) + Pivot Track (3 flags, 500 pts each = 1500 pts) + Proxy Recon Track (1 flag, 500 pts) + LOTP Track (5 flags, 300-500 pts = 1800 pts) + Advanced Attack Track (6 flags, 300-500 pts = 2400 pts)
+- 28 flags total (10950 pts): Main Chain (7 flags, 250 pts each = 1750 pts) + Supply Chain Track (4 flags, 500 pts each = 2000 pts) + Pivot Track (3 flags, 500 pts each = 1500 pts) + Proxy Recon Track (1 flag, 500 pts) + LOTP Track (5 flags, 300-500 pts = 1800 pts) + Advanced Attack Track (8 flags, 300-500 pts = 3400 pts)
 - Supply Chain Track: ctf-script-hopping (Flag 8, script injection) → ctf-cache-poison (Flag 9, cache poisoning) → ctf-auto-merge (Flag 10, self-approve + merge) + ctf-travy (Flag 15, Trivy-style tag poisoning). Entry points: cicd-bot PAT from Flag 1 (Flags 8-10), root PAT from Flag 5 (Flag 15).
 - Pivot Track: ctf-pivot-gateway (Flag 11, depth 0) → ctf-pivot-middleware (Flag 12, depth 1) → ctf-pivot-crown (Flag 13, depth 2). BFS lateral movement via `gogatoz pivot` with HTTP callback exfil. Entry point: cicd-bot PAT from Flag 1.
 - Proxy Recon Track: Flag 14 (500 pts). Discover internal GitLab via infra-automation CI vars → find SOCKS5 proxy creds → enumerate gitlab-internal through authenticated proxy → extract flag from root/classified-infra. Prerequisite: root PAT from Flag 5.
 - LOTP Track: vuln-gyp-inject (Flag 16, 500 pts), vuln-lotp-npm (Flag 17, 300 pts), vuln-oidc-mr-risk (Flag 18, 400 pts), vuln-trigger-chain (Flag 19, 300 pts), vuln-cache-key-injection (Flag 20, 300 pts). Living off the Pipeline attacks. Entry point: cicd-bot PAT from Flag 1.
-- Advanced Attack Track: ctf-ror-exposure (Flag 21, 300 pts), vuln-memory-dump (Flag 22, 300 pts), vuln-worm (Flag 23, 500 pts), vuln-escape (Flag 24, 500 pts), vuln-var-inject (Flag 25, 400 pts), vuln-c2 (Flag 26, 400 pts). Entry point: cicd-bot PAT from Flag 1.
+- Advanced Attack Track: ctf-ror-exposure (Flag 21, 300 pts), vuln-memory-dump (Flag 22, 300 pts), vuln-worm (Flag 23, 500 pts), vuln-escape (Flag 24, 500 pts), vuln-var-inject (Flag 25, 400 pts), vuln-c2 (Flag 26, 400 pts), vuln-dep-crown/middle/leaf (Flag 27, 500 pts, Dependency Pwnage Matrix), vuln-nested-runner + ctf-rogue-c2 (Flag 28, 500 pts, Nested Runner C2). Entry point: cicd-bot PAT from Flag 1.
 - 6 CTF users (main GitLab): cicd-bot (Developer), deploy-svc (Maintainer), admin-backup (Admin), opsec-bot (Developer), pivot-svc (Developer), pivot-ops (Developer)
 - Internal GitLab user: internal-svc (PAT: `<see-labs/setup-lab.sh>`, Developer on root/classified-infra)
 - CTF PATs must be 20+ chars of mixed-case alphanumeric after `glpat-` prefix for trufflehog entropy detection (e.g., `<example-20-char-base62>`). Human-readable tokens like `glpat-cicd-bot-readonly-token` fail trufflehog's detector.

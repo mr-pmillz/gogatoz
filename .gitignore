@@ -56,3 +56,4 @@ TASKS.md
 NEW_FEATURES.md
 .gortex/
 .playwright-mcp/
+.claude/reviews/

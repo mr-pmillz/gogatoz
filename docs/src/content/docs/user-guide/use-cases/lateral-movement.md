@@ -23,6 +23,10 @@ Token A → enumerate → find VARIABLE_INJECTION in project X
 
 Each depth level can discover tokens with different scopes, groups, and access levels — potentially reaching systems the original token could never access.
 
+![Pivot gateway pipeline — exfiltration job injected at BFS depth 0](/images/ctf/09-pivot-gateway-pipeline.png)
+
+![Pivot crown jewels pipeline — the final hop at depth 2, reaching the most sensitive secrets](/images/ctf/10-pivot-crown-pipeline.png)
+
 ## Step 1: Reconnaissance
 
 Start with a dry run to understand the attack surface:
