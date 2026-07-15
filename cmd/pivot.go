@@ -18,22 +18,22 @@ import (
 
 // Flags for pivot command
 var (
-	pivotTargets      []string
-	pivotGroups       []string
-	pivotExternalURL  string
-	pivotListenAddr   string
-	pivotRSAKeyPath   string
-	pivotMaxDepth     int
-	pivotMaxTargets   int
-	pivotMaxCreds     int
-	pivotTimeout      string
-	pivotConcurrency  int
-	pivotDryRun       bool
-	pivotCleanup      bool
-	pivotBranch       string
-	pivotFollowIncl    bool
-	pivotFetchRunners  bool
-	pivotAttackDelay   string
+	pivotTargets        []string
+	pivotGroups         []string
+	pivotExternalURL    string
+	pivotListenAddr     string
+	pivotRSAKeyPath     string
+	pivotMaxDepth       int
+	pivotMaxTargets     int
+	pivotMaxCreds       int
+	pivotTimeout        string
+	pivotConcurrency    int
+	pivotDryRun         bool
+	pivotCleanup        bool
+	pivotBranch         string
+	pivotFollowIncl     bool
+	pivotFetchRunners   bool
+	pivotAttackDelay    string
 	pivotReceiveTimeout string
 )
 

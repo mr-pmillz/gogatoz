@@ -2163,4 +2163,3 @@ var attackCmd = &cobra.Command{
 		return nil
 	},
 }
-
