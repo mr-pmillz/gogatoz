@@ -45,7 +45,7 @@ func detectSecretExfiltration(doc *pipeline.Document) []Finding {
 }
 
 type exfilSignals struct {
-	envDump, httpExfil, secretInHTTP bool
+	envDump, httpExfil, secretInHTTP                  bool
 	envDumpEvidence, httpEvidence, secretHTTPEvidence string
 }
 

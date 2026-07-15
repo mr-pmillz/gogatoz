@@ -254,9 +254,9 @@ var (
 	atkExfilDisguise     string // disguise job name (default: code-format)
 	atkExfilDumpGroupVar bool   // also dump group-level variables
 	// Commit prefix mode (release trigger abuse via commit message)
-	atkCommitPrefix    bool
-	atkPrefixValue     string // prefix (default: feat:)
-	atkPrefixMessage   string // commit message body
+	atkCommitPrefix  bool
+	atkPrefixValue   string // prefix (default: feat:)
+	atkPrefixMessage string // commit message body
 	// Release tamper pipeline mode (in-flight release artifact tampering)
 	atkReleaseTamperPipeline bool
 	atkRTPTag                string // release tag to target
