@@ -403,7 +403,7 @@ func (o *Orchestrator) emit(event PivotEvent) {
 
 func splitTags(tags string) []string {
 	var out []string
-	for _, t := range strings.Split(tags, ",") {
+	for t := range strings.SplitSeq(tags, ",") {
 		t = strings.TrimSpace(t)
 		if t != "" {
 			out = append(out, t)
