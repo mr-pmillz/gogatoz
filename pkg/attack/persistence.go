@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	gitlab "gitlab.com/gitlab-org/api/client-go"
 	"golang.org/x/crypto/ssh"
@@ -208,12 +209,26 @@ func (p *Persistence) RunAutoMerge(ctx context.Context, projectID any, branch, f
 		result.Approved = true
 	}
 
-	// Attempt merge
-	if err := p.MergeMergeRequest(ctx, projectID, mr.IID, true); err != nil {
-		result.MergeErr = err.Error()
-	} else {
-		result.Merged = true
+	// Attempt merge — retry with backoff to allow pipeline to finish
+	merged := false
+	for attempt := 0; attempt < 10; attempt++ {
+		if err := p.MergeMergeRequest(ctx, projectID, mr.IID, true); err != nil {
+			result.MergeErr = err.Error()
+			if attempt < 9 {
+				select {
+				case <-ctx.Done():
+					break
+				case <-time.After(time.Duration(3+attempt*2) * time.Second):
+				}
+			}
+		} else {
+			result.Merged = true
+			result.MergeErr = ""
+			merged = true
+			break
+		}
 	}
+	_ = merged
 
 	return result, nil
 }

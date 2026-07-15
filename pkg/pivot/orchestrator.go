@@ -11,6 +11,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	gitlab "gitlab.com/gitlab-org/api/client-go"
+
 	"github.com/mr-pmillz/gogatoz/pkg/attack"
 	"github.com/mr-pmillz/gogatoz/pkg/enumerate"
 	"github.com/mr-pmillz/gogatoz/pkg/enumerate/report"
@@ -265,9 +267,11 @@ func (o *Orchestrator) setupRSAKey() (*rsa.PrivateKey, string, error) {
 func (o *Orchestrator) enumerateWithToken(ctx context.Context, cl *gitlabx.Client, depth int) ([]enumerate.Result, error) {
 	idents := o.opts.InitialTargets
 	if depth > 0 {
-		// For subsequent depths, we'd enumerate projects accessible to the new token.
-		// For now, re-scan the same targets (the new token may see different things).
-		idents = o.opts.InitialTargets
+		// Discover projects accessible to the harvested token via membership.
+		discovered, err := o.discoverMemberProjects(ctx, cl)
+		if err == nil && len(discovered) > 0 {
+			idents = discovered
+		}
 	}
 
 	results, err := enumerate.EnumerateProjects(ctx, cl, idents, enumerate.Options{
@@ -280,6 +284,34 @@ func (o *Orchestrator) enumerateWithToken(ctx context.Context, cl *gitlabx.Clien
 	})
 	o.stats.ProjectsEnumerated += len(results)
 	return results, err
+}
+
+// discoverMemberProjects lists projects the token has membership on.
+func (o *Orchestrator) discoverMemberProjects(ctx context.Context, cl *gitlabx.Client) ([]string, error) {
+	var idents []string
+	var page int64 = 1
+	for page > 0 {
+		projects, resp, err := cl.GL.Projects.ListProjects(
+			&gitlab.ListProjectsOptions{
+				Membership: gitlab.Ptr(true),
+				ListOptions: gitlab.ListOptions{
+					Page:    page,
+					PerPage: 100,
+				},
+			}, gitlab.WithContext(ctx))
+		if err != nil {
+			return idents, err
+		}
+		for _, p := range projects {
+			idents = append(idents, p.PathWithNamespace)
+		}
+		if resp != nil && resp.NextPage > 0 {
+			page = resp.NextPage
+		} else {
+			page = 0
+		}
+	}
+	return idents, nil
 }
 
 // filterExploitable extracts projects with exploitable findings from enumerate results.
