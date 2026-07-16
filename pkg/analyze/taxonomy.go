@@ -42,29 +42,29 @@ var (
 
 // Commonly referenced CWEs.
 var (
-	cwe78  = CWERef{ID: 78, Name: "Improper Neutralization of Special Elements used in an OS Command ('OS Command Injection')"}
-	cwe94  = CWERef{ID: 94, Name: "Improper Control of Generation of Code ('Code Injection')"}
-	cwe250 = CWERef{ID: 250, Name: "Execution with Unnecessary Privileges"}
-	cwe269 = CWERef{ID: 269, Name: "Improper Privilege Management"}
-	cwe284 = CWERef{ID: 284, Name: "Improper Access Control"}
-	cwe311 = CWERef{ID: 311, Name: "Missing Encryption of Sensitive Data"}
-	cwe312 = CWERef{ID: 312, Name: "Cleartext Storage of Sensitive Information"}
-	cwe319 = CWERef{ID: 319, Name: "Cleartext Transmission of Sensitive Information"}
-	cwe345 = CWERef{ID: 345, Name: "Insufficient Verification of Data Authenticity"}
-	cwe346 = CWERef{ID: 346, Name: "Origin Validation Error"}
-	cwe367 = CWERef{ID: 367, Name: "Time-of-check Time-of-use (TOCTOU) Race Condition"}
-	cwe427 = CWERef{ID: 427, Name: "Uncontrolled Search Path Element"}
-	cwe451 = CWERef{ID: 451, Name: "User Interface (UI) Misrepresentation of Critical Information"}
-	cwe494 = CWERef{ID: 494, Name: "Download of Code Without Integrity Check"}
-	cwe506 = CWERef{ID: 506, Name: "Embedded Malicious Code"}
-	cwe522 = CWERef{ID: 522, Name: "Insufficiently Protected Credentials"}
-	cwe532 = CWERef{ID: 532, Name: "Insertion of Sensitive Information into Log File"}
-	cwe538 = CWERef{ID: 538, Name: "Insertion of Sensitive Information into Externally-Accessible File or Directory"}
-	cwe693 = CWERef{ID: 693, Name: "Protection Mechanism Failure"}
-	cwe829 = CWERef{ID: 829, Name: "Inclusion of Functionality from Untrusted Control Sphere"}
-	cwe913 = CWERef{ID: 913, Name: "Improper Control of Dynamically-Managed Code Resources"}
-	cwe915 = CWERef{ID: 915, Name: "Improperly Controlled Modification of Dynamically-Determined Object Attributes"}
-	cwe940 = CWERef{ID: 940, Name: "Improper Verification of Source of a Communication Channel"}
+	cwe78   = CWERef{ID: 78, Name: "Improper Neutralization of Special Elements used in an OS Command ('OS Command Injection')"}
+	cwe94   = CWERef{ID: 94, Name: "Improper Control of Generation of Code ('Code Injection')"}
+	cwe250  = CWERef{ID: 250, Name: "Execution with Unnecessary Privileges"}
+	cwe269  = CWERef{ID: 269, Name: "Improper Privilege Management"}
+	cwe284  = CWERef{ID: 284, Name: "Improper Access Control"}
+	cwe311  = CWERef{ID: 311, Name: "Missing Encryption of Sensitive Data"}
+	cwe312  = CWERef{ID: 312, Name: "Cleartext Storage of Sensitive Information"}
+	cwe319  = CWERef{ID: 319, Name: "Cleartext Transmission of Sensitive Information"}
+	cwe345  = CWERef{ID: 345, Name: "Insufficient Verification of Data Authenticity"}
+	cwe346  = CWERef{ID: 346, Name: "Origin Validation Error"}
+	cwe367  = CWERef{ID: 367, Name: "Time-of-check Time-of-use (TOCTOU) Race Condition"}
+	cwe427  = CWERef{ID: 427, Name: "Uncontrolled Search Path Element"}
+	cwe451  = CWERef{ID: 451, Name: "User Interface (UI) Misrepresentation of Critical Information"}
+	cwe494  = CWERef{ID: 494, Name: "Download of Code Without Integrity Check"}
+	cwe506  = CWERef{ID: 506, Name: "Embedded Malicious Code"}
+	cwe522  = CWERef{ID: 522, Name: "Insufficiently Protected Credentials"}
+	cwe532  = CWERef{ID: 532, Name: "Insertion of Sensitive Information into Log File"}
+	cwe538  = CWERef{ID: 538, Name: "Insertion of Sensitive Information into Externally-Accessible File or Directory"}
+	cwe693  = CWERef{ID: 693, Name: "Protection Mechanism Failure"}
+	cwe829  = CWERef{ID: 829, Name: "Inclusion of Functionality from Untrusted Control Sphere"}
+	cwe913  = CWERef{ID: 913, Name: "Improper Control of Dynamically-Managed Code Resources"}
+	cwe915  = CWERef{ID: 915, Name: "Improperly Controlled Modification of Dynamically-Determined Object Attributes"}
+	cwe940  = CWERef{ID: 940, Name: "Improper Verification of Source of a Communication Channel"}
 	cwe1104 = CWERef{ID: 1104, Name: "Use of Unmaintained Third-Party Components"}
 )
 

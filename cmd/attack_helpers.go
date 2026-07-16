@@ -46,8 +46,6 @@ type secretsOutput struct {
 	ArtifactFindings []secdump.ArtifactFinding `json:"artifact_findings,omitempty"`
 }
 
-
-
 // ensureBranchDeconflict picks a branch name according to strategy and performs deletions for force.
 func ensureBranchDeconflict(ctx context.Context, client *gitlabx.Client, projectID any, desired, strategy, authorName, authorEmail string) (string, error) {
 	att := attack.NewAttacker(client, strings.TrimSpace(gitlabURL), authorName, authorEmail, 0)

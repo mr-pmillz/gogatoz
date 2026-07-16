@@ -32,9 +32,9 @@ type sarifTaxonomy struct {
 }
 
 type sarifTax struct {
-	ID          string    `json:"id"`
-	Name        string    `json:"name,omitempty"`
-	ShortDesc   sarifText `json:"shortDescription"`
+	ID        string    `json:"id"`
+	Name      string    `json:"name,omitempty"`
+	ShortDesc sarifText `json:"shortDescription"`
 }
 
 type sarifRelationship struct {
@@ -285,12 +285,12 @@ func buildSARIF(findings []analyze.Finding, toolVersion string) sarifLog {
 	if len(cweTaxa) > 0 {
 		run.Taxonomies = []sarifTaxonomy{
 			{
-				Name:         "CWE",
-				Index:        0,
-				Organization: "MITRE",
-				ShortDesc:    sarifText{Text: "The MITRE Common Weakness Enumeration"},
+				Name:           "CWE",
+				Index:          0,
+				Organization:   "MITRE",
+				ShortDesc:      sarifText{Text: "The MITRE Common Weakness Enumeration"},
 				InformationURI: "https://cwe.mitre.org/",
-				Taxa:         cweTaxa,
+				Taxa:           cweTaxa,
 			},
 		}
 	}

@@ -80,9 +80,9 @@ type Options struct {
 	LogMaxPipelines int  // cap pipelines per ref
 	LogMaxJobs      int  // cap jobs per pipeline
 	// Analysis
-	SkipAnalyze bool                   // when true, parse and summarize but skip analyzer passes
-	Redact      bool                   // when true, mask plaintext secret values in findings (default: unredacted)
-	Controls    *config.ControlsConfig // per-detection configuration (nil = use defaults)
+	SkipAnalyze bool                    // when true, parse and summarize but skip analyzer passes
+	Redact      bool                    // when true, mask plaintext secret values in findings (default: unredacted)
+	Controls    *config.ControlsConfig  // per-detection configuration (nil = use defaults)
 	ThreatIntel *config.ThreatIntelFeed // external threat intel feed (nil = use hardcoded blocklist only)
 	// Progress, if set, is called once per completed project result.
 	Progress func(Result)
