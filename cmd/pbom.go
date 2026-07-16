@@ -36,7 +36,8 @@ images and CI include references used in a GitLab project's CI/CD pipeline.
 
 Output formats:
   json       Native PBOM JSON (default)
-  cyclonedx  CycloneDX 1.5 SBOM (JSON)`,
+  cyclonedx  CycloneDX 1.5 SBOM (JSON)
+  spdx       SPDX 2.3 SBOM (JSON)`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if strings.TrimSpace(pbomProject) == "" {
 			return fmt.Errorf("--project is required")
@@ -141,6 +142,11 @@ Output formats:
 			if err := enc.Encode(cdx); err != nil {
 				return fmt.Errorf("encode cyclonedx: %w", err)
 			}
+		case "spdx":
+			spdxDoc := result.ToSPDX(version)
+			if err := enc.Encode(spdxDoc); err != nil {
+				return fmt.Errorf("encode SPDX: %w", err)
+			}
 		default:
 			if err := enc.Encode(result); err != nil {
 				return fmt.Errorf("encode pbom: %w", err)
@@ -156,7 +162,7 @@ func init() {
 	pbomCmd.Flags().StringVar(&pbomProject, "project", "", "Project ID or path-with-namespace (required)")
 	pbomCmd.Flags().StringVar(&pbomRef, "ref", "", "Git ref to scan (default: project's default branch)")
 	pbomCmd.Flags().StringVarP(&pbomOutput, "output", "o", "", "Output file path (default: stdout)")
-	pbomCmd.Flags().StringVarP(&pbomFormat, "format", "f", "json", "Output format: json | cyclonedx")
+	pbomCmd.Flags().StringVarP(&pbomFormat, "format", "f", "json", "Output format: json | cyclonedx | spdx")
 	pbomCmd.Flags().BoolVar(&pbomFollowIncl, "follow-includes", true, "Resolve includes transitively")
 	pbomCmd.Flags().IntVar(&pbomIncludeDepth, "include-depth", 2, "Depth for include resolution")
 	pbomCmd.Flags().BoolVar(&pbomAllowRemote, "allow-remote-includes", false, "Allow resolving remote includes")

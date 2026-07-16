@@ -381,6 +381,18 @@ var taxonomyRegistry = map[string]Taxonomy{
 		OWASPCICDRefs: []OWASPCICDRef{owaspSec7},
 	},
 
+	// --- SBOM / Supply chain pinning ---
+	SBOMUnpinnedImageID: {
+		CWEs:          []CWERef{cwe829},
+		ATTACKRefs:    []ATTACKRef{attackT1195_002},
+		OWASPCICDRefs: []OWASPCICDRef{owaspSec9},
+	},
+	SBOMNoDigestID: {
+		CWEs:          []CWERef{cwe345},
+		ATTACKRefs:    []ATTACKRef{attackT1195_002},
+		OWASPCICDRefs: []OWASPCICDRef{owaspSec9},
+	},
+
 	// --- Dependency confusion ---
 	DepConfusionRiskID: {
 		CWEs:          []CWERef{cwe427, cwe829},

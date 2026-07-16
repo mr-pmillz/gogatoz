@@ -415,6 +415,22 @@ var findingCodeRegistry = map[string]FindingCodeInfo{
 		Description: "Pages deployment includes paths that commonly contain sensitive information such as coverage reports, API documentation, or configuration files.",
 		Remediation: "Review Pages artifact paths and exclude directories containing sensitive information (coverage/, docs/api/, config/). Use .gitlab/pages/ or public/ with curated content only.",
 	},
+
+	// --- SBOM / Supply chain pinning ---
+	SBOMUnpinnedImageID: {
+		ID:          SBOMUnpinnedImageID,
+		Severity:    SeverityMedium,
+		Title:       "Container image uses mutable or missing tag",
+		Description: "A container image uses ':latest' or has no tag specified, creating a supply chain risk.",
+		Remediation: "Pin container images to specific version tags or digests. Use image@sha256:... for maximum reproducibility.",
+	},
+	SBOMNoDigestID: {
+		ID:          SBOMNoDigestID,
+		Severity:    SeverityLow,
+		Title:       "Container image not pinned by digest",
+		Description: "A container image uses a version tag but is not pinned by digest (@sha256:...). Tags are mutable.",
+		Remediation: "Pin images by digest (image@sha256:...) for fully reproducible builds. See: https://docs.docker.com/reference/cli/docker/image/pull/#pull-an-image-by-digest-immutable-identifier",
+	},
 }
 
 func init() {

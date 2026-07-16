@@ -299,6 +299,7 @@ func Run(doc *pipeline.Document, opts ...Option) ([]Finding, error) {
 		{"ai_config_harvesters", detectAIConfigHarvesters},
 		{"oidc_provenance_anomaly", detectOIDCProvenanceAnomaly},
 		{"pages_risks", detectPagesRisks},
+		{"sbom_issues", detectSBOMIssues},
 	}
 	for _, s := range steps {
 		findings = append(findings, s.fn(doc)...)
