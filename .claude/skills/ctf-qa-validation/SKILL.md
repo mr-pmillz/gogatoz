@@ -231,6 +231,91 @@ Verify: ZIP contains OpenGraph JSON file with nodes and edges.
 
 Verify: returns finding description, severity, and remediation guidance.
 
+## Phase 4: Cleanup (always run after Phase 3)
+
+Any Phase 3 test that writes to GitLab (e.g., `--secrets`, `--commit-ci`) leaves artifacts behind — branches, CI files, pipelines, and job traces. Clean these up so the lab stays pristine for the next QA run.
+
+Cleanup requires a token with `write_repository` scope (e.g., `CTF_ADMIN_BACKUP_PAT`). Read it from `setup-lab.sh`.
+
+### Cleanup flags
+
+| Flag | What it removes |
+|------|-----------------|
+| `--cleanup` | Required mode flag — enables cleanup mode |
+| `--cleanup-ci` | Deletes `.gitlab-ci.yml` from the attack branch |
+| `--cleanup-jobs` | Erases job traces on recent pipelines |
+| `--cleanup-jobs-ref <ref>` | Limits job trace erasure to pipelines on this branch |
+| `--cleanup-jobs-max <n>` | Max pipelines to erase (default 5) |
+| `--cleanup-jobs-delete` | Also delete pipelines after erasing traces |
+| `--cleanup-pipeline <id>` | Delete a specific pipeline by ID |
+| `--cleanup-branch <name>` | Delete a branch from the target project |
+
+### Correct cleanup order
+
+Run cleanup steps in this order — CI file deletion must happen before branch deletion, because the file must be on an existing branch to be removed.
+
+```bash
+# 1. Remove the CI file from the attack branch
+./gogatoz attack --gitlab-url $GL --token $ADMIN \
+  --target <project> --cleanup --cleanup-ci \
+  --branch <attack-branch>
+
+# 2. Erase job traces (optional, anti-forensics)
+./gogatoz attack --gitlab-url $GL --token $ADMIN \
+  --target <project> --cleanup --cleanup-jobs \
+  --cleanup-jobs-ref <attack-branch> --cleanup-jobs-max 5
+
+# 3. Delete specific pipeline(s) if you captured the ID
+./gogatoz attack --gitlab-url $GL --token $ADMIN \
+  --target <project> --cleanup --cleanup-pipeline <pipeline-id>
+
+# 4. Delete the attack branch (last — CI file must be gone first)
+./gogatoz attack --gitlab-url $GL --token $ADMIN \
+  --target <project> --cleanup --cleanup-branch <attack-branch>
+```
+
+### QA cleanup example
+
+After running the secrets exfil test (3a) with branch `gogatoz-qa-test`:
+
+```bash
+./gogatoz attack --gitlab-url $GL --token $ADMIN \
+  --target root/vuln-lotp-npm --cleanup --cleanup-ci \
+  --branch gogatoz-qa-test
+
+./gogatoz attack --gitlab-url $GL --token $ADMIN \
+  --target root/vuln-lotp-npm --cleanup --cleanup-jobs \
+  --cleanup-jobs-ref gogatoz-qa-test
+
+./gogatoz attack --gitlab-url $GL --token $ADMIN \
+  --target root/vuln-lotp-npm --cleanup \
+  --cleanup-branch gogatoz-qa-test
+```
+
+Verify: each step prints `SUCCESS`. Confirm the branch is gone:
+```bash
+curl -sf -H "PRIVATE-TOKEN: $ADMIN" \
+  "$GL/api/v4/projects/<project-encoded>/repository/branches/gogatoz-qa-test" | jq '.name // empty'
+```
+Expected: empty output (branch deleted).
+
+### Lab state check
+
+After all cleanup, verify no gogatoz branches remain across CTF projects:
+
+```bash
+for proj in root/vuln-lotp-npm root/vuln-var-inject root/ctf-pivot-gateway; do
+  encoded=$(echo "$proj" | sed 's|/|%2F|g')
+  branches=$(curl -sf -H "PRIVATE-TOKEN: $ADMIN" \
+    "$GL/api/v4/projects/$encoded/repository/branches" | \
+    jq -r '.[].name' | grep -E "gogatoz-" || true)
+  if [ -n "$branches" ]; then
+    echo "LEFTOVER in $proj: $branches"
+  fi
+done
+echo "Lab cleanup verification complete"
+```
+
 ## Pass/Fail Criteria
 
 | Phase | Pass Condition |
@@ -238,6 +323,7 @@ Verify: returns finding description, severity, and remediation guidance.
 | Phase 1 | Zero build errors, zero test failures, zero lint issues |
 | Phase 2 | All smoke commands return expected output, no panics |
 | Phase 3 | Each tested feature produces expected output per section |
+| Phase 4 | All cleanup steps return SUCCESS, no leftover gogatoz branches |
 
 Flag values in the CTF always use `FLAG+...+` format (never `FLAG{...}`) because GitLab cannot mask variables containing curly braces.
 
