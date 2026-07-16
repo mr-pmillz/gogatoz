@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -43,6 +44,9 @@ func (a *Attacker) DeleteBranch(ctx context.Context, projectID any, branch strin
 		return fmt.Errorf("branch cannot be empty")
 	}
 	_, err := a.Client.GL.Branches.DeleteBranch(projectID, branch, gitlab.WithContext(ctx))
+	if err == nil {
+		slog.Debug("branch deleted", "project", projectID, "branch", branch)
+	}
 	return err
 }
 
@@ -328,7 +332,9 @@ func (a *Attacker) CommitCIPipeline(ctx context.Context, projectID any, branch, 
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("%s/%s/-/pipelines?ref=%s", strings.TrimSuffix(a.GitLabURL, "/"), p.PathWithNamespace, branch), nil
+	url := fmt.Sprintf("%s/%s/-/pipelines?ref=%s", strings.TrimSuffix(a.GitLabURL, "/"), p.PathWithNamespace, branch)
+	slog.Info("CI pipeline committed", "project", p.PathWithNamespace, "branch", branch)
+	return url, nil
 }
 
 // SetProjectVariable creates or updates a CI variable in the project scope.

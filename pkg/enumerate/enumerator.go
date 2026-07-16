@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"sync"
 	"time"
@@ -135,6 +136,7 @@ func EnumerateProjectsStream(ctx context.Context, cl *gitlabx.Client, idents []s
 		opts.IncludeDepth = DefaultIncludeDepth
 	}
 	uniq := dedup(idents)
+	slog.Info("enumerate starting", "projects", len(uniq), "concurrency", opts.Concurrency, "follow_includes", opts.FollowIncludes)
 
 	type job struct{ ident string }
 	jobs := make(chan job)
@@ -412,6 +414,7 @@ func scanOne(ctx context.Context, cl *gitlabx.Client, ident string, opts Options
 	adjustFindingsForRunnerRisk(&r, ciDocResolved)
 	// Post-analysis: downgrade severities when job rules appear to restrict to protected branches
 	adjustFindingsForProtectedBranches(&r, ciDocResolved)
+	slog.Debug("project scanned", "project", r.ProjectPathWithNS, "findings", len(r.Findings), "ref", ref, "duration_ms", r.DurationMS)
 	return r
 }
 

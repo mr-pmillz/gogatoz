@@ -2,6 +2,7 @@ package graph
 
 import (
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/mr-pmillz/gogatoz/pkg/pipeline"
@@ -42,6 +43,7 @@ func BuildCrossProject(projects map[string]*pipeline.Document) *CrossProjectGrap
 		Graph:           New(),
 		EdgeAnnotations: map[string][]CrossProjectEdge{},
 	}
+	slog.Info("building cross-project graph", "projects", len(projects))
 
 	for path := range projects {
 		g.AddNode(&RepoNode{Path: path})

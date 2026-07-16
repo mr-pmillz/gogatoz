@@ -46,64 +46,7 @@ type secretsOutput struct {
 	ArtifactFindings []secdump.ArtifactFinding `json:"artifact_findings,omitempty"`
 }
 
-// attackModeFlags returns the list of mode flag pointers and their CLI names.
-// Used for "exactly one mode" validation.
-func attackModeFlags() []struct {
-	flag *bool
-	name string
-} {
-	return []struct {
-		flag *bool
-		name string
-	}{
-		{&atkCommitCI, "--commit-ci"},
-		{&atkSecrets, "--secrets"},
-		{&atkCleanup, "--cleanup"},
-		{&atkDeployKey, "--deploy-key"},
-		{&atkAddMember, "--add-member"},
-		{&atkAIInject, "--ai-inject"},
-		{&atkInjectScript, "--inject-script"},
-		{&atkAutoMerge, "--auto-merge"},
-		{&atkTamperRelease, "--tamper-release"},
-		{&atkTamperPackage, "--tamper-package"},
-		{&atkHarvest, "--harvest"},
-		{&atkTamperTag, "--tamper-tag"},
-		{&atkLOTPInject, "--lotp-inject"},
-		{&atkRorListen, "--ror-listen"},
-		{&atkMemoryDump, "--memory-dump"},
-		{&atkSupplyChainWorm, "--supply-chain-worm"},
-		{&atkContainerEscape, "--container-escape"},
-		{&atkVariableInject, "--variable-inject"},
-		{&atkC2Channel, "--c2-channel"},
-		{&atkNpmTamper, "--npm-tamper"},
-		{&atkVaultEnum, "--vault-enum"},
-		{&atkK8sSecrets, "--k8s-secrets"},
-		{&atkDeadManSwitch, "--dead-man-switch"},
-		{&atkBranchMutator, "--branch-mutator"},
-		{&atkSigstore, "--sigstore"},
-		{&atkWorkflowExfil, "--workflow-exfil"},
-		{&atkCommitPrefix, "--commit-prefix"},
-		{&atkReleaseTamperPipeline, "--release-tamper-pipeline"},
-		{&atkDepConfusion, "--dep-confusion"},
-		{&atkRunnerVarDump, "--runner-var-dump"},
-	}
-}
 
-// validateExactlyOneMode checks that exactly one attack mode flag is set.
-func validateExactlyOneMode() error {
-	modes := 0
-	var names []string
-	for _, mf := range attackModeFlags() {
-		names = append(names, mf.name)
-		if *mf.flag {
-			modes++
-		}
-	}
-	if modes != 1 {
-		return fmt.Errorf("select exactly one mode: %s (or use --payload-only or --discover-tags)", strings.Join(names, ", "))
-	}
-	return nil
-}
 
 // ensureBranchDeconflict picks a branch name according to strategy and performs deletions for force.
 func ensureBranchDeconflict(ctx context.Context, client *gitlabx.Client, projectID any, desired, strategy, authorName, authorEmail string) (string, error) {

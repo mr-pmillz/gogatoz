@@ -3,12 +3,14 @@ package graph
 import (
 	"fmt"
 	"io"
+	"log/slog"
 	"sort"
 	"strings"
 )
 
 // WriteDOT renders the graph in Graphviz DOT format.
 func (g *Graph) WriteDOT(w io.Writer) error {
+	slog.Debug("exporting graph", "format", "dot", "nodes", len(g.Nodes))
 	if _, err := fmt.Fprintln(w, "digraph pipeline {"); err != nil {
 		return err
 	}
@@ -72,6 +74,7 @@ func (g *Graph) WriteDOT(w io.Writer) error {
 
 // WriteMermaid renders the graph in Mermaid flowchart format.
 func (g *Graph) WriteMermaid(w io.Writer) error {
+	slog.Debug("exporting graph", "format", "mermaid", "nodes", len(g.Nodes))
 	if _, err := fmt.Fprintln(w, "flowchart LR"); err != nil {
 		return err
 	}

