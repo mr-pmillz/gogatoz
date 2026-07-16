@@ -106,6 +106,7 @@ type SupplyChainView struct {
 }
 
 // Report root for templates.
+// +kubebuilder:object:generate=true
 type Report struct {
 	GeneratedAt      time.Time
 	Projects         []ProjectView
