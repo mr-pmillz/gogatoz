@@ -145,7 +145,7 @@ func sendWatchNotification(url string, alert watchAlert) {
 func pollAndAnalyze(ctx context.Context, client *gitlabx.Client, projectID, branch string, lastSHA map[string]string) []analyze.Finding {
 	key := projectID + ":" + branch
 	f, _, err := client.GL.RepositoryFiles.GetFile(projectID, ".gitlab-ci.yml", &gitlab.GetFileOptions{
-		Ref: gitlab.Ptr(branch),
+		Ref: new(branch),
 	}, gitlab.WithContext(ctx))
 	if err != nil {
 		return nil

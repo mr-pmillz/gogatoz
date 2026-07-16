@@ -3,6 +3,7 @@ package analyze
 import "sort"
 
 // FindingCodeInfo provides metadata about a finding code.
+// +kubebuilder:object:generate=true
 type FindingCodeInfo struct {
 	ID          string   `json:"id"`
 	Severity    Severity `json:"severity"`

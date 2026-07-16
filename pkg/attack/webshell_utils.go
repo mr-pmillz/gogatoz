@@ -64,11 +64,11 @@ func WaitForPipelineForRef(ctx context.Context, client *gitlabx.Client, projectI
 	check := func(ctx context.Context) (bool, error) {
 		opts := &gitlab.ListProjectPipelinesOptions{
 			ListOptions: gitlab.ListOptions{PerPage: 1, Page: 1},
-			OrderBy:     gitlab.Ptr("id"),
-			Sort:        gitlab.Ptr("desc"),
+			OrderBy:     new("id"),
+			Sort:        new("desc"),
 		}
 		if ref != "" {
-			opts.Ref = gitlab.Ptr(ref)
+			opts.Ref = new(ref)
 		}
 		pipes, _, err := client.GL.Pipelines.ListProjectPipelines(projectID, opts, gitlab.WithContext(ctx))
 		if err != nil {
@@ -125,11 +125,11 @@ func WaitForExfilPipeline(ctx context.Context, client *gitlabx.Client, projectID
 func listRecentPipelines(ctx context.Context, client *gitlabx.Client, projectID any, ref string, n int) ([]int64, error) {
 	opts := &gitlab.ListProjectPipelinesOptions{
 		ListOptions: gitlab.ListOptions{PerPage: int64(n), Page: 1},
-		OrderBy:     gitlab.Ptr("id"),
-		Sort:        gitlab.Ptr("desc"),
+		OrderBy:     new("id"),
+		Sort:        new("desc"),
 	}
 	if ref != "" {
-		opts.Ref = gitlab.Ptr(ref)
+		opts.Ref = new(ref)
 	}
 	pipes, _, err := client.GL.Pipelines.ListProjectPipelines(projectID, opts, gitlab.WithContext(ctx))
 	if err != nil {

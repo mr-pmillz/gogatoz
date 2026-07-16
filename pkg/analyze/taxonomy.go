@@ -1,5 +1,7 @@
 package analyze
 
+import "maps"
+
 // CWERef identifies a Common Weakness Enumeration entry.
 type CWERef struct {
 	ID   int    `json:"id"`
@@ -405,8 +407,6 @@ func LookupTaxonomy(findingID string) *Taxonomy {
 // AllTaxonomies returns a copy of the full taxonomy registry.
 func AllTaxonomies() map[string]Taxonomy {
 	out := make(map[string]Taxonomy, len(taxonomyRegistry))
-	for k, v := range taxonomyRegistry {
-		out[k] = v
-	}
+	maps.Copy(out, taxonomyRegistry)
 	return out
 }
