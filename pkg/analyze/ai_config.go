@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/mr-pmillz/gogatoz/pkg/pipeline"
+	"github.com/mr-pmillz/gogatoz/pkg/stringutil"
 )
 
 const (
@@ -69,7 +70,7 @@ func detectAIConfigHarvesters(doc *pipeline.Document) []Finding {
 				Description: "This CI job creates or modifies an AI tool configuration file that reads " +
 					"credential paths (~/.ssh, ~/.aws/credentials, .env, etc.). This is the Miasma attack " +
 					"pattern — credential harvesters disguised as legitimate AI tool configs.",
-				Evidence: truncateEvidence("job="+job.Name, 200),
+				Evidence: stringutil.TruncateEvidence("job="+job.Name, 200),
 				JobName:  job.Name,
 			})
 			continue
@@ -83,7 +84,7 @@ func detectAIConfigHarvesters(doc *pipeline.Document) []Finding {
 				Description: "This CI job creates or modifies an AI tool configuration file that includes " +
 					"HTTP request patterns. AI configs that make external requests can exfiltrate code context, " +
 					"secrets, or developer environment data.",
-				Evidence: truncateEvidence("job="+job.Name, 200),
+				Evidence: stringutil.TruncateEvidence("job="+job.Name, 200),
 				JobName:  job.Name,
 			})
 		}

@@ -7,6 +7,7 @@ import (
 
 	"github.com/mr-pmillz/gogatoz/pkg/config"
 	"github.com/mr-pmillz/gogatoz/pkg/pipeline"
+	"github.com/mr-pmillz/gogatoz/pkg/stringutil"
 )
 
 var (
@@ -77,7 +78,7 @@ func detectSuspiciousNetworkTargets(doc *pipeline.Document, feed *config.ThreatI
 						Severity:    SeverityHigh,
 						Title:       "CI script contacts suspicious domain",
 						Description: "CI/CD script makes a request to a suspicious domain (" + domain + "). This may indicate C2 communication, data exfiltration, or use of anonymous relay infrastructure.",
-						Evidence:    truncateEvidence("domain="+domain+" line="+trimmed, 200),
+						Evidence:    stringutil.TruncateEvidence("domain="+domain+" line="+trimmed, 200),
 						JobName:     job.Name,
 					})
 					found = true
@@ -94,7 +95,7 @@ func detectSuspiciousNetworkTargets(doc *pipeline.Document, feed *config.ThreatI
 							Severity:    SeverityHigh,
 							Title:       "CI script contacts public IP address directly",
 							Description: "CI/CD script makes an HTTP request to a public IP address (" + matches[1] + ") rather than a domain name. Direct IP connections bypass DNS monitoring and are commonly used by C2 infrastructure.",
-							Evidence:    truncateEvidence("ip="+matches[1]+" line="+trimmed, 200),
+							Evidence:    stringutil.TruncateEvidence("ip="+matches[1]+" line="+trimmed, 200),
 							JobName:     job.Name,
 						})
 						found = true

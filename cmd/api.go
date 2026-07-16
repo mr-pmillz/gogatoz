@@ -12,6 +12,7 @@ import (
 var (
 	apiListen  string
 	apiBaseURL string
+	apiKey     string
 )
 
 var apiCmd = &cobra.Command{
@@ -22,6 +23,7 @@ var apiCmd = &cobra.Command{
 		cfg := api.Config{
 			BaseURL:    strings.TrimSpace(viper.GetString("api-base-url")),
 			ListenAddr: strings.TrimSpace(viper.GetString("api-listen")),
+			APIKey:     strings.TrimSpace(viper.GetString("api-key")),
 		}
 		if cfg.ListenAddr == "" {
 			cfg.ListenAddr = ":8088"
@@ -33,7 +35,11 @@ var apiCmd = &cobra.Command{
 			cfg.BaseURL = "https://gitlab.com"
 		}
 		srv := api.NewServer(cfg)
-		slog.Info("starting API server", "listen", cfg.ListenAddr, "base", cfg.BaseURL)
+		authMsg := "disabled"
+		if cfg.APIKey != "" {
+			authMsg = "enabled (X-API-Key)"
+		}
+		slog.Info("starting API server", "listen", cfg.ListenAddr, "base", cfg.BaseURL, "auth", authMsg)
 		return srv.Run()
 	},
 }
@@ -42,8 +48,11 @@ func init() {
 	rootCmd.AddCommand(apiCmd)
 	apiCmd.Flags().StringVar(&apiListen, "listen", ":8088", "Listen address for API server (host:port)")
 	apiCmd.Flags().StringVar(&apiBaseURL, "base-url", "", "Default GitLab base URL for API requests (overridden by per-request)")
+	apiCmd.Flags().StringVar(&apiKey, "api-key", "", "API key required for all non-healthz requests (X-API-Key header)")
 	_ = viper.BindPFlag("api-listen", apiCmd.Flags().Lookup("listen"))
 	_ = viper.BindPFlag("api-base-url", apiCmd.Flags().Lookup("base-url"))
+	_ = viper.BindPFlag("api-key", apiCmd.Flags().Lookup("api-key"))
 	_ = viper.BindEnv("api-listen", "GOGATOZ_API_LISTEN")
 	_ = viper.BindEnv("api-base-url", "GOGATOZ_API_BASE_URL")
+	_ = viper.BindEnv("api-key", "GOGATOZ_API_KEY")
 }

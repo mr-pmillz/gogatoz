@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/mr-pmillz/gogatoz/pkg/pipeline"
+	"github.com/mr-pmillz/gogatoz/pkg/stringutil"
 )
 
 const DepConfusionRiskID = "DEP_CONFUSION_RISK"
@@ -55,7 +56,7 @@ func detectDependencyConfusion(doc *pipeline.Document) []Finding {
 				Severity:    sev,
 				Title:       "Dependency confusion risk: " + ref.ecosystem + " package " + ref.name,
 				Description: desc,
-				Evidence:    truncateEvidence("pkg="+ref.name+" eco="+ref.ecosystem+" line="+ref.evidence, 200),
+				Evidence:    stringutil.TruncateEvidence("pkg="+ref.name+" eco="+ref.ecosystem+" line="+ref.evidence, 200),
 				JobName:     job.Name,
 			})
 		}

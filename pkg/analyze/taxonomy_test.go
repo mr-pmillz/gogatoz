@@ -133,6 +133,33 @@ func TestTaxonomyRegistryHasNoOrphanEntries(t *testing.T) {
 	}
 }
 
+func taxonomyHasCWE(tax *Taxonomy, id int) bool {
+	for _, c := range tax.CWEs {
+		if c.ID == id {
+			return true
+		}
+	}
+	return false
+}
+
+func taxonomyHasATTACK(tax *Taxonomy, id string) bool {
+	for _, a := range tax.ATTACKRefs {
+		if a.ID == id {
+			return true
+		}
+	}
+	return false
+}
+
+func taxonomyHasOWASPCICD(tax *Taxonomy, id string) bool {
+	for _, o := range tax.OWASPCICDRefs {
+		if o.ID == id {
+			return true
+		}
+	}
+	return false
+}
+
 func TestTaxonomySpecificMappings(t *testing.T) {
 	tests := []struct {
 		findingID string
@@ -158,37 +185,13 @@ func TestTaxonomySpecificMappings(t *testing.T) {
 			if tax == nil {
 				t.Fatalf("no taxonomy for %q", tt.findingID)
 			}
-
-			hasCWE := false
-			for _, c := range tax.CWEs {
-				if c.ID == tt.wantCWE {
-					hasCWE = true
-					break
-				}
-			}
-			if !hasCWE {
+			if !taxonomyHasCWE(tax, tt.wantCWE) {
 				t.Errorf("expected CWE-%d in taxonomy for %q, got %v", tt.wantCWE, tt.findingID, tax.CWEs)
 			}
-
-			hasATT := false
-			for _, a := range tax.ATTACKRefs {
-				if a.ID == tt.wantATT {
-					hasATT = true
-					break
-				}
-			}
-			if !hasATT {
+			if !taxonomyHasATTACK(tax, tt.wantATT) {
 				t.Errorf("expected ATT&CK %s in taxonomy for %q, got %v", tt.wantATT, tt.findingID, tax.ATTACKRefs)
 			}
-
-			hasOWASP := false
-			for _, o := range tax.OWASPCICDRefs {
-				if o.ID == tt.wantOWASP {
-					hasOWASP = true
-					break
-				}
-			}
-			if !hasOWASP {
+			if !taxonomyHasOWASPCICD(tax, tt.wantOWASP) {
 				t.Errorf("expected OWASP %s in taxonomy for %q, got %v", tt.wantOWASP, tt.findingID, tax.OWASPCICDRefs)
 			}
 		})

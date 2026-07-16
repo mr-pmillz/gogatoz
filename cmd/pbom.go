@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"context"
-	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -10,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mr-pmillz/gogatoz/pkg/gitlabx"
 	"github.com/mr-pmillz/gogatoz/pkg/pbom"
 	"github.com/mr-pmillz/gogatoz/pkg/pipeline"
 	"github.com/spf13/cobra"
@@ -49,62 +47,7 @@ Output formats:
 
 		ctx := context.Background()
 
-		// Build GitLab client (same pattern as enumerate).
-		clOpts := []gitlabx.Option{gitlabx.WithRateLimit(rateRPS, rateBurst), gitlabx.WithRetry(retryMax)}
-		if ua := userAgent; strings.TrimSpace(ua) != "" {
-			clOpts = append(clOpts, gitlabx.WithUserAgent(ua))
-		}
-		var idleTO, tlsTO, expectTO, reqTO time.Duration
-		if s := strings.TrimSpace(httpIdleTimeout); s != "" {
-			if d, e := time.ParseDuration(s); e != nil {
-				return fmt.Errorf("invalid --http-idle-timeout: %w", e)
-			} else {
-				idleTO = d
-			}
-		}
-		if s := strings.TrimSpace(httpTLSTimeout); s != "" {
-			if d, e := time.ParseDuration(s); e != nil {
-				return fmt.Errorf("invalid --http-tls-timeout: %w", e)
-			} else {
-				tlsTO = d
-			}
-		}
-		if s := strings.TrimSpace(httpExpectTimeout); s != "" {
-			if d, e := time.ParseDuration(s); e != nil {
-				return fmt.Errorf("invalid --http-expect-timeout: %w", e)
-			} else {
-				expectTO = d
-			}
-		}
-		if s := strings.TrimSpace(httpRequestTimeout); s != "" {
-			if d, e := time.ParseDuration(s); e != nil {
-				return fmt.Errorf("invalid --http-req-timeout: %w", e)
-			} else {
-				reqTO = d
-			}
-		}
-		if httpMaxIdle > 0 || httpMaxIdlePerHost > 0 {
-			clOpts = append(clOpts, gitlabx.WithHTTPPool(httpMaxIdle, httpMaxIdlePerHost))
-		}
-		if idleTO > 0 || tlsTO > 0 || expectTO > 0 || reqTO > 0 {
-			clOpts = append(clOpts, gitlabx.WithHTTPTimeouts(idleTO, tlsTO, expectTO, reqTO))
-		}
-		if insecureSkipTLS {
-			clOpts = append(clOpts, gitlabx.WithInsecureTLS(true))
-		}
-		if p := strings.TrimSpace(caCertPath); p != "" {
-			pem, err := os.ReadFile(p)
-			if err != nil {
-				return fmt.Errorf("read --ca-cert: %w", err)
-			}
-			pool := x509.NewCertPool()
-			if !pool.AppendCertsFromPEM(pem) {
-				return fmt.Errorf("--ca-cert: no valid PEM certificates found")
-			}
-			clOpts = append(clOpts, gitlabx.WithRootCAs(pool))
-		}
-		clOpts = appendSOCKS5Option(clOpts)
-		client, err := gitlabx.New(strings.TrimSpace(gitlabURL), token, clOpts...)
+		client, err := newGitLabClient()
 		if err != nil {
 			return err
 		}

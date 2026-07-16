@@ -3,7 +3,6 @@ package cmd
 import (
 	"bufio"
 	"context"
-	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -98,61 +97,7 @@ var enumerateCmd = &cobra.Command{
 
 		// Build client (reuse global reliability + TLS flags)
 		ctx := context.Background()
-		clOpts := []gitlabx.Option{gitlabx.WithRateLimit(rateRPS, rateBurst), gitlabx.WithRetry(retryMax)}
-		if ua := userAgent; strings.TrimSpace(ua) != "" {
-			clOpts = append(clOpts, gitlabx.WithUserAgent(ua))
-		}
-		var idleTO, tlsTO, expectTO, reqTO time.Duration
-		if s := strings.TrimSpace(httpIdleTimeout); s != "" {
-			if d, e := time.ParseDuration(s); e != nil {
-				return fmt.Errorf("invalid --http-idle-timeout: %w", e)
-			} else {
-				idleTO = d
-			}
-		}
-		if s := strings.TrimSpace(httpTLSTimeout); s != "" {
-			if d, e := time.ParseDuration(s); e != nil {
-				return fmt.Errorf("invalid --http-tls-timeout: %w", e)
-			} else {
-				tlsTO = d
-			}
-		}
-		if s := strings.TrimSpace(httpExpectTimeout); s != "" {
-			if d, e := time.ParseDuration(s); e != nil {
-				return fmt.Errorf("invalid --http-expect-timeout: %w", e)
-			} else {
-				expectTO = d
-			}
-		}
-		if s := strings.TrimSpace(httpRequestTimeout); s != "" {
-			if d, e := time.ParseDuration(s); e != nil {
-				return fmt.Errorf("invalid --http-req-timeout: %w", e)
-			} else {
-				reqTO = d
-			}
-		}
-		if httpMaxIdle > 0 || httpMaxIdlePerHost > 0 {
-			clOpts = append(clOpts, gitlabx.WithHTTPPool(httpMaxIdle, httpMaxIdlePerHost))
-		}
-		if idleTO > 0 || tlsTO > 0 || expectTO > 0 || reqTO > 0 {
-			clOpts = append(clOpts, gitlabx.WithHTTPTimeouts(idleTO, tlsTO, expectTO, reqTO))
-		}
-		if insecureSkipTLS {
-			clOpts = append(clOpts, gitlabx.WithInsecureTLS(true))
-		}
-		if p := strings.TrimSpace(caCertPath); p != "" {
-			pem, err := os.ReadFile(p)
-			if err != nil {
-				return fmt.Errorf("read --ca-cert: %w", err)
-			}
-			pool := x509.NewCertPool()
-			if !pool.AppendCertsFromPEM(pem) {
-				return fmt.Errorf("--ca-cert: no valid PEM certificates found")
-			}
-			clOpts = append(clOpts, gitlabx.WithRootCAs(pool))
-		}
-		clOpts = appendSOCKS5Option(clOpts)
-		client, err := gitlabx.New(strings.TrimSpace(gitlabURL), token, clOpts...)
+		client, err := newGitLabClient()
 		if err != nil {
 			return err
 		}
@@ -450,6 +395,9 @@ var enumerateCmd = &cobra.Command{
 
 		// Post-analysis: MR comment (requires single-project scan with known project ID)
 		if enumMRComment > 0 && len(results) > 0 && results[0].ProjectID > 0 {
+			if len(results) > 1 {
+				fmt.Fprintf(cmd.ErrOrStderr(), "warning: --mr-comment with multi-project scan posts only to project %d (%s)\n", results[0].ProjectID, results[0].ProjectPathWithNS)
+			}
 			commentBody := report.BuildMRCommentBody(rep, scoreResult)
 			if mrErr := upsertMRComment(cmd.Context(), client, results[0].ProjectID, enumMRComment, commentBody); mrErr != nil {
 				fmt.Fprintf(cmd.ErrOrStderr(), "warning: MR comment failed: %v\n", mrErr)

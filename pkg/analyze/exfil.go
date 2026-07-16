@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/mr-pmillz/gogatoz/pkg/pipeline"
+	"github.com/mr-pmillz/gogatoz/pkg/stringutil"
 )
 
 var (
@@ -105,7 +106,7 @@ func analyzeJobExfil(job pipeline.Job, lines []string) []Finding {
 			Title:    "Environment secrets exfiltrated via HTTP",
 			Description: "This job dumps environment variables and sends data to an external endpoint via HTTP. " +
 				"This is a hallmark of CI/CD secret exfiltration campaigns (Hades, GhostAction, Megalodon).",
-			Evidence: truncateEvidence("dump="+s.envDumpEvidence+" exfil="+s.httpEvidence, 200),
+			Evidence: stringutil.TruncateEvidence("dump="+s.envDumpEvidence+" exfil="+s.httpEvidence, 200),
 			JobName:  job.Name,
 		})
 	} else if s.secretInHTTP {
@@ -115,7 +116,7 @@ func analyzeJobExfil(job pipeline.Job, lines []string) []Finding {
 			Title:    "Secret variable referenced in HTTP request",
 			Description: "This job references a known secret variable (CI_JOB_TOKEN, PRIVATE_TOKEN, etc.) " +
 				"in an HTTP request, indicating possible credential exfiltration.",
-			Evidence: truncateEvidence("line="+s.secretHTTPEvidence, 200),
+			Evidence: stringutil.TruncateEvidence("line="+s.secretHTTPEvidence, 200),
 			JobName:  job.Name,
 		})
 	}
@@ -129,7 +130,7 @@ func analyzeJobExfil(job pipeline.Job, lines []string) []Finding {
 				Title:    "Environment dump uploaded as CI artifact",
 				Description: "This job dumps environment variables to a file and uploads it as a CI artifact. " +
 					"Anyone with project read access can download the artifact and extract secrets.",
-				Evidence: truncateEvidence("dump_file="+dumpFile+" dump="+s.envDumpEvidence, 200),
+				Evidence: stringutil.TruncateEvidence("dump_file="+dumpFile+" dump="+s.envDumpEvidence, 200),
 				JobName:  job.Name,
 			})
 		}

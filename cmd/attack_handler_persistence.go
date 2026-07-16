@@ -63,101 +63,102 @@ func runAttackAddMember(ctx context.Context, cmd *cobra.Command, client *gitlabx
 	return nil
 }
 
+type cleanupAction struct {
+	Action  string `json:"action"`
+	Target  string `json:"target,omitempty"`
+	Success bool   `json:"success"`
+	Error   string `json:"error,omitempty"`
+}
+
+func cleanupCIFile(ctx context.Context, att *attack.Attacker, target, branch string) cleanupAction {
+	if branch == "" {
+		branch = gogatozAttack
+	}
+	err := att.DeleteFile(ctx, target, branch, ".gitlab-ci.yml", "Remove CI file via GoGatoZ")
+	ca := cleanupAction{Action: "delete-ci-file", Target: branch, Success: err == nil}
+	if err != nil {
+		ca.Error = err.Error()
+	}
+	return ca
+}
+
+func cleanupBranch(ctx context.Context, att *attack.Attacker, target, branch string) cleanupAction {
+	err := att.DeleteBranch(ctx, target, branch)
+	ca := cleanupAction{Action: "delete-branch", Target: branch, Success: err == nil}
+	if err != nil {
+		ca.Error = err.Error()
+	}
+	return ca
+}
+
+func cleanupDeployKey(ctx context.Context, att *attack.Attacker, target string, keyID int64) cleanupAction {
+	err := att.RevokeDeployKey(ctx, target, keyID)
+	ca := cleanupAction{Action: "revoke-deploy-key", Target: fmt.Sprintf("%d", keyID), Success: err == nil}
+	if err != nil {
+		ca.Error = err.Error()
+	}
+	return ca
+}
+
+func cleanupMember(ctx context.Context, att *attack.Attacker, target string, memberID int64) cleanupAction {
+	err := att.RemoveProjectMember(ctx, target, memberID)
+	ca := cleanupAction{Action: "remove-member", Target: fmt.Sprintf("%d", memberID), Success: err == nil}
+	if err != nil {
+		ca.Error = err.Error()
+	}
+	return ca
+}
+
+func cleanupPipeline(ctx context.Context, att *attack.Attacker, target string, pipelineID int64) cleanupAction {
+	err := att.DeletePipeline(ctx, target, pipelineID)
+	ca := cleanupAction{Action: "delete-pipeline", Target: fmt.Sprintf("%d", pipelineID), Success: err == nil}
+	if err != nil {
+		ca.Error = err.Error()
+	}
+	return ca
+}
+
+func cleanupJobTraces(ctx context.Context, att *attack.Attacker, target, ref string, maxPipelines int, deletePipelines bool) cleanupAction {
+	if maxPipelines <= 0 {
+		maxPipelines = 5
+	}
+	count, err := att.EraseRecentPipelines(ctx, target, ref, maxPipelines, deletePipelines)
+	verb := "erase-job-traces"
+	if deletePipelines {
+		verb = "erase-and-delete-pipelines"
+	}
+	ca := cleanupAction{Action: verb, Target: fmt.Sprintf("%d pipelines", count), Success: err == nil}
+	if err != nil {
+		ca.Error = err.Error()
+	}
+	return ca
+}
+
 // runAttackCleanup removes attack artifacts (branches, CI files, deploy keys, members, pipelines).
 func runAttackCleanup(ctx context.Context, cmd *cobra.Command, client *gitlabx.Client) error {
 	att := attack.NewAttacker(client, strings.TrimSpace(gitlabURL), atkAuthorName, atkAuthorEmail, 0)
 	_, _ = att.SetupUser(ctx)
-	type cleanupAction struct {
-		Action  string `json:"action"`
-		Target  string `json:"target,omitempty"`
-		Success bool   `json:"success"`
-		Error   string `json:"error,omitempty"`
-	}
 	var actions []cleanupAction
-	// Remove CI file if requested
+
 	if atkCleanupCI {
-		branch := strings.TrimSpace(atkBranch)
-		if branch == "" {
-			branch = gogatozAttack
-		}
-		err := att.DeleteFile(ctx, atkTarget, branch, ".gitlab-ci.yml", "Remove CI file via GoGatoZ")
-		ca := cleanupAction{Action: "delete-ci-file", Target: branch}
-		if err != nil {
-			ca.Success = false
-			ca.Error = err.Error()
-		} else {
-			ca.Success = true
-		}
-		actions = append(actions, ca)
+		actions = append(actions, cleanupCIFile(ctx, att, atkTarget, strings.TrimSpace(atkBranch)))
 	}
-	// Delete branch
 	if strings.TrimSpace(atkCleanupBranch) != "" {
-		err := att.DeleteBranch(ctx, atkTarget, strings.TrimSpace(atkCleanupBranch))
-		ca := cleanupAction{Action: "delete-branch", Target: strings.TrimSpace(atkCleanupBranch)}
-		if err != nil {
-			ca.Success = false
-			ca.Error = err.Error()
-		} else {
-			ca.Success = true
-		}
-		actions = append(actions, ca)
+		actions = append(actions, cleanupBranch(ctx, att, atkTarget, strings.TrimSpace(atkCleanupBranch)))
 	}
-	// Revoke deploy key
 	if atkRevokeDeployKey > 0 {
-		err := att.RevokeDeployKey(ctx, atkTarget, atkRevokeDeployKey)
-		ca := cleanupAction{Action: "revoke-deploy-key", Target: fmt.Sprintf("%d", atkRevokeDeployKey)}
-		if err != nil {
-			ca.Success = false
-			ca.Error = err.Error()
-		} else {
-			ca.Success = true
-		}
-		actions = append(actions, ca)
+		actions = append(actions, cleanupDeployKey(ctx, att, atkTarget, atkRevokeDeployKey))
 	}
-	// Remove member by user ID
 	if atkRemoveMemberID > 0 {
-		err := att.RemoveProjectMember(ctx, atkTarget, atkRemoveMemberID)
-		ca := cleanupAction{Action: "remove-member", Target: fmt.Sprintf("%d", atkRemoveMemberID)}
-		if err != nil {
-			ca.Success = false
-			ca.Error = err.Error()
-		} else {
-			ca.Success = true
-		}
-		actions = append(actions, ca)
+		actions = append(actions, cleanupMember(ctx, att, atkTarget, atkRemoveMemberID))
 	}
-	// Delete a specific pipeline
 	if atkCleanupPipeline > 0 {
-		err := att.DeletePipeline(ctx, atkTarget, atkCleanupPipeline)
-		ca := cleanupAction{Action: "delete-pipeline", Target: fmt.Sprintf("%d", atkCleanupPipeline)}
-		if err != nil {
-			ca.Success = false
-			ca.Error = err.Error()
-		} else {
-			ca.Success = true
-		}
-		actions = append(actions, ca)
+		actions = append(actions, cleanupPipeline(ctx, att, atkTarget, atkCleanupPipeline))
 	}
-	// Erase job traces (and optionally delete) recent pipelines
 	if atkCleanupJobs {
-		maxP := atkCleanupJobsMax
-		if maxP <= 0 {
-			maxP = 5
-		}
-		count, err := att.EraseRecentPipelines(ctx, atkTarget, atkCleanupJobsRef, maxP, atkCleanupJobsDelete)
-		verb := "erase-job-traces"
-		if atkCleanupJobsDelete {
-			verb = "erase-and-delete-pipelines"
-		}
-		ca := cleanupAction{Action: verb, Target: fmt.Sprintf("%d pipelines", count)}
-		if err != nil {
-			ca.Success = false
-			ca.Error = err.Error()
-		} else {
-			ca.Success = true
-		}
-		actions = append(actions, ca)
+		actions = append(actions, cleanupJobTraces(ctx, att, atkTarget, atkCleanupJobsRef, atkCleanupJobsMax, atkCleanupJobsDelete))
 	}
+
 	if outputJSON {
 		b, err := json.MarshalIndent(struct {
 			Actions []cleanupAction `json:"actions"`

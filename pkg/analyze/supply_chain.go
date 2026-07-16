@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/mr-pmillz/gogatoz/pkg/pipeline"
+	"github.com/mr-pmillz/gogatoz/pkg/stringutil"
 )
 
 // Finding ID constants for supply chain attack techniques.
@@ -112,7 +113,7 @@ func detectScriptInjectionRisk(doc *pipeline.Document) []Finding {
 					Severity:    severity,
 					Title:       "MR job executes external repo script",
 					Description: desc,
-					Evidence:    truncateEvidence("script="+line, 200),
+					Evidence:    stringutil.TruncateEvidence("script="+line, 200),
 					JobName:     job.Name,
 				})
 				break // one finding per job is sufficient
@@ -240,7 +241,7 @@ func detectCachePoisoningRisk(doc *pipeline.Document) []Finding {
 			Severity:    severity,
 			Title:       "MR job can poison shared cache",
 			Description: desc,
-			Evidence:    truncateEvidence(fmt.Sprintf("cache=%s policy=%s", toJSONString(job.Cache), policy), 200),
+			Evidence:    stringutil.TruncateEvidence(fmt.Sprintf("cache=%s policy=%s", toJSONString(job.Cache), policy), 200),
 			JobName:     job.Name,
 		})
 	}

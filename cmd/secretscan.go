@@ -2,14 +2,12 @@ package cmd
 
 import (
 	"context"
-	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/mr-pmillz/gogatoz/pkg/gitlabx"
 	"github.com/mr-pmillz/gogatoz/pkg/secretscan"
@@ -153,60 +151,15 @@ func init() {
 
 // buildSecretScanClient creates a GitLab client with the global HTTP/TLS options.
 func buildSecretScanClient() (*gitlabx.Client, error) {
-	clOpts := []gitlabx.Option{
-		gitlabx.WithRateLimit(rateRPS, rateBurst),
-		gitlabx.WithRetry(retryMax),
+	opts, err := buildClientOptions()
+	if err != nil {
+		return nil, err
 	}
-	if ua := strings.TrimSpace(userAgent); ua != "" {
-		clOpts = append(clOpts, gitlabx.WithUserAgent(ua))
-	}
-
-	var idleTO, tlsTO, expectTO, reqTO time.Duration
-	for _, pair := range []struct {
-		raw  string
-		dest *time.Duration
-		name string
-	}{
-		{httpIdleTimeout, &idleTO, "http-idle-timeout"},
-		{httpTLSTimeout, &tlsTO, "http-tls-timeout"},
-		{httpExpectTimeout, &expectTO, "http-expect-timeout"},
-		{httpRequestTimeout, &reqTO, "http-req-timeout"},
-	} {
-		if s := strings.TrimSpace(pair.raw); s != "" {
-			d, err := time.ParseDuration(s)
-			if err != nil {
-				return nil, fmt.Errorf("invalid --%s: %w", pair.name, err)
-			}
-			*pair.dest = d
-		}
-	}
-	if httpMaxIdle > 0 || httpMaxIdlePerHost > 0 {
-		clOpts = append(clOpts, gitlabx.WithHTTPPool(httpMaxIdle, httpMaxIdlePerHost))
-	}
-	if idleTO > 0 || tlsTO > 0 || expectTO > 0 || reqTO > 0 {
-		clOpts = append(clOpts, gitlabx.WithHTTPTimeouts(idleTO, tlsTO, expectTO, reqTO))
-	}
-	if insecureSkipTLS {
-		clOpts = append(clOpts, gitlabx.WithInsecureTLS(true))
-	}
-	if p := strings.TrimSpace(caCertPath); p != "" {
-		pem, err := os.ReadFile(p)
-		if err != nil {
-			return nil, fmt.Errorf("read --ca-cert: %w", err)
-		}
-		pool := x509.NewCertPool()
-		if !pool.AppendCertsFromPEM(pem) {
-			return nil, fmt.Errorf("--ca-cert: no valid PEM certificates found")
-		}
-		clOpts = append(clOpts, gitlabx.WithRootCAs(pool))
-	}
-	clOpts = appendSOCKS5Option(clOpts)
-
 	tok := token
 	if noToken {
 		tok = ""
 	}
-	return gitlabx.New(gitlabURL, tok, clOpts...)
+	return gitlabx.New(gitlabURL, tok, opts...)
 }
 
 // openOutputWriter returns a writer for command output and an optional closer.

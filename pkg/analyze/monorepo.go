@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"path"
 	"strings"
+
+	"github.com/mr-pmillz/gogatoz/pkg/stringutil"
 )
 
 const MonorepoCorrelationID = "MONOREPO_CORRELATION"
@@ -65,7 +67,7 @@ func detectMessageCorrelation(ns string, signals []MonorepoSignal) []Finding {
 			Description: "The same commit message appears across " +
 				strings.Join(projects[:min(3, len(projects))], ", ") +
 				" and more. This pattern matches supply chain attacks like Injective (18 packages in one train).",
-			Evidence: truncateEvidence("ns="+ns+" msg="+msg+" count="+fmt.Sprintf("%d", len(projects)), 200),
+			Evidence: stringutil.TruncateEvidence("ns="+ns+" msg="+msg+" count="+fmt.Sprintf("%d", len(projects)), 200),
 			JobName:  ns,
 		})
 	}
@@ -91,7 +93,7 @@ func detectAuthorCorrelation(ns string, signals []MonorepoSignal) []Finding {
 			Description: "Author " + author + " changed CI configuration in " +
 				fmt.Sprintf("%d", len(projects)) + " projects within the same namespace. " +
 				"Coordinated CI changes by a single author are a supply chain compromise indicator.",
-			Evidence: truncateEvidence("ns="+ns+" author="+author+" projects="+strings.Join(projects, ","), 200),
+			Evidence: stringutil.TruncateEvidence("ns="+ns+" author="+author+" projects="+strings.Join(projects, ","), 200),
 			JobName:  ns,
 		})
 	}

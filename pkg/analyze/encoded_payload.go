@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/mr-pmillz/gogatoz/pkg/pipeline"
+	"github.com/mr-pmillz/gogatoz/pkg/stringutil"
 )
 
 var (
@@ -58,7 +59,7 @@ func detectEncodedPayloads(doc *pipeline.Document) []Finding {
 					Severity:    SeverityHigh,
 					Title:       "Base64-decoded content piped to shell",
 					Description: "CI script decodes base64 content and pipes it to a shell for execution. This is a common technique for smuggling malicious payloads through CI pipelines.",
-					Evidence:    truncateEvidence("line="+trimmed, 200),
+					Evidence:    stringutil.TruncateEvidence("line="+trimmed, 200),
 					JobName:     job.Name,
 				})
 				found = true
@@ -71,7 +72,7 @@ func detectEncodedPayloads(doc *pipeline.Document) []Finding {
 					Severity:    SeverityHigh,
 					Title:       "Hex-decoded content piped to shell",
 					Description: "CI script uses xxd to decode hex content and pipe it to a shell. This obfuscates the true payload from code review.",
-					Evidence:    truncateEvidence("line="+trimmed, 200),
+					Evidence:    stringutil.TruncateEvidence("line="+trimmed, 200),
 					JobName:     job.Name,
 				})
 				found = true
@@ -84,7 +85,7 @@ func detectEncodedPayloads(doc *pipeline.Document) []Finding {
 					Severity:    SeverityHigh,
 					Title:       "Hex-escaped echo piped to shell",
 					Description: "CI script uses echo with hex escape sequences piped to a shell. This technique hides executable content from human review.",
-					Evidence:    truncateEvidence("line="+trimmed, 200),
+					Evidence:    stringutil.TruncateEvidence("line="+trimmed, 200),
 					JobName:     job.Name,
 				})
 				found = true
@@ -100,7 +101,7 @@ func detectEncodedPayloads(doc *pipeline.Document) []Finding {
 							Severity:    SeverityHigh,
 							Title:       "Binary payload embedded as base64 (" + magic.name + ")",
 							Description: "CI script contains a base64-encoded " + magic.name + ". Native binaries smuggled in CI scripts are a supply chain attack vector (Jscrambler campaign).",
-							Evidence:    truncateEvidence("magic="+magic.prefix+" line="+trimmed, 200),
+							Evidence:    stringutil.TruncateEvidence("magic="+magic.prefix+" line="+trimmed, 200),
 							JobName:     job.Name,
 						})
 						found = true
@@ -115,7 +116,7 @@ func detectEncodedPayloads(doc *pipeline.Document) []Finding {
 					Severity:    SeverityHigh,
 					Title:       "Large hex-encoded blob in CI script",
 					Description: "CI script contains a large sequence of hex-escaped bytes (10+). This may encode a binary payload or obfuscated command.",
-					Evidence:    truncateEvidence("line="+trimmed, 200),
+					Evidence:    stringutil.TruncateEvidence("line="+trimmed, 200),
 					JobName:     job.Name,
 				})
 				found = true
@@ -127,7 +128,7 @@ func detectEncodedPayloads(doc *pipeline.Document) []Finding {
 					Severity:    SeverityHigh,
 					Title:       "Script makes file executable and runs it inline",
 					Description: "CI script sets execute permission and immediately runs a file. Combined with encoded content, this is a binary drop-and-execute pattern.",
-					Evidence:    truncateEvidence("line="+trimmed, 200),
+					Evidence:    stringutil.TruncateEvidence("line="+trimmed, 200),
 					JobName:     job.Name,
 				})
 				found = true

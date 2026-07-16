@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/mr-pmillz/gogatoz/pkg/pipeline"
+	"github.com/mr-pmillz/gogatoz/pkg/stringutil"
 )
 
 const (
@@ -46,7 +47,7 @@ func detectWorkflowSecretExfil(doc *pipeline.Document) []Finding {
 				Description: "This job has a plausible tooling name but dumps environment secrets to a file " +
 					"and uploads it as a CI artifact. This is the artifact-only exfiltration pattern used by Hades " +
 					"and similar campaigns — no HTTP callback needed.",
-				Evidence: truncateEvidence("job="+job.Name+" dump="+signals.envDumpEvidence, 200),
+				Evidence: stringutil.TruncateEvidence("job="+job.Name+" dump="+signals.envDumpEvidence, 200),
 				JobName:  job.Name,
 			})
 			continue
@@ -59,7 +60,7 @@ func detectWorkflowSecretExfil(doc *pipeline.Document) []Finding {
 				Title:    "Disguised job exfiltrates secrets via HTTP",
 				Description: "This job has a plausible tooling name but dumps environment secrets and sends them " +
 					"to an external endpoint. Disguised exfiltration bypasses casual code review.",
-				Evidence: truncateEvidence("job="+job.Name+" dump="+signals.envDumpEvidence+" exfil="+signals.httpEvidence, 200),
+				Evidence: stringutil.TruncateEvidence("job="+job.Name+" dump="+signals.envDumpEvidence+" exfil="+signals.httpEvidence, 200),
 				JobName:  job.Name,
 			})
 			continue
@@ -72,7 +73,7 @@ func detectWorkflowSecretExfil(doc *pipeline.Document) []Finding {
 				Title:    "Secrets dumped to persistent artifact",
 				Description: "This job dumps environment variables to a file uploaded as an artifact with no expiration. " +
 					"Anyone with project access can download the artifact and extract secrets indefinitely.",
-				Evidence: truncateEvidence("job="+job.Name+" dump="+signals.envDumpEvidence, 200),
+				Evidence: stringutil.TruncateEvidence("job="+job.Name+" dump="+signals.envDumpEvidence, 200),
 				JobName:  job.Name,
 			})
 			continue
@@ -85,7 +86,7 @@ func detectWorkflowSecretExfil(doc *pipeline.Document) []Finding {
 				Title:    "Push-triggered job dumps secrets without review",
 				Description: "This job triggers on push events (not merge requests) and dumps environment secrets. " +
 					"Push-triggered jobs bypass code review, creating a no-review exfiltration window.",
-				Evidence: truncateEvidence("job="+job.Name+" dump="+signals.envDumpEvidence, 200),
+				Evidence: stringutil.TruncateEvidence("job="+job.Name+" dump="+signals.envDumpEvidence, 200),
 				JobName:  job.Name,
 			})
 		}

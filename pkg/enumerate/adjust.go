@@ -6,6 +6,7 @@ import (
 
 	"github.com/mr-pmillz/gogatoz/pkg/analyze"
 	"github.com/mr-pmillz/gogatoz/pkg/pipeline"
+	"github.com/mr-pmillz/gogatoz/pkg/stringutil"
 )
 
 const (
@@ -206,7 +207,7 @@ func addExecutorFindings(r *Result, doc *pipeline.Document) {
 			title = "Job targets runners with docker executor"
 		}
 
-		evidence := truncEvidence(fmt.Sprintf("tags=%v executors=%v", j.Tags, execCounts), 200)
+		evidence := stringutil.TruncateEvidence(fmt.Sprintf("tags=%v executors=%v", j.Tags, execCounts), 200)
 
 		r.Findings = append(r.Findings, analyze.Finding{
 			ID:       "RUNNER_EXECUTOR_RISK",
@@ -216,19 +217,4 @@ func addExecutorFindings(r *Result, doc *pipeline.Document) {
 			Evidence: evidence,
 		})
 	}
-}
-
-// truncEvidence returns s truncated to max runes with ellipsis when needed.
-func truncEvidence(s string, max int) string {
-	if max <= 0 || len(s) <= max {
-		return s
-	}
-	runes := []rune(s)
-	if len(runes) <= max {
-		return s
-	}
-	if max <= 3 {
-		return string(runes[:max])
-	}
-	return string(runes[:max-3]) + "..."
 }

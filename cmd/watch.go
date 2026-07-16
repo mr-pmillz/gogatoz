@@ -45,12 +45,7 @@ campaign matches, critical findings, or other supply chain indicators.`,
 		sigCh := make(chan os.Signal, 1)
 		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 
-		clOpts := []gitlabx.Option{gitlabx.WithRateLimit(rateRPS, rateBurst), gitlabx.WithRetry(retryMax)}
-		if ua := userAgent; strings.TrimSpace(ua) != "" {
-			clOpts = append(clOpts, gitlabx.WithUserAgent(ua))
-		}
-		clOpts = appendSOCKS5Option(clOpts)
-		client, err := gitlabx.New(strings.TrimSpace(gitlabURL), token, clOpts...)
+		client, err := newGitLabClient()
 		if err != nil {
 			return err
 		}

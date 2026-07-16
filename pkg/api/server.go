@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -21,6 +22,7 @@ import (
 type Config struct {
 	BaseURL    string
 	ListenAddr string
+	APIKey     string // if non-empty, all non-healthz requests require X-API-Key header
 }
 
 // Server provides HTTP endpoints that expose GoGatoZ functionality to tools/agents.
@@ -47,24 +49,47 @@ func NewServer(cfg Config) *Server {
 	return s
 }
 
+// apiKeyAuth returns Gin middleware that rejects requests without a valid X-API-Key header.
+func apiKeyAuth(key string) gin.HandlerFunc {
+	keyBytes := []byte(key)
+	return func(c *gin.Context) {
+		got := []byte(c.GetHeader("X-API-Key"))
+		if subtle.ConstantTimeCompare(got, keyBytes) != 1 {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid or missing API key"})
+			return
+		}
+		c.Next()
+	}
+}
+
 func (s *Server) routes() {
 	r := s.engine
 	r.GET("/healthz", func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"ok": true}) })
 
-	r.POST("/auth/validate", s.handleValidate)
+	// Apply API key auth to all non-healthz routes when configured
+	var authed gin.IRoutes = r
+	if key := strings.TrimSpace(s.cfg.APIKey); key != "" {
+		authed = r.Group("", apiKeyAuth(key))
+	}
+
+	authed.POST("/auth/validate", s.handleValidate)
 
 	enum := r.Group("/enumerate")
+	if key := strings.TrimSpace(s.cfg.APIKey); key != "" {
+		enum.Use(apiKeyAuth(key))
+	}
 	{
 		enum.POST("/repo", s.handleEnumerateRepo)
 		enum.POST("/repos", s.handleEnumerateRepos)
 		enum.POST("/org", s.handleEnumerateGroup)
 		enum.POST("/group", s.handleEnumerateGroup)
-		// Streaming NDJSON endpoint: streams results as they are produced
 		enum.POST("/stream", s.handleEnumerateStream)
 	}
 
-	// Search endpoints
 	search := r.Group("/search")
+	if key := strings.TrimSpace(s.cfg.APIKey); key != "" {
+		search.Use(apiKeyAuth(key))
+	}
 	{
 		search.POST("/projects", s.handleSearchProjects)
 	}

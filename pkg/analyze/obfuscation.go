@@ -6,6 +6,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/mr-pmillz/gogatoz/pkg/pipeline"
+	"github.com/mr-pmillz/gogatoz/pkg/stringutil"
 )
 
 var (
@@ -32,7 +33,7 @@ func detectScriptObfuscation(doc *pipeline.Document) []Finding {
 						Severity:    SeverityHigh,
 						Title:       "Script contains obfuscated or invisible characters",
 						Description: "CI/CD script contains suspicious Unicode characters (" + reason + ") that can hide malicious code from human reviewers. This technique has been used in real supply chain attacks (Trojan Source, CVE-2021-42574).",
-						Evidence:    truncateEvidence("line="+line, 200),
+						Evidence:    stringutil.TruncateEvidence("line="+line, 200),
 						JobName:     job.Name,
 					})
 					foundUnicode = true
@@ -46,7 +47,7 @@ func detectScriptObfuscation(doc *pipeline.Document) []Finding {
 						Severity:    SeverityMedium,
 						Title:       "Script hides code with excessive whitespace",
 						Description: "CI/CD script line " + reason + ". This technique was used in the AsyncAPI supply chain attack to push obfuscated code off-screen in diff views.",
-						Evidence:    truncateEvidence("line="+line, 200),
+						Evidence:    stringutil.TruncateEvidence("line="+line, 200),
 						JobName:     job.Name,
 					})
 					foundWhitespace = true
@@ -60,7 +61,7 @@ func detectScriptObfuscation(doc *pipeline.Document) []Finding {
 						Severity:    SeverityMedium,
 						Title:       "Character-code obfuscation in CI script",
 						Description: "CI/CD script constructs strings from character codes (" + reason + "). This technique hides C2 hostnames and URLs from static analysis, as seen in the Injective SDK attack.",
-						Evidence:    truncateEvidence("line="+line, 200),
+						Evidence:    stringutil.TruncateEvidence("line="+line, 200),
 						JobName:     job.Name,
 					})
 					foundCharcode = true

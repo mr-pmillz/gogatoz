@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/mr-pmillz/gogatoz/pkg/pipeline"
+	"github.com/mr-pmillz/gogatoz/pkg/stringutil"
 )
 
 type campaignSignature struct {
@@ -100,7 +101,7 @@ func detectCampaignSignatures(doc *pipeline.Document) []Finding {
 					Severity:    SeverityCritical,
 					Title:       "Matches known campaign: " + campaign.Name,
 					Description: campaign.Description,
-					Evidence:    truncateEvidence("campaign="+campaign.Name+" job="+job.Name, 200),
+					Evidence:    stringutil.TruncateEvidence("campaign="+campaign.Name+" job="+job.Name, 200),
 					JobName:     job.Name,
 				})
 				break

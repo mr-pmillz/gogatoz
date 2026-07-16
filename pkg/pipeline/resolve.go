@@ -20,8 +20,9 @@ import (
 
 // ttl cache for remote includes across calls
 var (
-	remoteCacheMu sync.Mutex
-	remoteCache   = map[string]remoteCacheEntry{}
+	remoteCacheMu  sync.Mutex
+	remoteCache    = map[string]remoteCacheEntry{}
+	cacheEvictOnce sync.Once
 )
 
 const maxRemoteCacheEntries = 1000
@@ -29,6 +30,27 @@ const maxRemoteCacheEntries = 1000
 type remoteCacheEntry struct {
 	doc *Document
 	exp time.Time
+}
+
+// startCacheEvictor lazily starts a background goroutine that removes expired
+// entries every 30 seconds, preventing unbounded memory growth between full-cache events.
+func startCacheEvictor() {
+	cacheEvictOnce.Do(func() {
+		go func() {
+			ticker := time.NewTicker(30 * time.Second)
+			defer ticker.Stop()
+			for range ticker.C {
+				remoteCacheMu.Lock()
+				now := time.Now()
+				for k, e := range remoteCache {
+					if now.After(e.exp) {
+						delete(remoteCache, k)
+					}
+				}
+				remoteCacheMu.Unlock()
+			}
+		}()
+	})
 }
 
 // ClearRemoteCache removes all entries from the cross-call remote include cache.
@@ -298,6 +320,7 @@ func ResolveIncludesWithOptions(ctx context.Context, cl *gitlabx.Client, project
 			}
 			cache[key] = doc
 			if ropts.RemoteCacheTTL > 0 {
+				startCacheEvictor()
 				remoteCacheMu.Lock()
 				if len(remoteCache) >= maxRemoteCacheEntries {
 					now := time.Now()

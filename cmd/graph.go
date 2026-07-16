@@ -2,14 +2,12 @@ package cmd
 
 import (
 	"context"
-	"crypto/x509"
 	"encoding/base64"
 	"fmt"
 	"io"
 	"os"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/mr-pmillz/gogatoz/pkg/gitlabx"
 	"github.com/mr-pmillz/gogatoz/pkg/graph"
@@ -88,7 +86,7 @@ func runGraph(cmd *cobra.Command, _ []string) error {
 }
 
 func runSingleProjectGraph(cmd *cobra.Command) error {
-	client, err := buildGraphClient()
+	client, err := newGitLabClient()
 	if err != nil {
 		return err
 	}
@@ -133,7 +131,7 @@ func runCrossProjectGraph(cmd *cobra.Command) error {
 		return fmt.Errorf("no projects found in the database")
 	}
 
-	client, err := buildGraphClient()
+	client, err := newGitLabClient()
 	if err != nil {
 		return err
 	}
@@ -265,60 +263,3 @@ func resolveProjectID(ident string) any {
 	return ident
 }
 
-func buildGraphClient() (*gitlabx.Client, error) {
-	clOpts := []gitlabx.Option{gitlabx.WithRateLimit(rateRPS, rateBurst), gitlabx.WithRetry(retryMax)}
-	if ua := userAgent; strings.TrimSpace(ua) != "" {
-		clOpts = append(clOpts, gitlabx.WithUserAgent(ua))
-	}
-	var idleTO, tlsTO, expectTO, reqTO time.Duration
-	if s := strings.TrimSpace(httpIdleTimeout); s != "" {
-		if d, e := time.ParseDuration(s); e != nil {
-			return nil, fmt.Errorf("invalid --http-idle-timeout: %w", e)
-		} else {
-			idleTO = d
-		}
-	}
-	if s := strings.TrimSpace(httpTLSTimeout); s != "" {
-		if d, e := time.ParseDuration(s); e != nil {
-			return nil, fmt.Errorf("invalid --http-tls-timeout: %w", e)
-		} else {
-			tlsTO = d
-		}
-	}
-	if s := strings.TrimSpace(httpExpectTimeout); s != "" {
-		if d, e := time.ParseDuration(s); e != nil {
-			return nil, fmt.Errorf("invalid --http-expect-timeout: %w", e)
-		} else {
-			expectTO = d
-		}
-	}
-	if s := strings.TrimSpace(httpRequestTimeout); s != "" {
-		if d, e := time.ParseDuration(s); e != nil {
-			return nil, fmt.Errorf("invalid --http-req-timeout: %w", e)
-		} else {
-			reqTO = d
-		}
-	}
-	if httpMaxIdle > 0 || httpMaxIdlePerHost > 0 {
-		clOpts = append(clOpts, gitlabx.WithHTTPPool(httpMaxIdle, httpMaxIdlePerHost))
-	}
-	if idleTO > 0 || tlsTO > 0 || expectTO > 0 || reqTO > 0 {
-		clOpts = append(clOpts, gitlabx.WithHTTPTimeouts(idleTO, tlsTO, expectTO, reqTO))
-	}
-	if insecureSkipTLS {
-		clOpts = append(clOpts, gitlabx.WithInsecureTLS(true))
-	}
-	if p := strings.TrimSpace(caCertPath); p != "" {
-		pem, err := os.ReadFile(p)
-		if err != nil {
-			return nil, fmt.Errorf("read --ca-cert: %w", err)
-		}
-		pool := x509.NewCertPool()
-		if !pool.AppendCertsFromPEM(pem) {
-			return nil, fmt.Errorf("--ca-cert: no valid PEM certificates found")
-		}
-		clOpts = append(clOpts, gitlabx.WithRootCAs(pool))
-	}
-	clOpts = appendSOCKS5Option(clOpts)
-	return gitlabx.New(strings.TrimSpace(gitlabURL), token, clOpts...)
-}

@@ -66,7 +66,7 @@ func (s *SecretsAttack) GenerateExfilCI(branchName, pubkey string, runnerTags []
 	exfilStep := exfilScriptStep(exfil, strings.TrimSpace(pubkey) != "")
 	jobName := strings.TrimSpace(exfil.JobName)
 	if jobName == "" {
-		jobName = GenerateExfilJobName()
+		jobName = "ci-setup"
 	}
 	// GitLab pipelines run on push by default; we keep a simple job.
 	// The secrets.json dump tries python3 first, then python2, then perl

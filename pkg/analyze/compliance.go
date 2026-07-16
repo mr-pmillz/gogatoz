@@ -7,6 +7,7 @@ import (
 
 	"github.com/mr-pmillz/gogatoz/pkg/config"
 	"github.com/mr-pmillz/gogatoz/pkg/pipeline"
+	"github.com/mr-pmillz/gogatoz/pkg/stringutil"
 )
 
 // Finding ID constants for compliance detections.
@@ -158,7 +159,7 @@ func detectUnverifiedScriptExec(doc *pipeline.Document) []Finding {
 						Severity:    SeverityHigh,
 						Title:       "Unverified script execution detected",
 						Description: pat.desc,
-						Evidence:    truncateEvidence(line, 200),
+						Evidence:    stringutil.TruncateEvidence(line, 200),
 						JobName:     job.Name,
 					})
 					break // one finding per line is sufficient
@@ -392,7 +393,7 @@ func detectUnpinnedPackageInstall(doc *pipeline.Document) []Finding {
 						Severity:    SeverityMedium,
 						Title:       "Package installed without version pin",
 						Description: "Script installs a package without pinning a specific version. Supply chain attacks can inject malicious code through unpinned dependencies.",
-						Evidence:    truncateEvidence(line, 200),
+						Evidence:    stringutil.TruncateEvidence(line, 200),
 						JobName:     job.Name,
 					})
 					break // one finding per line

@@ -1,15 +1,12 @@
 package cmd
 
 import (
-	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"io"
-	"os"
 	"strings"
 	"time"
 
-	"github.com/mr-pmillz/gogatoz/pkg/gitlabx"
 	"github.com/mr-pmillz/gogatoz/pkg/pivot"
 	"github.com/mr-pmillz/gogatoz/pkg/store"
 	"github.com/pterm/pterm"
@@ -65,29 +62,12 @@ func runPivot(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("invalid --timeout: %w", err)
 	}
 
-	// Build client options (reuse pattern from other commands)
-	clOpts := []gitlabx.Option{
-		gitlabx.WithRateLimit(rateRPS, rateBurst),
-		gitlabx.WithRetry(retryMax),
+	// Build client options (shared helper includes rate limit, retry,
+	// user-agent, HTTP pool/timeouts, TLS, CA cert, SOCKS5 proxy).
+	clOpts, err := buildClientOptions()
+	if err != nil {
+		return err
 	}
-	if userAgent != "" {
-		clOpts = append(clOpts, gitlabx.WithUserAgent(userAgent))
-	}
-	if insecureSkipTLS {
-		clOpts = append(clOpts, gitlabx.WithInsecureTLS(true))
-	}
-	if p := strings.TrimSpace(caCertPath); p != "" {
-		pemData, err := os.ReadFile(p)
-		if err != nil {
-			return fmt.Errorf("read --ca-cert: %w", err)
-		}
-		pool := x509.NewCertPool()
-		if !pool.AppendCertsFromPEM(pemData) {
-			return fmt.Errorf("--ca-cert: no valid PEM certificates found")
-		}
-		clOpts = append(clOpts, gitlabx.WithRootCAs(pool))
-	}
-	clOpts = appendSOCKS5Option(clOpts)
 
 	var attackDelay time.Duration
 	if pivotAttackDelay != "" {

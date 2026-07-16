@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/mr-pmillz/gogatoz/pkg/pipeline"
+	"github.com/mr-pmillz/gogatoz/pkg/stringutil"
 )
 
 // GitLab CI variables that are attacker-controllable and unsafe for direct use in scripts
@@ -117,7 +118,7 @@ func detectVariableInjection(doc *pipeline.Document) []Finding {
 						Severity:    severity,
 						Title:       "Unsafe CI variable usage in script",
 						Description: desc,
-						Evidence:    truncateEvidence("variable="+v+" in: "+scriptLine, 200),
+						Evidence:    stringutil.TruncateEvidence("variable="+v+" in: "+scriptLine, 200),
 						JobName:     job.Name,
 					})
 				}
@@ -218,7 +219,7 @@ func detectForkMRRisks(doc *pipeline.Document) []Finding {
 				Severity:    severity,
 				Title:       "MR job lacks fork protection",
 				Description: desc,
-				Evidence:    truncateEvidence("rules="+toJSONString(job.Rules), 200),
+				Evidence:    stringutil.TruncateEvidence("rules="+toJSONString(job.Rules), 200),
 				JobName:     job.Name,
 			})
 		}
@@ -266,7 +267,7 @@ func isLocalScriptExecution(line string) bool {
 	}
 
 	// ./ prefix (but not ./... which is a Go wildcard)
-	if strings.HasPrefix(trimmed, "./") && !strings.HasPrefix(trimmed, "./.") {
+	if strings.HasPrefix(trimmed, "./") && trimmed != "./..." && !strings.HasPrefix(trimmed, "./... ") {
 		return true
 	}
 	// .\ prefix (Windows)
@@ -340,7 +341,7 @@ func detectForkScriptExecution(doc *pipeline.Document) []Finding {
 					Severity:    severity,
 					Title:       "Fork MR can modify executed repo script",
 					Description: desc,
-					Evidence:    truncateEvidence("script="+line, 200),
+					Evidence:    stringutil.TruncateEvidence("script="+line, 200),
 					JobName:     job.Name,
 				})
 				break // one finding per job is sufficient
@@ -448,7 +449,7 @@ func detectAIPromptInjection(doc *pipeline.Document) []Finding {
 			Severity:    severity,
 			Title:       "AI tool in MR-triggered job vulnerable to prompt injection",
 			Description: desc.String(),
-			Evidence:    truncateEvidence("ai_invocation="+aiLine, 200),
+			Evidence:    stringutil.TruncateEvidence("ai_invocation="+aiLine, 200),
 			JobName:     job.Name,
 		})
 	}
@@ -500,7 +501,7 @@ func detectArtifactPoisoning(doc *pipeline.Document) []Finding {
 				Severity:    severity,
 				Title:       "Job consumes artifacts from MR-triggered sources",
 				Description: desc,
-				Evidence:    truncateEvidence("needs="+strings.Join(riskyNeeds, ","), 150),
+				Evidence:    stringutil.TruncateEvidence("needs="+strings.Join(riskyNeeds, ","), 150),
 				JobName:     job.Name,
 			})
 		}

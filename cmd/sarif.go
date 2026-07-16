@@ -131,43 +131,110 @@ func sarifSecuritySeverity(sev analyze.Severity) string {
 	}
 }
 
-// buildSARIF constructs a SARIF 2.1.0 log from analyze findings.
-//
-// Findings with an empty ID are skipped. Each unique finding ID produces one
-// rule entry; every finding produces a result. Rule metadata is sourced from
-// the analyze.LookupFinding registry, falling back to the finding's own
-// Title/Description when the ID is not registered.
-func buildSARIF(findings []analyze.Finding, toolVersion string) sarifLog {
-	type ruleState struct {
-		index      int
-		maxSev     analyze.Severity
-		maxSevRank int
+func sevRank(s analyze.Severity) int {
+	switch s {
+	case analyze.SeverityCritical:
+		return 4
+	case analyze.SeverityHigh:
+		return 3
+	case analyze.SeverityMedium:
+		return 2
+	case analyze.SeverityLow:
+		return 1
+	default:
+		return 0
 	}
-	seenRules := make(map[string]*ruleState)
-	var rules []sarifRule
-	var results []sarifResult
+}
 
-	sevRank := func(s analyze.Severity) int {
-		switch s {
-		case analyze.SeverityCritical:
-			return 4
-		case analyze.SeverityHigh:
-			return 3
-		case analyze.SeverityMedium:
-			return 2
-		case analyze.SeverityLow:
-			return 1
-		default:
-			return 0
-		}
+type sarifRuleState struct {
+	index      int
+	maxSev     analyze.Severity
+	maxSevRank int
+}
+
+func buildRuleTaxonomy(findingID string) ([]string, []sarifRelationship) {
+	tax := analyze.LookupTaxonomy(findingID)
+	if tax == nil {
+		return nil, nil
 	}
+
+	var tags []string
+	var rels []sarifRelationship
+
+	for _, cwe := range tax.CWEs {
+		tags = append(tags, fmt.Sprintf("external/cwe/cwe-%d", cwe.ID))
+	}
+	for _, owasp := range tax.OWASPCICDRefs {
+		tags = append(tags, "external/owasp-cicd/"+owasp.ID)
+	}
+	for _, att := range tax.ATTACKRefs {
+		tags = append(tags, "external/mitre-attack/"+att.ID)
+	}
+	for _, cwe := range tax.CWEs {
+		rels = append(rels, sarifRelationship{
+			Target: sarifRelTarget{
+				ID:            fmt.Sprintf("CWE-%d", cwe.ID),
+				ToolComponent: sarifToolComponentRef{Name: "CWE", Index: 0},
+			},
+			Kinds: []string{"superset"},
+		})
+	}
+	return tags, rels
+}
+
+func newSARIFRule(f analyze.Finding) sarifRule {
+	title := f.Title
+	desc := f.Description
+	sev := f.Severity
+	var helpText string
+	var helpURI string
+
+	if info := analyze.LookupFinding(f.ID); info != nil {
+		title = info.Title
+		desc = info.Description
+		helpText = info.Remediation
+		helpURI = info.DocURL
+	}
+
+	props := map[string]any{
+		"security-severity": sarifSecuritySeverity(sev),
+	}
+
+	tags, rels := buildRuleTaxonomy(f.ID)
+	if len(tags) > 0 {
+		props["tags"] = tags
+	}
+
+	r := sarifRule{
+		ID:               f.ID,
+		Name:             f.ID,
+		ShortDescription: sarifText{Text: title},
+		DefaultConfiguration: sarifConfig{
+			Level: sarifLevel(sev),
+		},
+		Properties:    props,
+		Relationships: rels,
+	}
+	if desc != "" {
+		r.FullDescription = &sarifText{Text: desc}
+	}
+	if helpText != "" {
+		r.Help = &sarifText{Text: helpText}
+	}
+	if helpURI != "" {
+		r.HelpURI = helpURI
+	}
+	return r
+}
+
+func buildSARIFRules(findings []analyze.Finding) []sarifRule {
+	seenRules := make(map[string]*sarifRuleState)
+	var rules []sarifRule
 
 	for _, f := range findings {
 		if f.ID == "" {
 			continue
 		}
-
-		// Build or update the rule for this finding ID.
 		if st, exists := seenRules[f.ID]; exists {
 			if rank := sevRank(f.Severity); rank > st.maxSevRank {
 				st.maxSev = f.Severity
@@ -175,83 +242,25 @@ func buildSARIF(findings []analyze.Finding, toolVersion string) sarifLog {
 				rules[st.index].DefaultConfiguration.Level = sarifLevel(f.Severity)
 				rules[st.index].Properties["security-severity"] = sarifSecuritySeverity(f.Severity)
 			}
-		} else {
-			title := f.Title
-			desc := f.Description
-			sev := f.Severity
-			var helpText string
-			var helpURI string
-
-			if info := analyze.LookupFinding(f.ID); info != nil {
-				title = info.Title
-				desc = info.Description
-				helpText = info.Remediation
-				helpURI = info.DocURL
-			}
-
-			props := map[string]any{
-				"security-severity": sarifSecuritySeverity(sev),
-			}
-
-			var tags []string
-			var rels []sarifRelationship
-
-			if tax := analyze.LookupTaxonomy(f.ID); tax != nil {
-				for _, cwe := range tax.CWEs {
-					tags = append(tags, fmt.Sprintf("external/cwe/cwe-%d", cwe.ID))
-				}
-				for _, owasp := range tax.OWASPCICDRefs {
-					tags = append(tags, "external/owasp-cicd/"+owasp.ID)
-				}
-				for _, att := range tax.ATTACKRefs {
-					tags = append(tags, "external/mitre-attack/"+att.ID)
-				}
-				for _, cwe := range tax.CWEs {
-					rels = append(rels, sarifRelationship{
-						Target: sarifRelTarget{
-							ID:            fmt.Sprintf("CWE-%d", cwe.ID),
-							ToolComponent: sarifToolComponentRef{Name: "CWE", Index: 0},
-						},
-						Kinds: []string{"superset"},
-					})
-				}
-			}
-
-			if len(tags) > 0 {
-				props["tags"] = tags
-			}
-
-			r := sarifRule{
-				ID:               f.ID,
-				Name:             f.ID,
-				ShortDescription: sarifText{Text: title},
-				DefaultConfiguration: sarifConfig{
-					Level: sarifLevel(sev),
-				},
-				Properties:    props,
-				Relationships: rels,
-			}
-			if desc != "" {
-				r.FullDescription = &sarifText{Text: desc}
-			}
-			if helpText != "" {
-				r.Help = &sarifText{Text: helpText}
-			}
-			if helpURI != "" {
-				r.HelpURI = helpURI
-			}
-
-			seenRules[f.ID] = &ruleState{index: len(rules), maxSev: sev, maxSevRank: sevRank(sev)}
-			rules = append(rules, r)
+			continue
 		}
+		seenRules[f.ID] = &sarifRuleState{index: len(rules), maxSev: f.Severity, maxSevRank: sevRank(f.Severity)}
+		rules = append(rules, newSARIFRule(f))
+	}
+	return rules
+}
 
-		// Build the result.
+func buildSARIFResults(findings []analyze.Finding) []sarifResult {
+	var results []sarifResult
+	for _, f := range findings {
+		if f.ID == "" {
+			continue
+		}
 		msg := f.Evidence
 		if msg == "" {
 			msg = f.Description
 		}
-
-		res := sarifResult{
+		results = append(results, sarifResult{
 			RuleID:  f.ID,
 			Level:   sarifLevel(f.Severity),
 			Message: sarifText{Text: msg},
@@ -264,10 +273,20 @@ func buildSARIF(findings []analyze.Finding, toolVersion string) sarifLog {
 					},
 				},
 			},
-		}
-		results = append(results, res)
+		})
 	}
+	return results
+}
 
+// buildSARIF constructs a SARIF 2.1.0 log from analyze findings.
+//
+// Findings with an empty ID are skipped. Each unique finding ID produces one
+// rule entry; every finding produces a result. Rule metadata is sourced from
+// the analyze.LookupFinding registry, falling back to the finding's own
+// Title/Description when the ID is not registered.
+func buildSARIF(findings []analyze.Finding, toolVersion string) sarifLog {
+	rules := buildSARIFRules(findings)
+	results := buildSARIFResults(findings)
 	cweTaxa := buildCWETaxa(rules)
 
 	run := sarifRun{

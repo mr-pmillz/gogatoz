@@ -97,6 +97,61 @@ func TestHealthz(t *testing.T) {
 	}
 }
 
+// --- API Key Auth -----------------------------------------------------------
+
+func TestAPIKeyAuth_RejectsWithoutKey(t *testing.T) {
+	t.Setenv("GITLAB_TOKEN", "")
+	s := NewServer(Config{BaseURL: "https://gitlab.com", APIKey: "test-secret-key"})
+	ts := httptest.NewServer(s.engine)
+	defer ts.Close()
+
+	resp, err := postJSON(ts.URL+"/auth/validate", map[string]any{"token": "x"})
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("expected 401 without API key, got %d", resp.StatusCode)
+	}
+}
+
+func TestAPIKeyAuth_AcceptsValidKey(t *testing.T) {
+	gl := newMockGitLab()
+	defer gl.Close()
+
+	s := NewServer(Config{BaseURL: gl.URL, APIKey: "test-secret-key"})
+	ts := httptest.NewServer(s.engine)
+	defer ts.Close()
+
+	body, _ := json.Marshal(map[string]any{"token": "test-token", "gitlab_url": gl.URL})
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/auth/validate", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", "test-secret-key")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 with valid API key, got %d", resp.StatusCode)
+	}
+}
+
+func TestAPIKeyAuth_HealthzBypassesAuth(t *testing.T) {
+	s := NewServer(Config{BaseURL: "https://gitlab.com", APIKey: "test-secret-key"})
+	ts := httptest.NewServer(s.engine)
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/healthz")
+	if err != nil {
+		t.Fatalf("GET /healthz: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("healthz should bypass auth, got %d", resp.StatusCode)
+	}
+}
+
 // --- /auth/validate ---------------------------------------------------------
 
 func TestHandleValidate_MissingToken(t *testing.T) {

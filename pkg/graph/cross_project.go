@@ -93,28 +93,33 @@ func (g *CrossProjectGraph) addAnnotatedEdge(from, to string, kind EdgeKind, via
 	})
 }
 
+func projectFromMap(m map[string]any) (string, bool) {
+	p, ok := m["project"]
+	if !ok {
+		return "", false
+	}
+	s, ok := p.(string)
+	return s, ok
+}
+
 func extractTriggerProject(trigger map[string]any) string {
-	if p, ok := trigger["project"]; ok {
-		if s, ok := p.(string); ok {
+	if s, ok := projectFromMap(trigger); ok {
+		return s
+	}
+	inc, ok := trigger["include"]
+	if !ok {
+		return ""
+	}
+	if m, ok := inc.(map[string]any); ok {
+		if s, ok := projectFromMap(m); ok {
 			return s
 		}
 	}
-	if inc, ok := trigger["include"]; ok {
-		if m, ok := inc.(map[string]any); ok {
-			if p, ok := m["project"]; ok {
-				if s, ok := p.(string); ok {
+	if items, ok := inc.([]any); ok {
+		for _, item := range items {
+			if m, ok := item.(map[string]any); ok {
+				if s, ok := projectFromMap(m); ok {
 					return s
-				}
-			}
-		}
-		if items, ok := inc.([]any); ok {
-			for _, item := range items {
-				if m, ok := item.(map[string]any); ok {
-					if p, ok := m["project"]; ok {
-						if s, ok := p.(string); ok {
-							return s
-						}
-					}
 				}
 			}
 		}

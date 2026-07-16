@@ -8,6 +8,7 @@ import (
 
 	"github.com/mr-pmillz/gogatoz/pkg/config"
 	"github.com/mr-pmillz/gogatoz/pkg/pipeline"
+	"github.com/mr-pmillz/gogatoz/pkg/stringutil"
 )
 
 // Severity levels for findings.
@@ -184,7 +185,7 @@ func Run(doc *pipeline.Document, opts ...Option) ([]Finding, error) {
 					Severity:    SeverityMedium,
 					Title:       "Job executes remote script content",
 					Description: "Script downloads code from the network and executes it directly (e.g., curl|bash, wget|sh, PowerShell iwr|iex). This is risky unless the source is fully trusted and pinned.",
-					Evidence:    truncateEvidence(line, 160),
+					Evidence:    stringutil.TruncateEvidence(line, 160),
 					JobName:     job.Name,
 				})
 			}
@@ -455,21 +456,6 @@ func isRiskyRemoteScript(s string) bool {
 		}
 	}
 	return false
-}
-
-// truncateEvidence returns s truncated to max runes with ellipsis when needed.
-func truncateEvidence(s string, max int) string {
-	if max <= 0 || len(s) <= max {
-		return s
-	}
-	runes := []rune(s)
-	if len(runes) <= max {
-		return s
-	}
-	if max <= 3 {
-		return string(runes[:max])
-	}
-	return string(runes[:max-3]) + "..."
 }
 
 func jobRulesAllowBroad(rules any) bool {
