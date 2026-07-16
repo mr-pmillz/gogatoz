@@ -6,7 +6,11 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/mr-pmillz/gogatoz/pkg/analyze"
@@ -35,7 +39,12 @@ campaign matches, critical findings, or other supply chain indicators.`,
 			return fmt.Errorf("--target is required")
 		}
 
-		ctx := context.Background()
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		sigCh := make(chan os.Signal, 1)
+		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+
 		clOpts := []gitlabx.Option{gitlabx.WithRateLimit(rateRPS, rateBurst), gitlabx.WithRetry(retryMax)}
 		if ua := userAgent; strings.TrimSpace(ua) != "" {
 			clOpts = append(clOpts, gitlabx.WithUserAgent(ua))
@@ -56,6 +65,7 @@ campaign matches, critical findings, or other supply chain indicators.`,
 			branches[i] = strings.TrimSpace(branches[i])
 		}
 
+		notifyURL := strings.TrimSpace(watchNotify)
 		lastSHA := map[string]string{}
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
@@ -72,18 +82,16 @@ campaign matches, critical findings, or other supply chain indicators.`,
 				if len(findings) == 0 {
 					continue
 				}
+
+				alert := watchAlert{
+					Time:     time.Now().UTC().Format(time.RFC3339),
+					Project:  watchTarget,
+					Branch:   branch,
+					Findings: findings,
+				}
+
 				if watchFormat == "json" {
-					b, _ := json.Marshal(struct {
-						Time     string            `json:"time"`
-						Project  string            `json:"project"`
-						Branch   string            `json:"branch"`
-						Findings []analyze.Finding `json:"findings"`
-					}{
-						Time:     time.Now().UTC().Format(time.RFC3339),
-						Project:  watchTarget,
-						Branch:   branch,
-						Findings: findings,
-					})
+					b, _ := json.Marshal(alert)
 					fmt.Fprintln(cmd.OutOrStdout(), string(b))
 				} else {
 					renderWarning(cmd.OutOrStdout(), fmt.Sprintf("[%s] %s@%s: %d findings detected",
@@ -92,12 +100,19 @@ campaign matches, critical findings, or other supply chain indicators.`,
 						fmt.Fprintf(cmd.OutOrStdout(), "  [%s] %s: %s\n", f.Severity, f.ID, f.Title)
 					}
 				}
+
+				if notifyURL != "" {
+					sendWatchNotification(notifyURL, alert)
+				}
 			}
 		}
 
 		checkOnce()
 		for {
 			select {
+			case <-sigCh:
+				renderInfo(cmd.OutOrStdout(), "Received signal, shutting down")
+				return nil
 			case <-ctx.Done():
 				return nil
 			case <-ticker.C:
@@ -107,10 +122,30 @@ campaign matches, critical findings, or other supply chain indicators.`,
 	},
 }
 
+type watchAlert struct {
+	Time     string            `json:"time"`
+	Project  string            `json:"project"`
+	Branch   string            `json:"branch"`
+	Findings []analyze.Finding `json:"findings"`
+}
+
+func sendWatchNotification(url string, alert watchAlert) {
+	body, err := json.Marshal(alert)
+	if err != nil {
+		return
+	}
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Post(url, "application/json", bytes.NewReader(body)) //nolint:gosec // user-provided webhook URL
+	if err != nil {
+		return
+	}
+	resp.Body.Close()
+}
+
 func pollAndAnalyze(ctx context.Context, client *gitlabx.Client, projectID, branch string, lastSHA map[string]string) []analyze.Finding {
 	key := projectID + ":" + branch
 	f, _, err := client.GL.RepositoryFiles.GetFile(projectID, ".gitlab-ci.yml", &gitlab.GetFileOptions{
-		Ref: new(branch),
+		Ref: gitlab.Ptr(branch),
 	}, gitlab.WithContext(ctx))
 	if err != nil {
 		return nil

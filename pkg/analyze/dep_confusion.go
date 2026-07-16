@@ -75,7 +75,11 @@ func extractPrivatePackageRefs(lines []string) []depRef {
 	for _, line := range lines {
 		if m := npmScopedPkgRe.FindStringSubmatch(line); len(m) >= 2 {
 			pkg := m[1]
-			scope := pkg[:strings.Index(pkg, "/")]
+			parts := strings.SplitN(pkg, "/", 2)
+			if len(parts) < 2 {
+				continue
+			}
+			scope := parts[0]
 			if !wellKnownPublicScopes[scope] && !seen[pkg] {
 				seen[pkg] = true
 				refs = append(refs, depRef{name: pkg, ecosystem: "npm", evidence: strings.TrimSpace(line)})

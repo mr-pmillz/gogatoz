@@ -8,8 +8,8 @@ import (
 )
 
 const (
-	AIConfigCredHarvesterID     = "AI_CONFIG_CREDENTIAL_HARVESTER"
-	AIConfigPromptInjEnhancedID = "AI_CONFIG_PROMPT_INJECTION_ENHANCED"
+	AIConfigCredHarvesterID     = "AI_CONFIG_CREDENTIAL_HARVESTER"      //nolint:gosec // finding ID, not a credential
+	AIConfigPromptInjEnhancedID = "AI_CONFIG_PROMPT_INJECTION_ENHANCED" //nolint:gosec // finding ID, not a credential
 )
 
 var (

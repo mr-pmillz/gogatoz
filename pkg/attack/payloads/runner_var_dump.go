@@ -38,6 +38,8 @@ func generateVarDumpScript(o RunnerVarDumpOptions) string {
 	case "printenv":
 		dumpCmd = fmt.Sprintf(`printenv | sort | grep -iE '%s' || true`, o.Filter)
 	case "strace":
+		// NOTE: strace requires CAP_SYS_PTRACE and is rarely installed on CI images.
+		// -p $$ traces the current shell, not the runner worker. Best-effort only.
 		dumpCmd = fmt.Sprintf(`strace -f -e trace=read -p $$ 2>&1 | grep -iE '%s' | head -200 || true`, o.Filter)
 	default:
 		dumpCmd = fmt.Sprintf(`_DUMP() {

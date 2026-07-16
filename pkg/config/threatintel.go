@@ -18,22 +18,42 @@ type ThreatIntelFeed struct {
 	UpdatedAt      time.Time `json:"updated_at" yaml:"updated_at"`
 }
 
-var (
-	feedCache    *ThreatIntelFeed
-	feedCacheMu  sync.RWMutex
-	feedCacheTTL = 1 * time.Hour
-	feedCacheAt  time.Time
-)
+// ThreatIntelCache provides thread-safe caching for a threat intel feed.
+type ThreatIntelCache struct {
+	mu      sync.RWMutex
+	feed    *ThreatIntelFeed
+	fetchAt time.Time
+	ttl     time.Duration
+}
 
-// LoadThreatIntelFeed fetches a JSON feed from a URL with in-memory caching.
-func LoadThreatIntelFeed(url string) (*ThreatIntelFeed, error) {
-	feedCacheMu.RLock()
-	if feedCache != nil && time.Since(feedCacheAt) < feedCacheTTL {
-		defer feedCacheMu.RUnlock()
-		return feedCache, nil
+// NewThreatIntelCache creates a cache with the given TTL.
+func NewThreatIntelCache(ttl time.Duration) *ThreatIntelCache {
+	return &ThreatIntelCache{ttl: ttl}
+}
+
+// LoadURL fetches a JSON feed from a URL, returning cached data if fresh.
+func (c *ThreatIntelCache) LoadURL(url string) (*ThreatIntelFeed, error) {
+	c.mu.RLock()
+	if c.feed != nil && time.Since(c.fetchAt) < c.ttl {
+		defer c.mu.RUnlock()
+		return c.feed, nil
 	}
-	feedCacheMu.RUnlock()
+	c.mu.RUnlock()
 
+	feed, err := fetchFeed(url)
+	if err != nil {
+		return nil, err
+	}
+
+	c.mu.Lock()
+	c.feed = feed
+	c.fetchAt = time.Now()
+	c.mu.Unlock()
+
+	return feed, nil
+}
+
+func fetchFeed(url string) (*ThreatIntelFeed, error) {
 	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Get(url) //nolint:gosec // user-provided URL for threat intel
 	if err != nil {
@@ -54,13 +74,12 @@ func LoadThreatIntelFeed(url string) (*ThreatIntelFeed, error) {
 		return nil, fmt.Errorf("parse threat intel feed: %w", err)
 	}
 	feed.UpdatedAt = time.Now()
-
-	feedCacheMu.Lock()
-	feedCache = &feed
-	feedCacheAt = time.Now()
-	feedCacheMu.Unlock()
-
 	return &feed, nil
+}
+
+// LoadThreatIntelFeed fetches a JSON feed from a URL (convenience wrapper).
+func LoadThreatIntelFeed(url string) (*ThreatIntelFeed, error) {
+	return fetchFeed(url)
 }
 
 // LoadThreatIntelFile reads a JSON feed from a local file.

@@ -283,8 +283,8 @@ func Build(results []enumerate.Result, opts Options) Report {
 		rep.SupplyChain.OIDCAnomaly
 
 	// Monorepo correlation: extract signals from scan metadata and run cross-project detection.
-	// Uses CISummary as a proxy for CI config presence since enumerate.Result
-	// does not yet carry commit message or author email.
+	// Uses supply-chain finding IDs as a proxy for CI config compromise since
+	// enumerate.Result does not yet carry commit message or author email.
 	var monoSignals []analyze.MonorepoSignal
 	for _, pv := range rep.Projects {
 		hasCIFindings := false

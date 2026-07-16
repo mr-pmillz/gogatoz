@@ -14,6 +14,7 @@ import (
 
 	"github.com/mr-pmillz/gogatoz/pkg/analyze"
 	"github.com/mr-pmillz/gogatoz/pkg/bloodhound"
+	"github.com/mr-pmillz/gogatoz/pkg/config"
 	"github.com/mr-pmillz/gogatoz/pkg/enumerate"
 	enumorg "github.com/mr-pmillz/gogatoz/pkg/enumerate/org"
 	report "github.com/mr-pmillz/gogatoz/pkg/enumerate/report"
@@ -75,6 +76,9 @@ var (
 	enumBadge     bool
 	// bloodhound export
 	enumBHExport string
+	// threat intelligence
+	enumThreatIntelURL  string
+	enumThreatIntelFile string
 )
 
 var enumerateFunc = enumerate.EnumerateProjects
@@ -257,6 +261,20 @@ var enumerateCmd = &cobra.Command{
 		opts.Redact = enumRedact
 		// Pass analysis controls from config file
 		opts.Controls = controlsCfg
+		// Threat intelligence feed
+		if u := strings.TrimSpace(enumThreatIntelURL); u != "" {
+			feed, ferr := config.LoadThreatIntelFeed(u)
+			if ferr != nil {
+				return fmt.Errorf("load threat intel feed: %w", ferr)
+			}
+			opts.ThreatIntel = feed
+		} else if p := strings.TrimSpace(enumThreatIntelFile); p != "" {
+			feed, ferr := config.LoadThreatIntelFile(p)
+			if ferr != nil {
+				return fmt.Errorf("load threat intel file: %w", ferr)
+			}
+			opts.ThreatIntel = feed
+		}
 		if strings.TrimSpace(remoteAllowlist) != "" {
 			parts := strings.SplitSeq(remoteAllowlist, ",")
 			for p := range parts {
@@ -560,6 +578,9 @@ func init() {
 	enumerateCmd.Flags().BoolVar(&enumBadge, "badge", false, "Create/update compliance badge on the project (requires api scope token)")
 	// BloodHound export
 	enumerateCmd.Flags().StringVar(&enumBHExport, "bloodhound-export", "", "Export results as BloodHound-CE OpenGraph ZIP (path to output .zip)")
+	// Threat intelligence
+	enumerateCmd.Flags().StringVar(&enumThreatIntelURL, "threat-intel-url", "", "URL to a JSON threat intelligence feed (blocked domains/IPs)")
+	enumerateCmd.Flags().StringVar(&enumThreatIntelFile, "threat-intel-file", "", "Path to a local JSON threat intelligence feed file")
 }
 
 // loadIdents reads project identifiers from --input according to --input-format (auto|text|json|jsonl).

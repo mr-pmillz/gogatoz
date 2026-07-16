@@ -82,6 +82,7 @@ type Options struct {
 	SkipAnalyze bool                   // when true, parse and summarize but skip analyzer passes
 	Redact      bool                   // when true, mask plaintext secret values in findings (default: unredacted)
 	Controls    *config.ControlsConfig // per-detection configuration (nil = use defaults)
+	ThreatIntel *config.ThreatIntelFeed // external threat intel feed (nil = use hardcoded blocklist only)
 	// Progress, if set, is called once per completed project result.
 	Progress func(Result)
 }
@@ -395,6 +396,9 @@ func scanOne(ctx context.Context, cl *gitlabx.Client, ident string, opts Options
 	}
 	if opts.Controls != nil {
 		aopts = append(aopts, analyze.WithControls(opts.Controls))
+	}
+	if opts.ThreatIntel != nil {
+		aopts = append(aopts, analyze.WithThreatIntel(opts.ThreatIntel))
 	}
 	findings, ferr := analyze.Run(ciDocResolved, aopts...)
 	if ferr != nil && !errors.Is(ferr, analyze.ErrPartial) {
