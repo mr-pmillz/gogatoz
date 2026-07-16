@@ -97,10 +97,3 @@ func detectAuthorCorrelation(ns string, signals []MonorepoSignal) []Finding {
 	}
 	return findings
 }
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}

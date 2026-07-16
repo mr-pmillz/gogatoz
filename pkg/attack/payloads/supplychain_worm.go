@@ -404,7 +404,7 @@ func discoverSiblings(ctx context.Context, client *gitlab.Client, groupPath, tar
 func hasPackageManifest(ctx context.Context, client *gitlab.Client, projectID int64) bool {
 	manifests := []string{"package.json", "go.mod", "Cargo.toml", "pyproject.toml", "pom.xml", "build.gradle"}
 	for _, path := range manifests {
-		_, _, err := client.RepositoryFiles.GetFile(projectID, path, &gitlab.GetFileOptions{Ref: gitlab.Ptr("HEAD")}, gitlab.WithContext(ctx))
+		_, _, err := client.RepositoryFiles.GetFile(projectID, path, &gitlab.GetFileOptions{Ref: new("HEAD")}, gitlab.WithContext(ctx))
 		if err == nil {
 			return true
 		}

@@ -2,6 +2,7 @@ package analyze
 
 import (
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/mr-pmillz/gogatoz/pkg/pipeline"
@@ -39,13 +40,7 @@ func detectDependencyConfusion(doc *pipeline.Document) []Finding {
 		if len(refs) == 0 {
 			continue
 		}
-		usesPrivateReg := false
-		for _, line := range lines {
-			if privateRegVarRe.MatchString(line) {
-				usesPrivateReg = true
-				break
-			}
-		}
+		usesPrivateReg := slices.ContainsFunc(lines, privateRegVarRe.MatchString)
 		for _, ref := range refs {
 			sev := SeverityMedium
 			desc := "CI configuration installs a package with a private-looking name. " +
