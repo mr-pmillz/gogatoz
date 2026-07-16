@@ -65,18 +65,23 @@ Expected: a non-zero number of projects returned.
 
 ### 2c. Enumerate smoke test
 
+Enumerate takes project identifiers via `--input` (file or `-` for stdin), not `--project`.
+Use a project that has a `.gitlab-ci.yml` — `root/vuln` may not have one, use `root/vuln-lotp-npm` or similar.
+
 ```bash
-./gogatoz enumerate --gitlab-url $GL --token $BOT \
-  --project root/vuln --follow-includes --format json 2>/dev/null | jq '.findings | length'
+echo "root/vuln-lotp-npm" | ./gogatoz enumerate --gitlab-url $GL --token $BOT \
+  --input - --follow-includes --format json 2>/dev/null | jq '.[0].findings | length'
 ```
 
-Expected: findings count > 0.
+Expected: findings count > 0. The JSON output is an array of result objects.
 
 ### 2d. Parse smoke test
 
+Parse is a subcommand (`parse dedup`), not a direct pipe target.
+
 ```bash
 ./gogatoz search --gitlab-url $GL --token $BOT --query vuln --format jsonl 2>/dev/null | \
-  ./gogatoz parse --format json 2>/dev/null | jq '.total_projects'
+  ./gogatoz parse dedup --format json 2>/dev/null | jq length
 ```
 
 Expected: a count of deduplicated projects.
@@ -85,12 +90,12 @@ Expected: a count of deduplicated projects.
 
 ```bash
 # SARIF
-./gogatoz enumerate --gitlab-url $GL --token $BOT \
-  --project root/vuln --format sarif 2>/dev/null | jq '.runs[0].results | length'
+echo "root/vuln-lotp-npm" | ./gogatoz enumerate --gitlab-url $GL --token $BOT \
+  --input - --format sarif 2>/dev/null | jq '.runs[0].results | length'
 
 # GLSAST
-./gogatoz enumerate --gitlab-url $GL --token $BOT \
-  --project root/vuln --format glsast 2>/dev/null | jq '.vulnerabilities | length'
+echo "root/vuln-lotp-npm" | ./gogatoz enumerate --gitlab-url $GL --token $BOT \
+  --input - --format glsast 2>/dev/null | jq '.vulnerabilities | length'
 ```
 
 Expected: both produce valid JSON with non-zero results.
@@ -101,18 +106,18 @@ These tests exercise attack, pivot, and advanced features against the CTF lab. E
 
 ### 3a. Secrets Exfiltration (attack --secrets)
 
-Tests the secrets exfil pipeline: CI generation, artifact collection, decryption. Requires a token with `write_repository` scope (e.g., `CTF_DEPLOY_SVC_PAT`).
+Tests the secrets exfil pipeline: CI generation, artifact collection, decryption. Requires a token with `write_repository` scope (e.g., `CTF_DEPLOY_SVC_PAT`). The `--target` flag takes project path or ID.
 
 ```bash
 ./gogatoz attack --gitlab-url $GL --token $DEPLOY \
-  --target root/vuln --secrets --method artifact \
+  --target root/vuln-lotp-npm --secrets --method artifact \
   --branch gogatoz-qa-test
 ```
 
 Verify: command produces exfiltrated variables JSON. Cleanup after:
 ```bash
 ./gogatoz attack --gitlab-url $GL --token $DEPLOY \
-  --target root/vuln --cleanup --branch gogatoz-qa-test
+  --target root/vuln-lotp-npm --cleanup --branch gogatoz-qa-test
 ```
 
 ### 3b. Payload Generation (attack --payload-only)
@@ -138,16 +143,16 @@ Verify: lists runner tags (e.g., `shell_executor`).
 
 ### 3d. Pivot Dry Run (pivot command)
 
-Tests lateral movement planning without executing attacks. Uses `CTF_CICD_BOT_PAT`.
+Tests lateral movement planning without executing attacks. Uses `CTF_CICD_BOT_PAT`. The flag is `-t`/`--target` (repeatable), and `--external-url` (not `--webhook`).
 
 ```bash
 ./gogatoz pivot --gitlab-url $GL --token $BOT \
-  --targets root/ctf-pivot-gateway \
-  --listen :9443 --webhook http://$(hostname -I | awk '{print $1}'):9443 \
+  -t root/ctf-pivot-gateway \
+  --listen :9443 --external-url http://127.0.0.1:9443 \
   --max-depth 1 --dry-run
 ```
 
-Verify: dry-run outputs exploitable target count and planned attacks without executing.
+Verify: dry-run outputs exploitable target count and stats table without executing attacks.
 
 ### 3e. SOCKS5 Proxy (search/enumerate through proxy)
 
@@ -203,14 +208,19 @@ Verify: formats findings as Discord embeds without sending.
 
 ### 3h. BloodHound Export
 
+BloodHound export takes a JSONL file as input (not a project flag). Generate enumerate output first, then export.
+
 ```bash
-./gogatoz bloodhound export --gitlab-url $GL --token $BOT \
-  --project root/vuln --output /tmp/gogatoz-qa-bh.zip 2>/dev/null && \
+echo "root/vuln-lotp-npm" | ./gogatoz enumerate --gitlab-url $GL --token $BOT \
+  --input - --format jsonl 2>/dev/null > /tmp/gogatoz-qa-enum.jsonl
+
+./gogatoz bloodhound export --input /tmp/gogatoz-qa-enum.jsonl \
+  --output /tmp/gogatoz-qa-bh.zip && \
   unzip -l /tmp/gogatoz-qa-bh.zip
-rm -f /tmp/gogatoz-qa-bh.zip
+rm -f /tmp/gogatoz-qa-bh.zip /tmp/gogatoz-qa-enum.jsonl
 ```
 
-Verify: ZIP contains OpenGraph JSON files.
+Verify: ZIP contains OpenGraph JSON file with nodes and edges.
 
 ### 3i. Explain Command
 
