@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 
 	"github.com/mr-pmillz/gogatoz/pkg/analyze"
@@ -16,8 +17,39 @@ type sarifLog struct {
 }
 
 type sarifRun struct {
-	Tool    sarifTool     `json:"tool"`
-	Results []sarifResult `json:"results"`
+	Tool       sarifTool       `json:"tool"`
+	Results    []sarifResult   `json:"results"`
+	Taxonomies []sarifTaxonomy `json:"taxonomies,omitempty"`
+}
+
+type sarifTaxonomy struct {
+	Name           string     `json:"name"`
+	Index          int        `json:"index"`
+	Organization   string     `json:"organization"`
+	ShortDesc      sarifText  `json:"shortDescription"`
+	InformationURI string     `json:"informationUri,omitempty"`
+	Taxa           []sarifTax `json:"taxa,omitempty"`
+}
+
+type sarifTax struct {
+	ID          string    `json:"id"`
+	Name        string    `json:"name,omitempty"`
+	ShortDesc   sarifText `json:"shortDescription"`
+}
+
+type sarifRelationship struct {
+	Target sarifRelTarget `json:"target"`
+	Kinds  []string       `json:"kinds"`
+}
+
+type sarifRelTarget struct {
+	ID            string                `json:"id"`
+	ToolComponent sarifToolComponentRef `json:"toolComponent"`
+}
+
+type sarifToolComponentRef struct {
+	Name  string `json:"name"`
+	Index int    `json:"index"`
 }
 
 type sarifTool struct {
@@ -32,14 +64,15 @@ type sarifDriver struct {
 }
 
 type sarifRule struct {
-	ID                   string         `json:"id"`
-	Name                 string         `json:"name,omitempty"`
-	ShortDescription     sarifText      `json:"shortDescription"`
-	FullDescription      *sarifText     `json:"fullDescription,omitempty"`
-	Help                 *sarifText     `json:"help,omitempty"`
-	HelpURI              string         `json:"helpUri,omitempty"`
-	DefaultConfiguration sarifConfig    `json:"defaultConfiguration"`
-	Properties           map[string]any `json:"properties,omitempty"`
+	ID                   string              `json:"id"`
+	Name                 string              `json:"name,omitempty"`
+	ShortDescription     sarifText           `json:"shortDescription"`
+	FullDescription      *sarifText          `json:"fullDescription,omitempty"`
+	Help                 *sarifText          `json:"help,omitempty"`
+	HelpURI              string              `json:"helpUri,omitempty"`
+	DefaultConfiguration sarifConfig         `json:"defaultConfiguration"`
+	Properties           map[string]any      `json:"properties,omitempty"`
+	Relationships        []sarifRelationship `json:"relationships,omitempty"`
 }
 
 type sarifText struct {
@@ -156,6 +189,38 @@ func buildSARIF(findings []analyze.Finding, toolVersion string) sarifLog {
 				helpURI = info.DocURL
 			}
 
+			props := map[string]any{
+				"security-severity": sarifSecuritySeverity(sev),
+			}
+
+			var tags []string
+			var rels []sarifRelationship
+
+			if tax := analyze.LookupTaxonomy(f.ID); tax != nil {
+				for _, cwe := range tax.CWEs {
+					tags = append(tags, fmt.Sprintf("external/cwe/cwe-%d", cwe.ID))
+				}
+				for _, owasp := range tax.OWASPCICDRefs {
+					tags = append(tags, "external/owasp-cicd/"+owasp.ID)
+				}
+				for _, att := range tax.ATTACKRefs {
+					tags = append(tags, "external/mitre-attack/"+att.ID)
+				}
+				for _, cwe := range tax.CWEs {
+					rels = append(rels, sarifRelationship{
+						Target: sarifRelTarget{
+							ID:            fmt.Sprintf("CWE-%d", cwe.ID),
+							ToolComponent: sarifToolComponentRef{Name: "CWE", Index: 0},
+						},
+						Kinds: []string{"superset"},
+					})
+				}
+			}
+
+			if len(tags) > 0 {
+				props["tags"] = tags
+			}
+
 			r := sarifRule{
 				ID:               f.ID,
 				Name:             f.ID,
@@ -163,9 +228,8 @@ func buildSARIF(findings []analyze.Finding, toolVersion string) sarifLog {
 				DefaultConfiguration: sarifConfig{
 					Level: sarifLevel(sev),
 				},
-				Properties: map[string]any{
-					"security-severity": sarifSecuritySeverity(sev),
-				},
+				Properties:    props,
+				Relationships: rels,
 			}
 			if desc != "" {
 				r.FullDescription = &sarifText{Text: desc}
@@ -204,23 +268,62 @@ func buildSARIF(findings []analyze.Finding, toolVersion string) sarifLog {
 		results = append(results, res)
 	}
 
+	cweTaxa := buildCWETaxa(rules)
+
+	run := sarifRun{
+		Tool: sarifTool{
+			Driver: sarifDriver{
+				Name:           "GoGatoZ",
+				InformationURI: "https://github.com/mr-pmillz/gogatoz",
+				Version:        toolVersion,
+				Rules:          rules,
+			},
+		},
+		Results: results,
+	}
+
+	if len(cweTaxa) > 0 {
+		run.Taxonomies = []sarifTaxonomy{
+			{
+				Name:         "CWE",
+				Index:        0,
+				Organization: "MITRE",
+				ShortDesc:    sarifText{Text: "The MITRE Common Weakness Enumeration"},
+				InformationURI: "https://cwe.mitre.org/",
+				Taxa:         cweTaxa,
+			},
+		}
+	}
+
 	return sarifLog{
 		Schema:  "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/sarif-2.1/schema/sarif-schema-2.1.0.json",
 		Version: "2.1.0",
-		Runs: []sarifRun{
-			{
-				Tool: sarifTool{
-					Driver: sarifDriver{
-						Name:           "GoGatoZ",
-						InformationURI: "https://github.com/mr-pmillz/gogatoz",
-						Version:        toolVersion,
-						Rules:          rules,
-					},
-				},
-				Results: results,
-			},
-		},
+		Runs:    []sarifRun{run},
 	}
+}
+
+// buildCWETaxa extracts unique CWE entries referenced by SARIF rules.
+func buildCWETaxa(rules []sarifRule) []sarifTax {
+	seen := map[string]bool{}
+	var taxa []sarifTax
+
+	for _, r := range rules {
+		for _, rel := range r.Relationships {
+			if rel.Target.ToolComponent.Name != "CWE" {
+				continue
+			}
+			id := rel.Target.ID
+			if seen[id] {
+				continue
+			}
+			seen[id] = true
+			taxa = append(taxa, sarifTax{
+				ID:        id,
+				ShortDesc: sarifText{Text: id},
+			})
+		}
+	}
+	return taxa
 }
 
 // WriteSARIF marshals the findings as a SARIF 2.1.0 JSON document and writes

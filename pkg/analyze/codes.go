@@ -10,6 +10,7 @@ type FindingCodeInfo struct {
 	Description string   `json:"description"`
 	Remediation string   `json:"remediation"`
 	DocURL      string   `json:"docUrl,omitempty"`
+	Taxonomy    Taxonomy `json:"taxonomy,omitempty"`
 }
 
 // findingCodeRegistry maps finding IDs to their metadata.
@@ -390,6 +391,15 @@ var findingCodeRegistry = map[string]FindingCodeInfo{
 		Description: "A CI job dumps environment secrets to a file and uploads it as a CI artifact without requiring an HTTP callback. Anyone with project access can download the artifact and extract secrets. This is the Hades campaign cash-out pattern.",
 		Remediation: "Remove the job and delete any uploaded artifacts containing secrets. Rotate all CI/CD secrets. Set artifact expiration policies (expire_in) on all jobs. Restrict artifact download permissions.",
 	},
+}
+
+func init() {
+	for id, tax := range taxonomyRegistry {
+		if info, ok := findingCodeRegistry[id]; ok {
+			info.Taxonomy = tax
+			findingCodeRegistry[id] = info
+		}
+	}
 }
 
 // LookupFinding returns metadata for a finding code, or nil if unknown.

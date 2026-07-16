@@ -124,6 +124,31 @@ func buildGLSAST(findings []analyze.Finding, toolVersion string, startTime, endT
 
 	vulns := make([]glsastVuln, 0, len(findings))
 	for _, f := range findings {
+		identifiers := []glsastIdentifier{
+			{
+				Type:  "gogatoz_finding_id",
+				Name:  f.ID,
+				Value: f.ID,
+			},
+		}
+
+		if tax := analyze.LookupTaxonomy(f.ID); tax != nil {
+			for _, cwe := range tax.CWEs {
+				identifiers = append(identifiers, glsastIdentifier{
+					Type:  "cwe",
+					Name:  fmt.Sprintf("CWE-%d", cwe.ID),
+					Value: fmt.Sprintf("%d", cwe.ID),
+				})
+			}
+			for _, owasp := range tax.OWASPCICDRefs {
+				identifiers = append(identifiers, glsastIdentifier{
+					Type:  "owasp_cicd",
+					Name:  owasp.ID + ": " + owasp.Name,
+					Value: owasp.ID,
+				})
+			}
+		}
+
 		vulns = append(vulns, glsastVuln{
 			ID:          vulnID(f),
 			Name:        f.Title,
@@ -134,13 +159,7 @@ func buildGLSAST(findings []analyze.Finding, toolVersion string, startTime, endT
 				ID:   "gogatoz",
 				Name: "GoGatoZ",
 			},
-			Identifiers: []glsastIdentifier{
-				{
-					Type:  "gogatoz_finding_id",
-					Name:  f.ID,
-					Value: f.ID,
-				},
-			},
+			Identifiers: identifiers,
 			Location: glsastLocation{
 				File: ".gitlab-ci.yml",
 			},
