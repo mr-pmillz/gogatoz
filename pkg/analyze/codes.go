@@ -392,6 +392,29 @@ var findingCodeRegistry = map[string]FindingCodeInfo{
 		Description: "A CI job dumps environment secrets to a file and uploads it as a CI artifact without requiring an HTTP callback. Anyone with project access can download the artifact and extract secrets. This is the Hades campaign cash-out pattern.",
 		Remediation: "Remove the job and delete any uploaded artifacts containing secrets. Rotate all CI/CD secrets. Set artifact expiration policies (expire_in) on all jobs. Restrict artifact download permissions.",
 	},
+
+	// --- Pages risks ---
+	PagesPublicDeployID: {
+		ID:          PagesPublicDeployID,
+		Severity:    SeverityMedium,
+		Title:       "GitLab Pages deployment detected",
+		Description: "A Pages job deploys static content that may expose internal documentation, credentials, or sensitive data publicly.",
+		Remediation: "Enable Pages access control, review published content, and restrict Pages deployment to protected branches only. See: https://docs.gitlab.com/ee/user/project/pages/pages_access_control.html",
+	},
+	PagesMRDeployRiskID: {
+		ID:          PagesMRDeployRiskID,
+		Severity:    SeverityHigh,
+		Title:       "Pages job can be triggered from MR pipelines",
+		Description: "A GitLab Pages job runs on merge request pipelines, allowing content injection via MR. An attacker can deploy arbitrary content to the project's Pages URL.",
+		Remediation: "Restrict Pages deployment jobs to protected branches only using rules:if with $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH. See: https://docs.gitlab.com/ee/user/project/pages/",
+	},
+	PagesSensitivePathID: {
+		ID:          PagesSensitivePathID,
+		Severity:    SeverityMedium,
+		Title:       "Pages artifacts include potentially sensitive paths",
+		Description: "Pages deployment includes paths that commonly contain sensitive information such as coverage reports, API documentation, or configuration files.",
+		Remediation: "Review Pages artifact paths and exclude directories containing sensitive information (coverage/, docs/api/, config/). Use .gitlab/pages/ or public/ with curated content only.",
+	},
 }
 
 func init() {

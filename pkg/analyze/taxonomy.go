@@ -97,6 +97,7 @@ var (
 	attackT1611     = ATTACKRef{ID: "T1611", Name: "Escape to Host"}
 	attackT1612     = ATTACKRef{ID: "T1612", Name: "Build Image on Host"}
 	attackT1027     = ATTACKRef{ID: "T1027", Name: "Obfuscated Files or Information"}
+	attackT1530     = ATTACKRef{ID: "T1530", Name: "Data from Cloud Storage Object"}
 )
 
 // taxonomyRegistry maps finding IDs to their standard taxonomy references.
@@ -361,6 +362,23 @@ var taxonomyRegistry = map[string]Taxonomy{
 		CWEs:          []CWERef{cwe506},
 		ATTACKRefs:    []ATTACKRef{attackT1195_002},
 		OWASPCICDRefs: []OWASPCICDRef{owaspSec3, owaspSec10},
+	},
+
+	// --- Pages risks ---
+	PagesPublicDeployID: {
+		CWEs:          []CWERef{cwe538},
+		ATTACKRefs:    []ATTACKRef{attackT1530},
+		OWASPCICDRefs: []OWASPCICDRef{owaspSec7},
+	},
+	PagesMRDeployRiskID: {
+		CWEs:          []CWERef{cwe284},
+		ATTACKRefs:    []ATTACKRef{attackT1195_002},
+		OWASPCICDRefs: []OWASPCICDRef{owaspSec3},
+	},
+	PagesSensitivePathID: {
+		CWEs:          []CWERef{cwe538},
+		ATTACKRefs:    []ATTACKRef{attackT1530},
+		OWASPCICDRefs: []OWASPCICDRef{owaspSec7},
 	},
 
 	// --- Dependency confusion ---
