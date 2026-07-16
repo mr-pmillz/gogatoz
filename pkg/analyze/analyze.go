@@ -57,6 +57,7 @@ var ErrPartial = errors.New("partial analysis")
 type runConfig struct {
 	redactSecrets bool
 	controls      *config.ControlsConfig
+	threatIntel   *config.ThreatIntelFeed
 }
 
 // Option configures Run behavior.
@@ -67,6 +68,11 @@ type Option func(*runConfig)
 // By default Run leaves these values unredacted.
 func WithRedactedSecrets() Option {
 	return func(c *runConfig) { c.redactSecrets = true }
+}
+
+// WithThreatIntel merges an external threat intelligence feed into network target detection.
+func WithThreatIntel(feed *config.ThreatIntelFeed) Option {
+	return func(c *runConfig) { c.threatIntel = feed }
 }
 
 // WithControls injects per-detection configuration into the analysis engine.
@@ -325,10 +331,22 @@ func Run(doc *pipeline.Document, opts ...Option) ([]Finding, error) {
 	findings = append(findings, detectEncodedPayloads(doc)...)
 
 	// 27) Suspicious network targets (direct IPs, .onion, C2 infrastructure)
-	findings = append(findings, detectSuspiciousNetworkTargets(doc)...)
+	findings = append(findings, detectSuspiciousNetworkTargets(doc, cfg.threatIntel)...)
 
 	// 28) Campaign signature matching (known supply chain attack patterns)
 	findings = append(findings, detectCampaignSignatures(doc)...)
+
+	// 29) Workflow-as-exfil detection (disguised jobs, artifact-only exfil)
+	findings = append(findings, detectWorkflowSecretExfil(doc)...)
+
+	// 30) Dependency confusion risk (private package names in install commands)
+	findings = append(findings, detectDependencyConfusion(doc)...)
+
+	// 31) AI tool config credential harvester detection
+	findings = append(findings, detectAIConfigHarvesters(doc)...)
+
+	// 32) OIDC provenance anomaly (push-triggered OIDC without branch protection)
+	findings = append(findings, detectOIDCProvenanceAnomaly(doc)...)
 
 	// Filter disabled rules
 	if cfg.controls != nil {

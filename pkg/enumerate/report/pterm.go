@@ -107,6 +107,11 @@ func RenderPTerm(w io.Writer, r Report) error {
 		}
 	}
 
+	// Supply chain risk summary
+	if r.SupplyChain.TotalRisk > 0 {
+		renderSupplyChainSection(w, r.SupplyChain)
+	}
+
 	// Runner, pipeline, and log stats
 	return renderStatsSection(w, r)
 }
@@ -260,4 +265,28 @@ func appendPipelineStats(items []pterm.BulletListItem, pv PipelinesView) []pterm
 		items = append(items, pterm.BulletListItem{Level: 1, Text: fmt.Sprintf("Components: %d", pv.Components)})
 	}
 	return items
+}
+
+func renderSupplyChainSection(w io.Writer, sc SupplyChainView) {
+	var items []pterm.BulletListItem
+	items = append(items, pterm.BulletListItem{Level: 0, Text: pterm.Bold.Sprint("Supply Chain Risk Summary")})
+	add := func(label string, count int) {
+		if count > 0 {
+			items = append(items, pterm.BulletListItem{Level: 1, Text: fmt.Sprintf("%s: %d", label, count)})
+		}
+	}
+	add("Exfiltration findings", sc.ExfilFindings)
+	add("Encoded payloads", sc.EncodedPayloads)
+	add("Campaign matches", sc.CampaignMatches)
+	add("Suspicious network targets", sc.SuspiciousNetwork)
+	add("Obfuscation issues", sc.ObfuscationIssues)
+	add("Weak branch protection", sc.WeakProtection)
+	add("Dependency confusion", sc.DepConfusion)
+	add("AI config risk", sc.AIConfigRisk)
+	add("OIDC provenance anomaly", sc.OIDCAnomaly)
+	items = append(items, pterm.BulletListItem{Level: 1, Text: pterm.Bold.Sprintf("Total risk indicators: %d", sc.TotalRisk)})
+
+	if bl, err := pterm.DefaultBulletList.WithItems(items).Srender(); err == nil {
+		fmt.Fprintln(w, bl)
+	}
 }

@@ -159,14 +159,19 @@ func ValidateToken(ctx context.Context, baseURL, token string, opts ...gitlabx.O
 			GitLabURL: baseURL,
 		}, nil
 	}
+	accessLevel := 0
+	if u.IsAdmin {
+		accessLevel = 50
+	}
 	return &Credential{
-		Token:     token,
-		TokenHash: hashToken(token),
-		TokenType: classifyTokenType(token),
-		IsValid:   true,
-		UserID:    u.ID,
-		Username:  u.Username,
-		GitLabURL: baseURL,
+		Token:       token,
+		TokenHash:   hashToken(token),
+		TokenType:   classifyTokenType(token),
+		IsValid:     true,
+		UserID:      u.ID,
+		Username:    u.Username,
+		GitLabURL:   baseURL,
+		AccessLevel: accessLevel,
 	}, nil
 }
 

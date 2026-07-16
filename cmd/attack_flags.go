@@ -214,6 +214,16 @@ var (
 	atkSigstore        bool
 	atkSigstorePackage string // package name for attestation
 	atkSigstoreVersion string // package version
+	// Dependency confusion mode (publish to public registry with private name)
+	atkDepConfusion          bool
+	atkDepConfusionPackage   string // target private package name
+	atkDepConfusionRegistry  string // public registry URL
+	atkDepConfusionEcosystem string // npm, pip, go
+	atkDepConfusionVersion   string // version to publish (default: 99.0.0)
+	// Runner variable dump mode (bypass masked variable display)
+	atkRunnerVarDump       bool
+	atkRunnerVarDumpMethod string // procfs, printenv, strace
+	atkRunnerVarDumpFilter string // regex filter for variable names
 	// Impersonation
 	atkImpersonateMaintainer bool
 	// Workflow exfil mode (stealthy artifact-based secret exfiltration)
@@ -445,6 +455,16 @@ func init() {
 	attackCmd.Flags().BoolVar(&atkSigstore, "sigstore", false, "Forge Sigstore provenance attestations via CI OIDC tokens")
 	attackCmd.Flags().StringVar(&atkSigstorePackage, "sigstore-package", "", "Package name for the attestation subject")
 	attackCmd.Flags().StringVar(&atkSigstoreVersion, "sigstore-version", "", "Package version for the attestation")
+	// Dependency confusion flags
+	attackCmd.Flags().BoolVar(&atkDepConfusion, "dep-confusion", false, "Publish a package to the public registry with the same name as a private package")
+	attackCmd.Flags().StringVar(&atkDepConfusionPackage, "dep-confusion-package", "", "Target private package name (e.g. @acme/utils)")
+	attackCmd.Flags().StringVar(&atkDepConfusionRegistry, "dep-confusion-registry", "", "Public registry URL")
+	attackCmd.Flags().StringVar(&atkDepConfusionEcosystem, "dep-confusion-ecosystem", "npm", "Package ecosystem: npm, pip, go")
+	attackCmd.Flags().StringVar(&atkDepConfusionVersion, "dep-confusion-version", "99.0.0", "Version to publish (should be higher than internal)")
+	// Runner variable dump flags
+	attackCmd.Flags().BoolVar(&atkRunnerVarDump, "runner-var-dump", false, "Dump runner environment variables bypassing masked display")
+	attackCmd.Flags().StringVar(&atkRunnerVarDumpMethod, "runner-var-dump-method", "procfs", "Dump method: procfs, printenv, strace")
+	attackCmd.Flags().StringVar(&atkRunnerVarDumpFilter, "runner-var-dump-filter", "", "Regex filter for variable names")
 	// Impersonation flag
 	attackCmd.Flags().BoolVar(&atkImpersonateMaintainer, "impersonate-maintainer", false, "Auto-populate git author from a project maintainer (stealth)")
 	// Workflow exfil mode flags

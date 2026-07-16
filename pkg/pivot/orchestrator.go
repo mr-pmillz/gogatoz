@@ -29,6 +29,7 @@ type PivotStats struct {
 	MaxDepthReached    int           `json:"max_depth_reached"`
 	Duration           time.Duration `json:"duration_ms"`
 	ExploitableTargets int           `json:"exploitable_targets"`
+	Correlations       []Correlation `json:"correlations,omitempty"`
 }
 
 // ExfilEntry represents a single exfiltrated key/value pair with source context.
@@ -134,11 +135,13 @@ func (o *Orchestrator) Run(ctx context.Context) (*PivotStats, error) {
 		}
 	}
 	o.stats.CredentialsValid = validCount
+	o.stats.Correlations = CorrelateCredentials(o.creds)
 	o.stats.Duration = time.Since(start)
 	return &o.stats, nil
 }
 
 func (o *Orchestrator) processDepth(ctx context.Context, credQueue []*Credential, pubPEM string, depth int, totalAttacked *int32) []*Credential {
+	SortByAccessLevel(credQueue)
 	var nextQueue []*Credential
 	for _, cred := range credQueue {
 		if ctx.Err() != nil {

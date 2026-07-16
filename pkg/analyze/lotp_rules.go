@@ -144,6 +144,54 @@ func detectOIDCTokenMRRisk(doc *pipeline.Document) []Finding {
 	return findings
 }
 
+const OIDCProvenanceAnomalyID = "OIDC_PROVENANCE_ANOMALY"
+
+// detectOIDCProvenanceAnomaly flags push/broad-triggered jobs with OIDC tokens
+// where branch protection is absent. Unlike OIDC_TOKEN_MR_RISK (MR path), this
+// detects the push-triggered OIDC path where anyone with push access can forge
+// valid provenance without code review.
+func detectOIDCProvenanceAnomaly(doc *pipeline.Document) []Finding {
+	var findings []Finding
+	if doc == nil {
+		return findings
+	}
+	for _, job := range doc.Jobs {
+		if !jobHasIDTokens(doc, job.Name) {
+			continue
+		}
+		if jobTriggersOnMR(job.Rules) || triggersOnMRViaOnly(job.Only) {
+			continue
+		}
+		hasForkProtection := false
+		if job.Rules != nil {
+			text := strings.ToLower(toJSONString(job.Rules))
+			hasForkProtection = strings.Contains(text, "ci_commit_ref_protected") ||
+				strings.Contains(text, "ci_project_namespace") ||
+				strings.Contains(text, "protected")
+		}
+		if hasForkProtection {
+			continue
+		}
+		sev := SeverityMedium
+		desc := "Job defines id_tokens and runs on push/broad triggers without branch protection rules. " +
+			"Anyone with push access can forge valid OIDC provenance by pushing a commit. " +
+			"This is the AsyncAPI attack pattern — valid cloud credentials from an unreviewed commit."
+		if job.Rules == nil {
+			sev = SeverityHigh
+			desc += " No rules defined — job runs on all pipeline sources."
+		}
+		findings = append(findings, Finding{
+			ID:          OIDCProvenanceAnomalyID,
+			Severity:    sev,
+			Title:       "OIDC provenance forgeable without branch protection",
+			Description: desc,
+			Evidence:    truncateEvidence("job="+job.Name+" has id_tokens, no protected branch gate", 200),
+			JobName:     job.Name,
+		})
+	}
+	return findings
+}
+
 // detectTriggerChainRisk flags MR-triggered jobs that launch downstream pipelines
 // via trigger:. Fork authors can use this to trigger cross-project pipelines, and
 // with strategy:depend the parent waits for the downstream — exposing timing and

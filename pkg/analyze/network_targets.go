@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/mr-pmillz/gogatoz/pkg/config"
 	"github.com/mr-pmillz/gogatoz/pkg/pipeline"
 )
 
@@ -44,10 +45,15 @@ var (
 )
 
 //nolint:gocognit // complexity from distinct domain/IP checks, each straightforward
-func detectSuspiciousNetworkTargets(doc *pipeline.Document) []Finding {
+func detectSuspiciousNetworkTargets(doc *pipeline.Document, feed *config.ThreatIntelFeed) []Finding {
 	var findings []Finding
 	if doc == nil {
 		return findings
+	}
+
+	domains := suspiciousDomains
+	if feed != nil {
+		domains = append(domains, feed.BlockedDomains...)
 	}
 
 	for _, job := range doc.Jobs {
@@ -64,7 +70,7 @@ func detectSuspiciousNetworkTargets(doc *pipeline.Document) []Finding {
 				continue
 			}
 
-			for _, domain := range suspiciousDomains {
+			for _, domain := range domains {
 				if strings.Contains(lower, strings.ToLower(domain)) {
 					findings = append(findings, Finding{
 						ID:          SuspiciousNetworkID,

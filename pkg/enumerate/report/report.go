@@ -99,6 +99,9 @@ type SupplyChainView struct {
 	SuspiciousNetwork int `json:"suspicious_network"`
 	ObfuscationIssues int `json:"obfuscation_issues"`
 	WeakProtection    int `json:"weak_protection"`
+	DepConfusion      int `json:"dep_confusion"`
+	AIConfigRisk      int `json:"ai_config_risk"`
+	OIDCAnomaly       int `json:"oidc_anomaly"`
 	TotalRisk         int `json:"total_risk"`
 }
 
@@ -250,7 +253,8 @@ func Build(results []enumerate.Result, opts Options) Report {
 	for _, pv := range rep.Projects {
 		for _, f := range pv.Project.Findings {
 			switch f.ID {
-			case "SECRET_EXFIL_HTTP", "SECRET_EXFIL_ARTIFACT":
+			case "SECRET_EXFIL_HTTP", "SECRET_EXFIL_ARTIFACT",
+				"WORKFLOW_SECRET_EXFIL", "WORKFLOW_ARTIFACT_EXFIL":
 				rep.SupplyChain.ExfilFindings++
 			case "SCRIPT_ENCODED_PAYLOAD":
 				rep.SupplyChain.EncodedPayloads++
@@ -262,12 +266,43 @@ func Build(results []enumerate.Result, opts Options) Report {
 				rep.SupplyChain.ObfuscationIssues++
 			case "WEAK_BRANCH_PROTECTION":
 				rep.SupplyChain.WeakProtection++
+			case "DEP_CONFUSION_RISK":
+				rep.SupplyChain.DepConfusion++
+			case "AI_CONFIG_CREDENTIAL_HARVESTER", "AI_CONFIG_PROMPT_INJECTION_ENHANCED":
+				rep.SupplyChain.AIConfigRisk++
+			case "OIDC_PROVENANCE_ANOMALY":
+				rep.SupplyChain.OIDCAnomaly++
 			}
 		}
 	}
 	rep.SupplyChain.TotalRisk = rep.SupplyChain.ExfilFindings + rep.SupplyChain.EncodedPayloads +
 		rep.SupplyChain.CampaignMatches + rep.SupplyChain.SuspiciousNetwork +
-		rep.SupplyChain.ObfuscationIssues + rep.SupplyChain.WeakProtection
+		rep.SupplyChain.ObfuscationIssues + rep.SupplyChain.WeakProtection +
+		rep.SupplyChain.DepConfusion + rep.SupplyChain.AIConfigRisk +
+		rep.SupplyChain.OIDCAnomaly
+
+	// Monorepo correlation: extract signals from scan metadata and run cross-project detection.
+	// Uses CISummary as a proxy for CI config presence since enumerate.Result
+	// does not yet carry commit message or author email.
+	var monoSignals []analyze.MonorepoSignal
+	for _, pv := range rep.Projects {
+		hasCIFindings := false
+		for _, f := range pv.Project.Findings {
+			if f.ID == "CAMPAIGN_MATCH" || f.ID == "WORKFLOW_SECRET_EXFIL" || f.ID == "WORKFLOW_ARTIFACT_EXFIL" {
+				hasCIFindings = true
+				break
+			}
+		}
+		monoSignals = append(monoSignals, analyze.MonorepoSignal{
+			ProjectPath:     pv.Project.ProjectPathWithNS,
+			CIConfigChanged: hasCIFindings,
+		})
+	}
+	if monoFindings := analyze.DetectMonorepoCorrelation(monoSignals); len(monoFindings) > 0 {
+		for range monoFindings {
+			rep.SupplyChain.TotalRisk++
+		}
+	}
 
 	return rep
 }

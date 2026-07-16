@@ -145,7 +145,12 @@ var findingCodeRegistry = map[string]FindingCodeInfo{
 		Severity:    SeverityCritical,
 		Title:       "Job targets runners with risky executor type",
 		Description: "Job targets runners using a shell or docker executor, which carries elevated risk of host compromise or container escape.",
-		Remediation: "Use docker or kubernetes executors with non-privileged configuration; restrict shell executors to isolated hosts with protected branch triggers. See: https://docs.gitlab.com/runner/executors/",
+		Remediation: "Playbook: (1) Identify which runners use shell executors via GitLab Admin > Runners. " +
+			"(2) Migrate shell runners to Docker or Kubernetes executors on isolated hosts. " +
+			"(3) If shell runners are required, restrict them to protected branches only. " +
+			"(4) Enable runner tags to prevent MR-triggered jobs from targeting shell runners. " +
+			"(5) Audit the runner host for signs of compromise (unauthorized processes, modified crontabs). " +
+			"See: https://docs.gitlab.com/runner/executors/",
 	},
 	ScriptInjectionRiskID: {
 		ID:          ScriptInjectionRiskID,
@@ -201,7 +206,11 @@ var findingCodeRegistry = map[string]FindingCodeInfo{
 		Severity:    SeverityCritical,
 		Title:       "CI debug trace enabled — secrets exposed in job logs",
 		Description: "CI_DEBUG_TRACE or CI_DEBUG_SERVICES is enabled, which causes GitLab Runner to print every environment variable — including masked secrets — to the job log.",
-		Remediation: "Remove CI_DEBUG_TRACE and CI_DEBUG_SERVICES from pipeline variables. If debugging is needed, use targeted echo statements instead of full trace mode. See: https://docs.gitlab.com/ee/ci/variables/predefined_variables.html",
+		Remediation: "Playbook: (1) Remove CI_DEBUG_TRACE and CI_DEBUG_SERVICES from project and group CI/CD variables. " +
+			"(2) Check pipeline logs for any runs with debug trace enabled — masked secrets are visible in those logs. " +
+			"(3) Rotate any secrets that were visible in debug trace logs. " +
+			"(4) Use targeted echo statements for debugging instead of full trace mode. " +
+			"See: https://docs.gitlab.com/ee/ci/variables/predefined_variables.html",
 	},
 	UnverifiedScriptExecID: {
 		ID:          UnverifiedScriptExecID,
@@ -278,7 +287,12 @@ var findingCodeRegistry = map[string]FindingCodeInfo{
 		Severity:    SeverityCritical,
 		Title:       "Environment secrets exfiltrated via HTTP",
 		Description: "CI/CD job dumps environment variables (printenv, env, /proc/self/environ) and sends them to an external endpoint. This is a hallmark of supply chain exfiltration campaigns (Hades, GhostAction, Megalodon).",
-		Remediation: "Remove the environment dump and HTTP POST from the CI script. Audit project CI variables for exposure. Rotate any secrets that may have been exfiltrated. Use protected branches and require MR approval for CI changes.",
+		Remediation: "Playbook: (1) Remove the environment dump and HTTP POST from the CI script immediately. " +
+			"(2) Rotate ALL CI/CD secrets — project variables, group variables, and any tokens referenced in the job. " +
+			"(3) Audit git log for the commit that introduced this job and investigate the author. " +
+			"(4) Check the target URL/IP for prior exfiltrated data if reachable. " +
+			"(5) Enable protected branches and require MR approval for .gitlab-ci.yml changes. " +
+			"(6) Review pipeline execution history for successful runs of this job.",
 	},
 	SecretExfilArtifactID: {
 		ID:          SecretExfilArtifactID,
@@ -320,7 +334,61 @@ var findingCodeRegistry = map[string]FindingCodeInfo{
 		Severity:    SeverityCritical,
 		Title:       "CI config matches known supply chain attack campaign",
 		Description: "CI/CD configuration matches the signature of a known supply chain attack campaign. This indicates the pipeline may have been compromised using techniques from documented attacks.",
-		Remediation: "Immediately investigate the CI configuration for unauthorized changes. Compare with the last known-good version in git history. Rotate all CI/CD secrets. Review recent commits for suspicious authors or timing.",
+		Remediation: "Playbook: (1) FREEZE pipeline execution on this project immediately. " +
+			"(2) Run git diff against the last known-good CI config to identify unauthorized changes. " +
+			"(3) Rotate ALL CI/CD secrets (project tokens, group tokens, deploy keys). " +
+			"(4) Check recent pipeline logs for evidence of data exfiltration or credential harvesting. " +
+			"(5) Review the commit author and check for account compromise indicators. " +
+			"(6) Notify your security team — this matches a known attack campaign signature.",
+	},
+	OIDCProvenanceAnomalyID: {
+		ID:          OIDCProvenanceAnomalyID,
+		Severity:    SeverityMedium,
+		Title:       "OIDC provenance forgeable without branch protection",
+		Description: "Push/broad-triggered job with id_tokens lacks branch protection rules. Anyone with push access can forge valid OIDC provenance to authenticate against cloud providers.",
+		Remediation: "Add rules:if gates that check $CI_COMMIT_REF_PROTECTED or restrict id_tokens jobs to protected branches only. Enable branch protection with required merge request approvals.",
+	},
+	AIConfigCredHarvesterID: {
+		ID:          AIConfigCredHarvesterID,
+		Severity:    SeverityMedium,
+		Title:       "AI tool config credential harvester",
+		Description: "CI job creates or modifies an AI tool configuration file (.cursorrules, copilot-instructions.md, etc.) that reads credential paths. This is the Miasma attack pattern — credential harvesters disguised as AI configs.",
+		Remediation: "Remove the suspicious AI config file. Audit repo for unauthorized .cursorrules, copilot-instructions.md, or similar files. Review commit history for when the file was introduced.",
+	},
+	AIConfigPromptInjEnhancedID: {
+		ID:          AIConfigPromptInjEnhancedID,
+		Severity:    SeverityMedium,
+		Title:       "AI tool config with external HTTP requests",
+		Description: "CI job creates or modifies an AI tool configuration file that includes HTTP request patterns, enabling exfiltration of code context and developer environment data.",
+		Remediation: "Remove HTTP-calling AI config files. Use .gitignore to prevent AI config files from being committed. Review and pin AI tool configurations via project policy.",
+	},
+	MonorepoCorrelationID: {
+		ID:          MonorepoCorrelationID,
+		Severity:    SeverityHigh,
+		Title:       "Monorepo coordinated compromise indicator",
+		Description: "Multiple projects in the same namespace show coordinated suspicious activity — identical commit messages, same author modifying CI configs, or synchronized version bumps. This pattern matches known supply chain campaigns (Injective, Hades).",
+		Remediation: "Investigate the flagged commits across all affected projects. Compare CI configs with last known-good versions. Check if the author account was compromised. Rotate CI/CD secrets in all affected projects.",
+	},
+	DepConfusionRiskID: {
+		ID:          DepConfusionRiskID,
+		Severity:    SeverityHigh,
+		Title:       "Dependency confusion risk detected",
+		Description: "CI configuration installs packages with private-looking names (internal scopes, corp domains). An attacker can register the same name on the public registry with a higher version to hijack dependency resolution.",
+		Remediation: "Pin packages to your private registry exclusively. Use npm scope registry config, pip --index-url, or GOPROXY=direct. Claim your namespace on public registries as a defensive measure. Enable package verification/signing.",
+	},
+	WorkflowSecretExfilID: {
+		ID:          WorkflowSecretExfilID,
+		Severity:    SeverityCritical,
+		Title:       "Workflow secret exfiltration detected",
+		Description: "A CI job dumps environment secrets and exfiltrates them via HTTP or operates in a push-triggered context that bypasses code review. Disguised job names mask the exfiltration from casual review.",
+		Remediation: "Remove or disable the suspicious job immediately. Rotate all CI/CD secrets. Enable protected branches and require merge request approval for CI configuration changes. Audit git history for the commit that introduced this job.",
+	},
+	WorkflowArtifactExfilID: {
+		ID:          WorkflowArtifactExfilID,
+		Severity:    SeverityCritical,
+		Title:       "Workflow artifact-based secret exfiltration detected",
+		Description: "A CI job dumps environment secrets to a file and uploads it as a CI artifact without requiring an HTTP callback. Anyone with project access can download the artifact and extract secrets. This is the Hades campaign cash-out pattern.",
+		Remediation: "Remove the job and delete any uploaded artifacts containing secrets. Rotate all CI/CD secrets. Set artifact expiration policies (expire_in) on all jobs. Restrict artifact download permissions.",
 	},
 }
 

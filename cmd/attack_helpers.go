@@ -84,6 +84,8 @@ func attackModeFlags() []struct {
 		{&atkWorkflowExfil, "--workflow-exfil"},
 		{&atkCommitPrefix, "--commit-prefix"},
 		{&atkReleaseTamperPipeline, "--release-tamper-pipeline"},
+		{&atkDepConfusion, "--dep-confusion"},
+		{&atkRunnerVarDump, "--runner-var-dump"},
 	}
 }
 
