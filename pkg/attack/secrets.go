@@ -153,4 +153,3 @@ func (s *SecretsAttack) RunExfil(ctx context.Context, projectID any, branch, pub
 	}
 	return url, exfil.JobName, err
 }
-
