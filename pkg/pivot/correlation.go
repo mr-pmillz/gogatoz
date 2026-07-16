@@ -2,10 +2,10 @@ package pivot
 
 // Correlation represents a token found across multiple projects.
 type Correlation struct {
-	TokenHash    string  `json:"token_hash"`
-	ProjectIDs   []int64 `json:"project_ids"`
-	TokenType    string  `json:"token_type"`
-	SharedCount  int     `json:"shared_count"`
+	TokenHash   string  `json:"token_hash"`
+	ProjectIDs  []int64 `json:"project_ids"`
+	TokenType   string  `json:"token_type"`
+	SharedCount int     `json:"shared_count"`
 }
 
 // CorrelateCredentials identifies tokens that appear in multiple projects,

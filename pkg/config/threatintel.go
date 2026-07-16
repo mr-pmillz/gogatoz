@@ -19,8 +19,8 @@ type ThreatIntelFeed struct {
 }
 
 var (
-	feedCache   *ThreatIntelFeed
-	feedCacheMu sync.RWMutex
+	feedCache    *ThreatIntelFeed
+	feedCacheMu  sync.RWMutex
 	feedCacheTTL = 1 * time.Hour
 	feedCacheAt  time.Time
 )

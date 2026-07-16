@@ -117,4 +117,3 @@ func TestWorkflowExfil_ToJSONSecrets(t *testing.T) {
 		t.Fatalf("expected %s for toJSON(secrets), got: %v", WorkflowArtifactExfilID, findingIDs(findings))
 	}
 }
-

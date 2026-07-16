@@ -74,9 +74,9 @@ campaign matches, critical findings, or other supply chain indicators.`,
 				}
 				if watchFormat == "json" {
 					b, _ := json.Marshal(struct {
-						Time     string           `json:"time"`
-						Project  string           `json:"project"`
-						Branch   string           `json:"branch"`
+						Time     string            `json:"time"`
+						Project  string            `json:"project"`
+						Branch   string            `json:"branch"`
 						Findings []analyze.Finding `json:"findings"`
 					}{
 						Time:     time.Now().UTC().Format(time.RFC3339),
