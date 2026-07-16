@@ -104,7 +104,7 @@ func Run(ctx context.Context, cl *gitlabx.Client, token string, opts Options) ([
 
 	wg.Add(opts.Concurrency)
 	for i := 0; i < opts.Concurrency; i++ {
-		go func() {
+		go func(ctx context.Context) {
 			defer wg.Done()
 			for j := range jobs {
 				res := scanOneProject(ctx, j.project, scanners, token, opts)
@@ -115,7 +115,7 @@ func Run(ctx context.Context, cl *gitlabx.Client, token string, opts Options) ([
 					opts.Progress(res)
 				}
 			}
-		}()
+		}(ctx)
 	}
 
 	for _, p := range projects {

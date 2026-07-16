@@ -499,6 +499,10 @@ var enumerateCmd = &cobra.Command{
 			}
 			return nil
 		}
+		// CSV format
+		if fmtSel == fmtCSV {
+			return report.RenderCSV(w, results)
+		}
 		// SARIF format
 		if fmtSel == fmtSARIF {
 			return WriteSARIF(w, collectFindings(results), version)
@@ -567,7 +571,7 @@ func init() {
 	enumerateCmd.Flags().IntVar(&maxRefs, "max-refs", 0, "Maximum number of refs to scan per project (0 = all provided)")
 	// Output controls
 	enumerateCmd.Flags().BoolVar(&enumFilterFP, "filter-false-positives", false, "Automatically identify and mark common false positive patterns")
-	enumerateCmd.Flags().StringVar(&enumFormat, "format", "", "Output format: text|json|jsonl|html|sarif|glsast (default respects --json)")
+	enumerateCmd.Flags().StringVar(&enumFormat, "format", "", "Output format: text|json|jsonl|csv|html|sarif|glsast (default respects --json)")
 	enumerateCmd.Flags().StringVar(&enumOutputPath, "output", "", "Write output to file (default: stdout)")
 	enumerateCmd.Flags().StringVar(&sarifOutputPath, "sarif-output", "", "Write SARIF 2.1.0 report to file (in addition to primary output)")
 	enumerateCmd.Flags().StringVar(&glsastOutputPath, "glsast-output", "", "Write GitLab SAST report (gl-sast-report.json) to file (in addition to primary output)")
