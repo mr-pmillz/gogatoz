@@ -221,14 +221,18 @@ func detectTriggerChainRisk(doc *pipeline.Document) []Finding {
 		}
 
 		evid := fmt.Sprintf("trigger=%v strategy=%s", job.Trigger, strategy)
-		findings = append(findings, Finding{
+		f := Finding{
 			ID:          "TRIGGER_CHAIN_RISK",
 			Severity:    sev,
 			Title:       "Downstream trigger in MR-triggered job",
 			Description: desc,
 			Evidence:    stringutil.TruncateEvidence(evid, 200),
 			JobName:     job.Name,
-		})
+		}
+		if proj, ok := job.Trigger["project"].(string); ok && proj != "" {
+			f.Deps = []Dependency{{Kind: "trigger", Path: proj}}
+		}
+		findings = append(findings, f)
 	}
 	return findings
 }

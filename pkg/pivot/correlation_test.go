@@ -5,7 +5,9 @@ import "testing"
 func TestCorrelateCredentials_SharedToken(t *testing.T) {
 	store := NewCredentialStore()
 	store.Add(&Credential{Token: "glpat-abc123def456ghij", TokenHash: "hash1", TokenType: "pat"})
-	store.ProjectsByToken["hash1"] = []int64{100, 200, 300}
+	store.RecordTokenProject("hash1", 100)
+	store.RecordTokenProject("hash1", 200)
+	store.RecordTokenProject("hash1", 300)
 
 	corrs := CorrelateCredentials(store)
 	if len(corrs) != 1 {
@@ -22,7 +24,7 @@ func TestCorrelateCredentials_SharedToken(t *testing.T) {
 func TestCorrelateCredentials_SingleProject(t *testing.T) {
 	store := NewCredentialStore()
 	store.Add(&Credential{Token: "glpat-abc123def456ghij", TokenHash: "hash1", TokenType: "pat"})
-	store.ProjectsByToken["hash1"] = []int64{100}
+	store.RecordTokenProject("hash1", 100)
 
 	corrs := CorrelateCredentials(store)
 	if len(corrs) != 0 {

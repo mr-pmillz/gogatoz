@@ -2,6 +2,7 @@ package enumerate
 
 import (
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/mr-pmillz/gogatoz/pkg/analyze"
@@ -147,9 +148,10 @@ func bumpSeverity(s analyze.Severity) analyze.Severity {
 		return analyze.SeverityMedium
 	case analyze.SeverityMedium:
 		return analyze.SeverityHigh
-	case analyze.SeverityHigh:
+	case analyze.SeverityHigh, analyze.SeverityCritical:
 		return analyze.SeverityCritical
 	default:
+		slog.Warn("bumpSeverity: unrecognized severity, defaulting to Critical", "severity", string(s))
 		return analyze.SeverityCritical
 	}
 }

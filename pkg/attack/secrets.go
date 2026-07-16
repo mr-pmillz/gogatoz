@@ -8,6 +8,8 @@ import (
 	"log/slog"
 	"strings"
 
+	"github.com/mr-pmillz/gogatoz/pkg/stringutil"
+
 	gitlab "gitlab.com/gitlab-org/api/client-go"
 )
 
@@ -54,7 +56,7 @@ func (s *SecretsAttack) ListProjectVariableNames(ctx context.Context, projectID 
 func (s *SecretsAttack) GenerateExfilCI(branchName, pubkey string, runnerTags []string, exfil ExfilOptions) string {
 	var tagLine string
 	if len(runnerTags) > 0 {
-		tagLine = fmt.Sprintf("\n  tags: [%s]", quoteJoin(runnerTags))
+		tagLine = fmt.Sprintf("\n  tags: [%s]", stringutil.QuoteJoin(runnerTags))
 	}
 	// escape pubkey for shell heredoc if provided
 	encStep := ""
@@ -152,10 +154,3 @@ func (s *SecretsAttack) RunExfil(ctx context.Context, projectID any, branch, pub
 	return url, exfil.JobName, err
 }
 
-func quoteJoin(items []string) string {
-	q := make([]string, len(items))
-	for i, v := range items {
-		q[i] = fmt.Sprintf("\"%s\"", strings.TrimSpace(v))
-	}
-	return strings.Join(q, ", ")
-}

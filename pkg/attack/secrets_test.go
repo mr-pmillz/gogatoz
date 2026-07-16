@@ -8,29 +8,6 @@ import (
 	"testing"
 )
 
-// --- quoteJoin --------------------------------------------------------------
-
-func TestQuoteJoin(t *testing.T) {
-	tests := []struct {
-		name string
-		in   []string
-		want string
-	}{
-		{"normal slice", []string{"a", "b", "c"}, `"a", "b", "c"`},
-		{"trimmed whitespace", []string{" a ", " b "}, `"a", "b"`},
-		{"single element", []string{"only"}, `"only"`},
-		{"empty slice", []string{}, ""},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := quoteJoin(tt.in)
-			if got != tt.want {
-				t.Fatalf("quoteJoin(%v) = %q, want %q", tt.in, got, tt.want)
-			}
-		})
-	}
-}
-
 // --- ListProjectVariableNames -----------------------------------------------
 
 func TestListProjectVariableNames(t *testing.T) {

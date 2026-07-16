@@ -194,7 +194,7 @@ type CredentialStore struct {
 	mu              sync.RWMutex
 	creds           map[string]*Credential // tokenHash → Credential
 	visited         map[visitKey]struct{}
-	ProjectsByToken map[string][]int64 // tokenHash → project IDs where token was found
+	projectsByToken map[string][]int64 // tokenHash → project IDs where token was found
 }
 
 // NewCredentialStore creates an empty credential store.
@@ -202,7 +202,7 @@ func NewCredentialStore() *CredentialStore {
 	return &CredentialStore{
 		creds:           make(map[string]*Credential),
 		visited:         make(map[visitKey]struct{}),
-		ProjectsByToken: make(map[string][]int64),
+		projectsByToken: make(map[string][]int64),
 	}
 }
 
@@ -260,10 +260,10 @@ func (s *CredentialStore) IsVisited(tokenHash string, projectID int64) bool {
 func (s *CredentialStore) RecordTokenProject(tokenHash string, projectID int64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if slices.Contains(s.ProjectsByToken[tokenHash], projectID) {
+	if slices.Contains(s.projectsByToken[tokenHash], projectID) {
 		return
 	}
-	s.ProjectsByToken[tokenHash] = append(s.ProjectsByToken[tokenHash], projectID)
+	s.projectsByToken[tokenHash] = append(s.projectsByToken[tokenHash], projectID)
 }
 
 // ReusedTokens returns tokens found in more than one project.
@@ -271,7 +271,7 @@ func (s *CredentialStore) ReusedTokens() map[string][]int64 {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	out := make(map[string][]int64)
-	for hash, pids := range s.ProjectsByToken {
+	for hash, pids := range s.projectsByToken {
 		if len(pids) > 1 {
 			out[hash] = pids
 		}

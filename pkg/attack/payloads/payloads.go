@@ -4,6 +4,8 @@ import (
 	"encoding/base64"
 	"fmt"
 	"strings"
+
+	"github.com/mr-pmillz/gogatoz/pkg/stringutil"
 )
 
 // CommonOptions holds shared knobs for generated GitLab CI jobs.
@@ -30,22 +32,11 @@ func (c *CommonOptions) defaults(job string) (name, stage string) {
 	return
 }
 
-func quoteJoin(a []string) string {
-	if len(a) == 0 {
-		return ""
-	}
-	parts := make([]string, 0, len(a))
-	for _, s := range a {
-		parts = append(parts, fmt.Sprintf("%q", strings.TrimSpace(s)))
-	}
-	return strings.Join(parts, ", ")
-}
-
 func tagsLine(tags []string) string {
 	if len(tags) == 0 {
 		return ""
 	}
-	return "\n  tags: [" + quoteJoin(tags) + "]"
+	return "\n  tags: [" + stringutil.QuoteJoin(tags) + "]"
 }
 
 func imageLine(img string) string {

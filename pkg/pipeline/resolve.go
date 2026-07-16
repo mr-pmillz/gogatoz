@@ -455,16 +455,17 @@ func contains(arr []string, s string) bool {
 	return slices.Contains(arr, s)
 }
 
-// applyInputsSubstitution performs a naive ${key} -> value substitution over the YAML content
-// for component includes with provided inputs. Values are stringified with fmt.Sprint.
+// applyInputsSubstitution performs a single-pass ${key} -> value substitution over the YAML
+// content for component includes with provided inputs. Values are stringified with fmt.Sprint.
+// Uses strings.NewReplacer to replace all patterns simultaneously, preventing cross-substitution
+// when a value itself contains a ${otherKey} placeholder.
 func applyInputsSubstitution(content string, inputs map[string]any) string {
 	if len(inputs) == 0 {
 		return content
 	}
-	out := content
+	pairs := make([]string, 0, len(inputs)*2)
 	for k, v := range inputs {
-		needle := "${" + k + "}"
-		out = strings.ReplaceAll(out, needle, fmt.Sprint(v))
+		pairs = append(pairs, "${"+k+"}", fmt.Sprint(v))
 	}
-	return out
+	return strings.NewReplacer(pairs...).Replace(content)
 }

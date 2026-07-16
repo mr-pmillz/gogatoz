@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mr-pmillz/gogatoz/pkg/stringutil"
 	gitlab "gitlab.com/gitlab-org/api/client-go"
 	"golang.org/x/crypto/ssh"
 )
@@ -242,7 +243,7 @@ func (p *Persistence) GenerateMRPwnCI(jobName string, runnerTags []string, downl
 	}
 	tagLine := ""
 	if len(runnerTags) > 0 {
-		tagLine = fmt.Sprintf("\n  tags: [%s]", quoteJoin(runnerTags))
+		tagLine = fmt.Sprintf("\n  tags: [%s]", stringutil.QuoteJoin(runnerTags))
 	}
 	artifacts := ""
 	if strings.TrimSpace(downloadPath) != "" {

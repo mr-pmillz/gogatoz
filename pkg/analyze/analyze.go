@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/mr-pmillz/gogatoz/pkg/config"
@@ -37,6 +38,12 @@ const (
 	CampaignMatchID        = "CAMPAIGN_MATCH"
 )
 
+// Dependency records a structured cross-project reference extracted during analysis.
+type Dependency struct {
+	Kind string `json:"kind"` // "project", "remote", "component", "trigger"
+	Path string `json:"path"` // project path, URL, or component ref
+}
+
 // Finding represents a single analysis result.
 type Finding struct {
 	ID             string   `json:"id"`
@@ -49,6 +56,8 @@ type Finding struct {
 
 	FalsePositive       bool   `json:"false_positive,omitempty"`
 	FalsePositiveReason string `json:"false_positive_reason,omitempty"`
+
+	Deps []Dependency `json:"deps,omitempty"`
 }
 
 // ErrPartial indicates some checks failed but partial results are returned.
@@ -93,7 +102,7 @@ func Run(doc *pipeline.Document, opts ...Option) ([]Finding, error) {
 	for _, o := range opts {
 		o(&cfg)
 	}
-	var findings []Finding
+	findings := make([]Finding, 0, 64)
 
 	// 0) Workflow-level rules risks
 	if workflowRulesAllowBroad(doc.Workflow.Rules) {
@@ -116,6 +125,7 @@ func Run(doc *pipeline.Document, opts ...Option) ([]Finding, error) {
 				Title:       "Remote include in pipeline",
 				Description: "Pipeline includes a remote URL. If the remote is compromised or modified, your pipeline can be hijacked. Prefer project includes with pinned refs.",
 				Evidence:    fmt.Sprintf("remote=%s", inc.Remote),
+				Deps:        []Dependency{{Kind: "remote", Path: inc.Remote}},
 			})
 		case pipeline.IncludeProject:
 			if strings.TrimSpace(inc.Ref) == "" {
@@ -125,6 +135,7 @@ func Run(doc *pipeline.Document, opts ...Option) ([]Finding, error) {
 					Title:       "Unpinned project include",
 					Description: "Project include without a ref pin (branch/tag/commit). Changes upstream may silently alter your pipeline.",
 					Evidence:    fmt.Sprintf("project=%s files=%v", inc.Project, inc.File),
+					Deps:        []Dependency{{Kind: "project", Path: inc.Project}},
 				})
 			}
 		case pipeline.IncludeComponent:
@@ -134,6 +145,7 @@ func Run(doc *pipeline.Document, opts ...Option) ([]Finding, error) {
 				Title:       "CI/CD component include",
 				Description: "Pipeline uses a CI/CD component. Ensure the component source is trusted and pinned.",
 				Evidence:    fmt.Sprintf("component=%s", inc.Component),
+				Deps:        []Dependency{{Kind: "component", Path: inc.Component}},
 			})
 		}
 	}
@@ -248,106 +260,48 @@ func Run(doc *pipeline.Document, opts ...Option) ([]Finding, error) {
 		}
 	}
 
-	// 4) Variable injection detection
-	injectionFindings := detectVariableInjection(doc)
-	findings = append(findings, injectionFindings...)
-
-	// 5) Fork MR safety checks
-	forkFindings := detectForkMRRisks(doc)
-	findings = append(findings, forkFindings...)
-
-	// 5b) Fork MR script execution risks
-	forkScriptFindings := detectForkScriptExecution(doc)
-	findings = append(findings, forkScriptFindings...)
-
-	// 6) Artifact poisoning detection
-	artifactFindings := detectArtifactPoisoning(doc)
-	findings = append(findings, artifactFindings...)
-
-	// 7) Dispatch/TOCTOU risks (manual jobs, triggers, schedules with broad scope)
-	dispatchFindings := detectDispatchTOCTOU(doc)
-	findings = append(findings, dispatchFindings...)
-
-	// 8) Pwn Request nuances for deployments without protections
-	pwnFindings := detectPwnRequestNuances(doc)
-	findings = append(findings, pwnFindings...)
-
-	// 9) Privileged runner usage on MR (e.g., docker:dind)
-	privFindings := detectPrivilegedRunnerUse(doc)
-	findings = append(findings, privFindings...)
-
-	// 10) AI prompt injection risks
-	aiFindings := detectAIPromptInjection(doc)
-	findings = append(findings, aiFindings...)
-
-	// 11) Script injection risk (external scripts in MR-triggered jobs)
-	scriptInjFindings := detectScriptInjectionRisk(doc)
-	findings = append(findings, scriptInjFindings...)
-
-	// 12) Self-merge possible (no approval enforcement detected)
-	selfMergeFindings := detectSelfMergePossible(doc)
-	findings = append(findings, selfMergeFindings...)
-
-	// 13) Cache poisoning risk (MR-triggered jobs with push cache policy)
-	cachePoisonFindings := detectCachePoisoningRisk(doc)
-	findings = append(findings, cachePoisonFindings...)
-
-	// 14) LOTP: config-file-based RCE via build/lint tools in MR-triggered jobs
-	findings = append(findings, detectLOTPToolExec(doc)...)
-
-	// 15) Cache key injection via attacker-controllable CI variables
-	findings = append(findings, detectCacheKeyInjection(doc)...)
-
-	// 16) GitLab OIDC token exposed to MR-triggered jobs
-	findings = append(findings, detectOIDCTokenMRRisk(doc)...)
-
-	// 17) Downstream trigger chain abuse in MR-triggered jobs
-	findings = append(findings, detectTriggerChainRisk(doc)...)
-
-	// 18) CI debug trace / debug services enabled (secret exposure)
-	findings = append(findings, detectDebugTrace(doc, cfg.controls)...)
-
-	// 19) Unverified script execution (base64|bash, download-then-exec)
-	findings = append(findings, detectUnverifiedScriptExec(doc)...)
-
-	// 20) Unpinned package installs (supply chain risk)
-	findings = append(findings, detectUnpinnedPackageInstall(doc)...)
-
-	// 21) Pipeline governance (mutable include refs, weakened security jobs)
-	findings = append(findings, detectGovernance(doc, cfg.controls)...)
-
-	// 22) Docker-in-Docker detection (container escape risk)
-	findings = append(findings, detectDinD(doc)...)
-
-	// 23) Container image supply chain (mutable tags, missing digest pins)
-	findings = append(findings, detectImageIssues(doc, cfg.controls)...)
-
-	// 24) Script obfuscation (zero-width chars, bidi overrides, whitespace hiding, charcode C2)
-	findings = append(findings, detectScriptObfuscation(doc)...)
-
-	// 25) Secret exfiltration (env dump → HTTP POST or artifact upload)
-	findings = append(findings, detectSecretExfiltration(doc)...)
-
-	// 26) Encoded/binary payload detection (base64, hex blobs, magic bytes)
-	findings = append(findings, detectEncodedPayloads(doc)...)
-
-	// 27) Suspicious network targets (direct IPs, .onion, C2 infrastructure)
-	findings = append(findings, detectSuspiciousNetworkTargets(doc, cfg.threatIntel)...)
-
-	// 28) Campaign signature matching (known supply chain attack patterns)
-	findings = append(findings, detectCampaignSignatures(doc)...)
-
-	// 29) Workflow-as-exfil detection (disguised jobs, artifact-only exfil)
-	findings = append(findings, detectWorkflowSecretExfil(doc)...)
-
-	// 30) Dependency confusion risk (private package names in install commands)
-	findings = append(findings, detectDependencyConfusion(doc)...)
-
-	// 31) AI tool config credential harvester detection
-	findings = append(findings, detectAIConfigHarvesters(doc)...)
-
-	// 32) OIDC provenance anomaly (push-triggered OIDC without branch protection)
-	findings = append(findings, detectOIDCProvenanceAnomaly(doc)...)
+	// Steps 4–32: detection functions registered as a step table.
+	// Each step wraps a detect* function; closures capture cfg fields
+	// when the underlying function needs extra arguments.
+	type detectionStep struct {
+		name string
+		fn   func(*pipeline.Document) []Finding
+	}
+	steps := []detectionStep{
+		{"variable_injection", func(d *pipeline.Document) []Finding { return detectVariableInjection(d) }},
+		{"fork_mr_risks", func(d *pipeline.Document) []Finding { return detectForkMRRisks(d) }},
+		{"fork_script_execution", func(d *pipeline.Document) []Finding { return detectForkScriptExecution(d) }},
+		{"artifact_poisoning", func(d *pipeline.Document) []Finding { return detectArtifactPoisoning(d) }},
+		{"dispatch_toctou", func(d *pipeline.Document) []Finding { return detectDispatchTOCTOU(d) }},
+		{"pwn_request_nuances", func(d *pipeline.Document) []Finding { return detectPwnRequestNuances(d) }},
+		{"privileged_runner_use", func(d *pipeline.Document) []Finding { return detectPrivilegedRunnerUse(d) }},
+		{"ai_prompt_injection", func(d *pipeline.Document) []Finding { return detectAIPromptInjection(d) }},
+		{"script_injection_risk", func(d *pipeline.Document) []Finding { return detectScriptInjectionRisk(d) }},
+		{"self_merge_possible", func(d *pipeline.Document) []Finding { return detectSelfMergePossible(d) }},
+		{"cache_poisoning_risk", func(d *pipeline.Document) []Finding { return detectCachePoisoningRisk(d) }},
+		{"lotp_tool_exec", func(d *pipeline.Document) []Finding { return detectLOTPToolExec(d) }},
+		{"cache_key_injection", func(d *pipeline.Document) []Finding { return detectCacheKeyInjection(d) }},
+		{"oidc_token_mr_risk", func(d *pipeline.Document) []Finding { return detectOIDCTokenMRRisk(d) }},
+		{"trigger_chain_risk", func(d *pipeline.Document) []Finding { return detectTriggerChainRisk(d) }},
+		{"debug_trace", func(d *pipeline.Document) []Finding { return detectDebugTrace(d, cfg.controls) }},
+		{"unverified_script_exec", func(d *pipeline.Document) []Finding { return detectUnverifiedScriptExec(d) }},
+		{"unpinned_package_install", func(d *pipeline.Document) []Finding { return detectUnpinnedPackageInstall(d) }},
+		{"governance", func(d *pipeline.Document) []Finding { return detectGovernance(d, cfg.controls) }},
+		{"dind", func(d *pipeline.Document) []Finding { return detectDinD(d) }},
+		{"image_issues", func(d *pipeline.Document) []Finding { return detectImageIssues(d, cfg.controls) }},
+		{"script_obfuscation", func(d *pipeline.Document) []Finding { return detectScriptObfuscation(d) }},
+		{"secret_exfiltration", func(d *pipeline.Document) []Finding { return detectSecretExfiltration(d) }},
+		{"encoded_payloads", func(d *pipeline.Document) []Finding { return detectEncodedPayloads(d) }},
+		{"suspicious_network_targets", func(d *pipeline.Document) []Finding { return detectSuspiciousNetworkTargets(d, cfg.threatIntel) }},
+		{"campaign_signatures", func(d *pipeline.Document) []Finding { return detectCampaignSignatures(d) }},
+		{"workflow_secret_exfil", func(d *pipeline.Document) []Finding { return detectWorkflowSecretExfil(d) }},
+		{"dependency_confusion", func(d *pipeline.Document) []Finding { return detectDependencyConfusion(d) }},
+		{"ai_config_harvesters", func(d *pipeline.Document) []Finding { return detectAIConfigHarvesters(d) }},
+		{"oidc_provenance_anomaly", func(d *pipeline.Document) []Finding { return detectOIDCProvenanceAnomaly(d) }},
+	}
+	for _, s := range steps {
+		findings = append(findings, s.fn(doc)...)
+	}
 
 	// Filter disabled rules
 	if cfg.controls != nil {
@@ -522,6 +476,7 @@ func triggersOnMRViaOnly(only any) bool {
 func toJSONString(v any) string {
 	b, err := json.Marshal(v)
 	if err != nil {
+		slog.Debug("json marshal failed in evidence", "error", err)
 		return fmt.Sprintf("%v", v)
 	}
 	return string(b)

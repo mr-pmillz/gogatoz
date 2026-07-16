@@ -372,70 +372,91 @@ var (
 func (b *Builder) extractIncludeDependencies(r *enumerate.Result, f *analyze.Finding) {
 	configID := configNodeID(r.ProjectID)
 
+	// Prefer structured dependency data when available.
+	if len(f.Deps) > 0 {
+		for _, dep := range f.Deps {
+			b.addDependencyEdge(r, configID, dep)
+		}
+		return
+	}
+
+	// Fallback: parse evidence strings for legacy findings without Deps.
 	switch f.ID {
 	case "INCLUDE_PROJECT_UNPINNED":
 		if m := reProjectInclude.FindStringSubmatch(f.Evidence); len(m) > 1 {
-			depPath := m[1]
-			depProjID := b.resolveProjectByPath(depPath)
-			b.addNode(&Node{
-				ID:    depProjID,
-				Kinds: []string{KindProject},
-				Properties: map[string]any{
-					"name":          depPath,
-					"environmentid": b.instanceID,
-				},
-			})
-			b.addEdge(NewEdge(configID, depProjID, EdgeIncludesProject))
-			b.projectIncludes[r.ProjectPathWithNS] = append(
-				b.projectIncludes[r.ProjectPathWithNS], depPath)
+			b.addDependencyEdge(r, configID, analyze.Dependency{Kind: "project", Path: m[1]})
 		}
 
 	case "INCLUDE_REMOTE", "RISKY_REMOTE_SCRIPT":
 		if m := reRemoteInclude.FindStringSubmatch(f.Evidence); len(m) > 1 {
-			remoteURL := m[1]
-			remoteID := remoteNodeID(remoteURL)
-			b.addNode(&Node{
-				ID:    remoteID,
-				Kinds: []string{KindCIConfig},
-				Properties: map[string]any{
-					"name":          remoteURL,
-					"remote_url":    remoteURL,
-					"environmentid": b.instanceID,
-				},
-			})
-			b.addEdge(NewEdge(configID, remoteID, EdgeIncludesRemote))
+			b.addDependencyEdge(r, configID, analyze.Dependency{Kind: "remote", Path: m[1]})
 		}
 
 	case "INCLUDE_COMPONENT":
 		compRef := strings.TrimPrefix(f.Evidence, "component=")
-		compID := componentNodeID(compRef)
+		b.addDependencyEdge(r, configID, analyze.Dependency{Kind: "component", Path: compRef})
+
+	case "TRIGGER_CHAIN_RISK":
+		if m := reTriggerProject.FindStringSubmatch(f.Evidence); len(m) > 1 {
+			b.addDependencyEdge(r, configID, analyze.Dependency{Kind: "trigger", Path: m[1]})
+		}
+	}
+}
+
+// addDependencyEdge creates the appropriate graph node and edge for a single
+// structured dependency extracted from a finding.
+func (b *Builder) addDependencyEdge(r *enumerate.Result, configID string, dep analyze.Dependency) {
+	switch dep.Kind {
+	case "project":
+		depProjID := b.resolveProjectByPath(dep.Path)
+		b.addNode(&Node{
+			ID:    depProjID,
+			Kinds: []string{KindProject},
+			Properties: map[string]any{
+				"name":          dep.Path,
+				"environmentid": b.instanceID,
+			},
+		})
+		b.addEdge(NewEdge(configID, depProjID, EdgeIncludesProject))
+		b.projectIncludes[r.ProjectPathWithNS] = append(
+			b.projectIncludes[r.ProjectPathWithNS], dep.Path)
+	case "remote":
+		remoteID := remoteNodeID(dep.Path)
+		b.addNode(&Node{
+			ID:    remoteID,
+			Kinds: []string{KindCIConfig},
+			Properties: map[string]any{
+				"name":          dep.Path,
+				"remote_url":    dep.Path,
+				"environmentid": b.instanceID,
+			},
+		})
+		b.addEdge(NewEdge(configID, remoteID, EdgeIncludesRemote))
+	case "component":
+		compID := componentNodeID(dep.Path)
 		b.addNode(&Node{
 			ID:    compID,
 			Kinds: []string{KindCIConfig},
 			Properties: map[string]any{
-				"name":          compRef,
-				"component":     compRef,
+				"name":          dep.Path,
+				"component":     dep.Path,
 				"environmentid": b.instanceID,
 			},
 		})
 		b.addEdge(NewEdge(configID, compID, EdgeIncludesComponent))
-
-	case "TRIGGER_CHAIN_RISK":
-		if m := reTriggerProject.FindStringSubmatch(f.Evidence); len(m) > 1 {
-			depPath := m[1]
-			depProjID := b.resolveProjectByPath(depPath)
-			b.addNode(&Node{
-				ID:    depProjID,
-				Kinds: []string{KindProject},
-				Properties: map[string]any{
-					"name":          depPath,
-					"environmentid": b.instanceID,
-				},
-			})
-			b.addEdge(NewEdge(projectNodeID(r.ProjectID), depProjID, EdgeTriggersDownstream))
-			b.projectIncludes[r.ProjectPathWithNS] = append(
-				b.projectIncludes[r.ProjectPathWithNS], depPath)
-		}
+	case "trigger":
+		depProjID := b.resolveProjectByPath(dep.Path)
+		b.addNode(&Node{
+			ID:    depProjID,
+			Kinds: []string{KindProject},
+			Properties: map[string]any{
+				"name":          dep.Path,
+				"environmentid": b.instanceID,
+			},
+		})
+		b.addEdge(NewEdge(projectNodeID(r.ProjectID), depProjID, EdgeTriggersDownstream))
+		b.projectIncludes[r.ProjectPathWithNS] = append(
+			b.projectIncludes[r.ProjectPathWithNS], dep.Path)
 	}
 }
 

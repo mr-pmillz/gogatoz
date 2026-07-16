@@ -18,7 +18,7 @@ func CorrelateCredentials(store *CredentialStore) []Correlation {
 	defer store.mu.RUnlock()
 
 	var correlations []Correlation
-	for hash, projectIDs := range store.ProjectsByToken {
+	for hash, projectIDs := range store.projectsByToken {
 		if len(projectIDs) < 2 {
 			continue
 		}
