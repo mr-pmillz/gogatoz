@@ -32,9 +32,9 @@ func RenderHTML(w io.Writer, d Dashboard, ver string) error {
 	data := HTMLData{
 		Dashboard:       d,
 		Version:         ver,
-		RiskDistJSON:    template.JS(mustJSON(d.RiskDistribution)),    //nolint:gosec // trusted data from internal aggregation
-		TopFindingsJSON: template.JS(mustJSON(d.TopFindings)),         //nolint:gosec // trusted data from internal aggregation
-		ScorecardsJSON:  template.JS(mustJSON(d.Scorecards)),          //nolint:gosec // trusted data from internal aggregation
+		RiskDistJSON:    template.JS(mustJSON(d.RiskDistribution)), //nolint:gosec // trusted data from internal aggregation
+		TopFindingsJSON: template.JS(mustJSON(d.TopFindings)),      //nolint:gosec // trusted data from internal aggregation
+		ScorecardsJSON:  template.JS(mustJSON(d.Scorecards)),       //nolint:gosec // trusted data from internal aggregation
 	}
 
 	raw, err := htmlFS.ReadFile("html_template.html")

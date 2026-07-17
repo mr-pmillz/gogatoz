@@ -17,8 +17,8 @@ func TestDetectPagesRisks(t *testing.T) {
 			name: "pages_job_with_mr_trigger",
 			doc: &pipeline.Document{
 				Jobs: []pipeline.Job{{
-					Name:  "pages",
-					Stage: "deploy",
+					Name:   "pages",
+					Stage:  "deploy",
 					Script: []string{"echo deploy"},
 					Artifacts: map[string]any{
 						"paths": []any{"public/"},
@@ -34,8 +34,8 @@ func TestDetectPagesRisks(t *testing.T) {
 			name: "pages_job_with_sensitive_paths",
 			doc: &pipeline.Document{
 				Jobs: []pipeline.Job{{
-					Name:  "pages",
-					Stage: "deploy",
+					Name:   "pages",
+					Stage:  "deploy",
 					Script: []string{"echo deploy"},
 					Artifacts: map[string]any{
 						"paths": []any{"public/", "coverage/", "docs/api/"},
@@ -48,8 +48,8 @@ func TestDetectPagesRisks(t *testing.T) {
 			name: "pages_job_public_deploy",
 			doc: &pipeline.Document{
 				Jobs: []pipeline.Job{{
-					Name:  "pages",
-					Stage: "deploy",
+					Name:   "pages",
+					Stage:  "deploy",
 					Script: []string{"echo deploy"},
 					Artifacts: map[string]any{
 						"paths": []any{"public/"},
@@ -78,8 +78,8 @@ func TestDetectPagesRisks(t *testing.T) {
 			name: "pages_stage_detected",
 			doc: &pipeline.Document{
 				Jobs: []pipeline.Job{{
-					Name:  "deploy_docs",
-					Stage: "pages",
+					Name:   "deploy_docs",
+					Stage:  "pages",
 					Script: []string{"echo deploy"},
 					Artifacts: map[string]any{
 						"paths": []any{"public/"},
