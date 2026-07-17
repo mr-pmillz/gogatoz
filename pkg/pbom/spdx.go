@@ -54,7 +54,7 @@ type SPDXRelationship struct {
 // toolVersion is embedded in the creator metadata (e.g. "v1.2.3" or "dev").
 func (p *PBOM) ToSPDX(toolVersion string) SPDX {
 	now := time.Now().UTC()
-	h := sha256.Sum256([]byte(fmt.Sprintf("%s-%s", p.Project.Path, now.Format(time.RFC3339))))
+	h := sha256.Sum256(fmt.Appendf(nil, "%s-%s", p.Project.Path, now.Format(time.RFC3339)))
 	ns := fmt.Sprintf("https://gogatoz.dev/spdx/%x", h[:16])
 
 	s := SPDX{
