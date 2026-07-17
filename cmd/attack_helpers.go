@@ -420,6 +420,20 @@ func renderPayload() (string, error) {
 			Common:         common,
 			MaliciousValue: strings.TrimSpace(atkCmd),
 		}), nil
+	case "trigger-artifact", "trigger_artifact", "triggerartifact":
+		return payloadgen.GenerateTriggerArtifactYAML(payloadgen.TriggerArtifactOptions{
+			Common:         common,
+			TriggerProject: strings.TrimSpace(atkTriggerProject),
+		}), nil
+	case "rules-bypass", "rules_bypass", "rulesbypass":
+		return payloadgen.GenerateRulesBypassYAML(payloadgen.RulesBypassOptions{
+			Common: common,
+		}), nil
+	case "needs-project", "needs_project", "needsproject":
+		return payloadgen.GenerateNeedsProjectYAML(payloadgen.NeedsProjectOptions{
+			Common:        common,
+			SourceProject: strings.TrimSpace(atkSourceProject),
+		}), nil
 	default:
 		return "", fmt.Errorf("unsupported --payload: %s", atkPayload)
 	}

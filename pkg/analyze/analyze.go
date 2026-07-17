@@ -344,6 +344,9 @@ func Run(doc *pipeline.Document, opts ...Option) ([]Finding, error) {
 		{"include_remote_cached", detectIncludeRemoteCached},
 		{"workflow_var_injection", detectWorkflowVarInjection},
 		{"spec_inputs_risk", detectSpecInputsRisk},
+		{"trigger_artifact_risk", detectTriggerArtifactRisk},
+		{"rules_security_bypass", detectRulesSecurityBypass},
+		{"needs_project_risk", detectNeedsProjectRisk},
 	}
 	for _, s := range steps {
 		findings = append(findings, s.fn(doc)...)

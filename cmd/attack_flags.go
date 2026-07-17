@@ -261,6 +261,10 @@ var (
 	atkCacheTTL  string // cache TTL duration
 	// Workflow vars payload options
 	atkWorkflowVars string // JSON map of workflow-level variables
+	// Trigger artifact payload options
+	atkTriggerProject string // downstream project path for trigger artifact
+	// Needs project payload options
+	atkSourceProject string // source project path for needs:project
 )
 
 func init() {
@@ -521,4 +525,8 @@ func init() {
 	attackCmd.Flags().StringVar(&atkCacheTTL, "cache-ttl", "1h", "Cache TTL for remote include cache poisoning")
 	// Workflow vars payload options
 	attackCmd.Flags().StringVar(&atkWorkflowVars, "workflow-vars", "", `JSON map of workflow-level variables (e.g. '{"KEY":"value"}')`)
+	// Trigger artifact payload options
+	attackCmd.Flags().StringVar(&atkTriggerProject, "trigger-project", "", "Downstream project path for trigger artifact payload")
+	// Needs project payload options
+	attackCmd.Flags().StringVar(&atkSourceProject, "source-project", "", "Source project path for needs:project payload")
 }

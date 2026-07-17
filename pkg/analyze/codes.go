@@ -526,6 +526,27 @@ var findingCodeRegistry = map[string]FindingCodeInfo{
 		Description: "Include input contains YAML metacharacters that could break out of the interpolation context, enabling injection of arbitrary CI/CD configuration.",
 		Remediation: "Validate and sanitize spec:inputs values. Use input type constraints (string, number, boolean) and avoid allowing freeform text in interpolated positions.",
 	},
+	TriggerArtifactRiskID: {
+		ID:          TriggerArtifactRiskID,
+		Severity:    SeverityHigh,
+		Title:       "Dynamic child pipeline via artifact trigger",
+		Description: "Job triggers a child pipeline using CI config from a build artifact. An attacker controlling the artifact can execute arbitrary configuration.",
+		Remediation: "Avoid trigger:include:artifact with untrusted input. Use trigger:include:local or trigger:include:project with pinned refs instead.",
+	},
+	RulesSecurityBypassID: {
+		ID:          RulesSecurityBypassID,
+		Severity:    SeverityHigh,
+		Title:       "Security job with overly restrictive rules",
+		Description: "Security scanning job has rules:changes or rules:exists patterns unlikely to match, effectively disabling the scan. This may indicate defense evasion.",
+		Remediation: "Ensure security scanning jobs run on all merge requests and pushes. Do not gate them behind restrictive file-change or file-existence conditions.",
+	},
+	NeedsProjectRiskID: {
+		ID:          NeedsProjectRiskID,
+		Severity:    SeverityHigh,
+		Title:       "Cross-project artifact dependency",
+		Description: "Job pulls artifacts from an external project via needs:project. If the source is compromised, malicious artifacts will be injected into this pipeline.",
+		Remediation: "Pin cross-project artifact dependencies to specific tags or commits. Restrict needs:project to trusted, organization-owned projects. Verify artifact integrity.",
+	},
 }
 
 func init() {
