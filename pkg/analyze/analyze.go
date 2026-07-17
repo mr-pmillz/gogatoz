@@ -103,20 +103,11 @@ func WithEnvironmentData(envs []EnvironmentInfo) Option {
 	return func(c *runConfig) { c.environmentData = envs }
 }
 
-// Run executes core checks against the parsed CI document.
-//
-//nolint:gocognit
-func Run(doc *pipeline.Document, opts ...Option) ([]Finding, error) {
-	if doc == nil {
-		return nil, nil
-	}
-	cfg := runConfig{}
-	for _, o := range opts {
-		o(&cfg)
-	}
+// runPreChecks performs steps 0–3: workflow rules, include risks, job trigger/runner
+// exposure, risky remote scripts, artifacts expiration, and plaintext variables.
+func runPreChecks(doc *pipeline.Document, cfg *runConfig) []Finding {
 	findings := make([]Finding, 0, 64)
 
-	// 0) Workflow-level rules risks
 	if workflowRulesAllowBroad(doc.Workflow.Rules) {
 		findings = append(findings, Finding{
 			ID:          "WORKFLOW_BROAD_RULES",
@@ -127,7 +118,15 @@ func Run(doc *pipeline.Document, opts ...Option) ([]Finding, error) {
 		})
 	}
 
-	// 1) Include risks
+	findings = append(findings, checkIncludeRisks(doc)...)
+	findings = append(findings, checkJobTriggerExposure(doc)...)
+	findings = append(findings, checkArtifactExpiry(doc)...)
+	findings = append(findings, checkPlaintextVars(doc, cfg.redactSecrets)...)
+	return findings
+}
+
+func checkIncludeRisks(doc *pipeline.Document) []Finding {
+	var findings []Finding
 	for _, inc := range doc.Includes {
 		switch inc.Type {
 		case pipeline.IncludeRemote:
@@ -161,14 +160,15 @@ func Run(doc *pipeline.Document, opts ...Option) ([]Finding, error) {
 			})
 		}
 	}
+	return findings
+}
 
-	// 2) Job trigger risks and runner exposure
+func checkJobTriggerExposure(doc *pipeline.Document) []Finding {
+	var findings []Finding
 	for _, job := range doc.Jobs {
-		// Self-hosted runner tags suggest sensitive runners
 		if len(job.Tags) > 0 {
 			if jobRulesAllowBroad(job.Rules) || onlyIsBroad(job.Only) {
 				sev := SeverityHigh
-				// If rules include fork/protected guards, downgrade severity to medium to reduce FPs
 				if checkForkProtection(job.Rules) {
 					sev = SeverityMedium
 				}
@@ -182,11 +182,9 @@ func Run(doc *pipeline.Document, opts ...Option) ([]Finding, error) {
 				})
 			}
 		}
-		// Merge Request triggered jobs with tagged runners
-		if (jobTriggersOnMR(job) || triggersOnMRViaOnly(job.Only)) && len(job.Tags) > 0 {
+		if (jobTriggersOnMR(job.Rules) || triggersOnMRViaOnly(job.Only)) && len(job.Tags) > 0 {
 			sev := SeverityMedium
 			if checkForkProtection(job.Rules) {
-				// Protections present; lower severity to reduce false positives
 				sev = SeverityLow
 			}
 			findings = append(findings, Finding{
@@ -199,8 +197,6 @@ func Run(doc *pipeline.Document, opts ...Option) ([]Finding, error) {
 			})
 		}
 	}
-
-	// 2b) Risky remote script execution in job scripts (before, script, after)
 	for _, job := range doc.Jobs {
 		for _, line := range effectiveScripts(job, doc) {
 			if isRiskyRemoteScript(line) {
@@ -215,8 +211,11 @@ func Run(doc *pipeline.Document, opts ...Option) ([]Finding, error) {
 			}
 		}
 	}
+	return findings
+}
 
-	// 2c) Artifacts without expire_in (unbounded retention)
+func checkArtifactExpiry(doc *pipeline.Document) []Finding {
+	var findings []Finding
 	for _, job := range doc.Jobs {
 		if job.Artifacts != nil {
 			exp, hasExpire := job.Artifacts["expire_in"]
@@ -232,13 +231,16 @@ func Run(doc *pipeline.Document, opts ...Option) ([]Finding, error) {
 			}
 		}
 	}
+	return findings
+}
 
-	// 3) Suspicious plaintext variables
+func checkPlaintextVars(doc *pipeline.Document, redact bool) []Finding {
+	var findings []Finding
 	for k, v := range doc.Variables {
 		if s, ok := v.(string); ok {
 			if looksLikeSecretKey(k, s) {
 				val := s
-				if cfg.redactSecrets {
+				if redact {
 					val = "<redacted>"
 				}
 				findings = append(findings, Finding{
@@ -256,7 +258,7 @@ func Run(doc *pipeline.Document, opts ...Option) ([]Finding, error) {
 			if s, ok := v.(string); ok {
 				if looksLikeSecretKey(k, s) {
 					val := s
-					if cfg.redactSecrets {
+					if redact {
 						val = "<redacted>"
 					}
 					findings = append(findings, Finding{
@@ -271,8 +273,24 @@ func Run(doc *pipeline.Document, opts ...Option) ([]Finding, error) {
 			}
 		}
 	}
+	return findings
+}
 
-	// Steps 4–32: detection functions registered as a step table.
+// Run executes core checks against the parsed CI document.
+//
+//nolint:gocognit
+func Run(doc *pipeline.Document, opts ...Option) ([]Finding, error) {
+	if doc == nil {
+		return nil, nil
+	}
+	cfg := runConfig{}
+	for _, o := range opts {
+		o(&cfg)
+	}
+
+	findings := runPreChecks(doc, &cfg)
+
+	// Steps 4–N: detection functions registered as a step table.
 	// Each step wraps a detect* function; closures capture cfg fields
 	// when the underlying function needs extra arguments.
 	type detectionStep struct {

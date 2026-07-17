@@ -20,6 +20,9 @@ type Document struct {
 	BeforeScript []string
 	AfterScript  []string
 	Jobs         []Job
+	// Cache holds the global/default cache config (from default: or deprecated top-level cache:).
+	// Each element is a single cache config map. GitLab supports up to 4 caches per job.
+	Cache []map[string]any
 	// Provenance maps job names to the include(s) they originated from during resolution.
 	// Jobs defined in the root document typically have no provenance entries.
 	Provenance map[string][]Include
@@ -74,20 +77,24 @@ type Job struct {
 	Environment  string         // environment name (if any)
 	Trigger      map[string]any // normalized trigger block (downstream pipelines)
 	// Newly modeled fields for richer analysis
-	Image     string         // resolved from string or image.name
-	Services  []string       // normalized list of service names
-	Artifacts map[string]any // raw map for now
-	Cache     map[string]any // raw map for now
+	Image     string           // resolved from string or image.name
+	Services  []string         // normalized list of service names
+	Artifacts map[string]any   // raw map for now
+	Cache     map[string]any   // primary cache config (first element; nil if none)
+	Caches    []map[string]any // all cache configs (supports GitLab's array-of-caches)
 }
 
 var reservedTopLevel = map[string]struct{}{
-	"stages":    {},
-	"variables": {},
-	"include":   {},
-	"workflow":  {},
-	"default":   {},
-	"image":     {},
-	"services":  {},
+	"stages":        {},
+	"variables":     {},
+	"include":       {},
+	"workflow":      {},
+	"default":       {},
+	"image":         {},
+	"services":      {},
+	"cache":         {},
+	"before_script": {},
+	"after_script":  {},
 }
 
 //// ParseFile loads and parses a .gitlab-ci.yml from disk.
@@ -154,6 +161,17 @@ func Parse(r io.Reader) (*Document, error) {
 	if v, ok := raw["default"]; ok {
 		if m, ok := v.(map[string]any); ok {
 			doc.Default = m
+		}
+	}
+	// global cache: prefer default:.cache, fall back to deprecated top-level cache:
+	if doc.Default != nil {
+		if c, ok := doc.Default["cache"]; ok {
+			doc.Cache = parseCacheConfigs(c)
+		}
+	}
+	if len(doc.Cache) == 0 {
+		if c, ok := raw["cache"]; ok {
+			doc.Cache = parseCacheConfigs(c)
 		}
 	}
 	// before_script and after_script (top-level)
@@ -228,12 +246,16 @@ func Parse(r io.Reader) (*Document, error) {
 		if sv, ok := m["services"]; ok {
 			j.Services = toServiceNames(sv)
 		}
-		// artifacts and cache: keep raw maps for now
+		// artifacts: keep raw map for now
 		if art, ok := m["artifacts"].(map[string]any); ok {
 			j.Artifacts = art
 		}
-		if cache, ok := m["cache"].(map[string]any); ok {
-			j.Cache = cache
+		// cache: supports both single map and array-of-maps
+		if c, ok := m["cache"]; ok {
+			j.Caches = parseCacheConfigs(c)
+			if len(j.Caches) > 0 {
+				j.Cache = j.Caches[0]
+			}
 		}
 		// extra fields for analysis
 		if w, ok := m["when"].(string); ok {
@@ -332,6 +354,25 @@ func toServiceNames(v any) []string {
 			return []string{img}
 		}
 		return nil
+	default:
+		return nil
+	}
+}
+
+// parseCacheConfigs normalizes a YAML cache value into a slice of cache config maps.
+// GitLab supports cache as a single map or an array of up to 4 maps.
+func parseCacheConfigs(v any) []map[string]any {
+	switch t := v.(type) {
+	case map[string]any:
+		return []map[string]any{t}
+	case []any:
+		var out []map[string]any
+		for _, it := range t {
+			if m, ok := it.(map[string]any); ok {
+				out = append(out, m)
+			}
+		}
+		return out
 	default:
 		return nil
 	}

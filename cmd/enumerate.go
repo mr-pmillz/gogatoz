@@ -229,15 +229,12 @@ var enumerateCmd = &cobra.Command{
 				return nerr
 			}
 			for _, r := range results {
-				proj := r.ProjectPathWithNS
+				if len(r.Findings) == 0 {
+					continue
+				}
 				meta := map[string]string{"web_url": r.WebURL}
-				for _, f := range r.Findings {
-					if err := n.SendFinding(ctx, proj, f, meta); err != nil {
-						_, err := fmt.Fprintf(cmd.ErrOrStderr(), "notify warning: %v\n", err)
-						if err != nil {
-							return err
-						}
-					}
+				if err := n.SendFindings(ctx, r.ProjectPathWithNS, r.Findings, meta); err != nil {
+					fmt.Fprintf(cmd.ErrOrStderr(), "notify warning: %v\n", err) //nolint:errcheck
 				}
 			}
 		}
