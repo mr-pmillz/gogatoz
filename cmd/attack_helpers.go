@@ -368,6 +368,35 @@ func renderPayload() (string, error) {
 			Common:         common,
 			FallbackScript: strings.TrimSpace(atkCmd),
 		}), nil
+	case "oidc-federation", "oidc_federation", "oidcfederation", "oidc":
+		return payloadgen.GenerateOIDCFederationYAML(payloadgen.OIDCFederationOptions{
+			Common:      common,
+			Provider:    strings.TrimSpace(atkOIDCProvider),
+			RoleARN:     strings.TrimSpace(atkOIDCRoleARN),
+			Audience:    strings.TrimSpace(atkOIDCAudience),
+			CallbackURL: strings.TrimSpace(atkWebhook),
+		}), nil
+	case "artifact-reports", "artifact_reports", "artifactreports":
+		return payloadgen.GenerateArtifactReportsYAML(payloadgen.ArtifactReportsOptions{
+			Common:      common,
+			ReportType:  strings.TrimSpace(atkReportType),
+			CallbackURL: strings.TrimSpace(atkWebhook),
+		}), nil
+	case "image-poison", "image_poison", "imagepoison":
+		var svcCmd []string
+		if s := strings.TrimSpace(atkServiceCommand); s != "" {
+			for c := range strings.SplitSeq(s, ",") {
+				c = strings.TrimSpace(c)
+				if c != "" {
+					svcCmd = append(svcCmd, c)
+				}
+			}
+		}
+		return payloadgen.GenerateImagePoisonYAML(payloadgen.ImagePoisonOptions{
+			Common:         common,
+			MaliciousImage: strings.TrimSpace(atkMaliciousImage),
+			ServiceCommand: svcCmd,
+		}), nil
 	default:
 		return "", fmt.Errorf("unsupported --payload: %s", atkPayload)
 	}

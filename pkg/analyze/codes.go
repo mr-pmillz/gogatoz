@@ -491,6 +491,20 @@ var findingCodeRegistry = map[string]FindingCodeInfo{
 		Description: "A container image uses a version tag but is not pinned by digest (@sha256:...). Tags are mutable.",
 		Remediation: "Pin images by digest (image@sha256:...) for fully reproducible builds. See: https://docs.docker.com/reference/cli/docker/image/pull/#pull-an-image-by-digest-immutable-identifier",
 	},
+	ArtifactReportInjectionID: {
+		ID:          ArtifactReportInjectionID,
+		Severity:    SeverityHigh,
+		Title:       "Security report artifact without recognized scanner",
+		Description: "Job produces security report artifacts (SARIF, dependency scanning, etc.) but does not invoke a recognized security scanner. An attacker can inject clean reports to suppress real findings.",
+		Remediation: "Ensure security report artifacts are only produced by trusted, pinned scanning tools. Do not allow MR-triggered jobs to override report artifacts.",
+	},
+	ServiceCommandInjectionID: {
+		ID:          ServiceCommandInjectionID,
+		Severity:    SeverityHigh,
+		Title:       "Service container command override",
+		Description: "Job overrides a service container's command, which can execute arbitrary code in the service. This is especially dangerous in MR-triggered jobs where fork authors control the CI config.",
+		Remediation: "Avoid overriding service container commands in CI jobs. If necessary, restrict to protected branches and review service configurations.",
+	},
 }
 
 func init() {

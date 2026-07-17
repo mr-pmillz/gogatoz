@@ -247,6 +247,15 @@ var (
 	atkCacheKeyFiles  string // comma-separated files for cache:key:files
 	// Parallel matrix payload options
 	atkMatrixVars string // JSON map of key→[]values for parallel:matrix
+	// OIDC federation payload options
+	atkOIDCProvider string // aws|gcp|azure
+	atkOIDCRoleARN  string // AWS role ARN, GCP workload identity pool, or Azure tenant
+	atkOIDCAudience string // OIDC audience
+	// Artifact reports injection payload options
+	atkReportType string // sarif|dependency_scanning|secret_scanning
+	// Image poison payload options
+	atkMaliciousImage string // attacker-controlled container image
+	atkServiceCommand string // service container command override
 )
 
 func init() {
@@ -493,4 +502,13 @@ func init() {
 	attackCmd.Flags().StringVar(&atkCacheKeyFiles, "cache-key-files", "", "Comma-separated files for cache:key:files (cache-key-poison payload)")
 	// Parallel matrix payload options
 	attackCmd.Flags().StringVar(&atkMatrixVars, "matrix-vars", "", `JSON map of key→values for parallel:matrix (e.g. '{"KEY":["v1","v2"]}')`)
+	// OIDC federation payload options
+	attackCmd.Flags().StringVar(&atkOIDCProvider, "oidc-provider", "aws", "Cloud provider for OIDC token exchange: aws|gcp|azure")
+	attackCmd.Flags().StringVar(&atkOIDCRoleARN, "oidc-role-arn", "", "AWS Role ARN, GCP workload identity pool, or Azure tenant ID")
+	attackCmd.Flags().StringVar(&atkOIDCAudience, "oidc-audience", "", "OIDC token audience (default: provider-specific)")
+	// Artifact reports injection payload options
+	attackCmd.Flags().StringVar(&atkReportType, "report-type", "sarif", "Security report type: sarif|dependency_scanning|secret_scanning|dast")
+	// Image poison payload options
+	attackCmd.Flags().StringVar(&atkMaliciousImage, "malicious-image", "", "Attacker-controlled container image for image-poison payload")
+	attackCmd.Flags().StringVar(&atkServiceCommand, "service-command", "", "Service container command override (comma-separated)")
 }

@@ -466,6 +466,18 @@ var taxonomyRegistry = map[string]Taxonomy{
 		ATTACKRefs:    []ATTACKRef{attackT1078},
 		OWASPCICDRefs: []OWASPCICDRef{owaspSec1, owaspSec7},
 	},
+
+	// --- Attack Vector Expansion: Sprint 2 ---
+	ArtifactReportInjectionID: {
+		CWEs:          []CWERef{cwe345},
+		ATTACKRefs:    []ATTACKRef{attackT1562},
+		OWASPCICDRefs: []OWASPCICDRef{owaspSec7},
+	},
+	ServiceCommandInjectionID: {
+		CWEs:          []CWERef{cwe78},
+		ATTACKRefs:    []ATTACKRef{attackT1059},
+		OWASPCICDRefs: []OWASPCICDRef{owaspSec4, owaspSec7},
+	},
 }
 
 // LookupTaxonomy returns the taxonomy references for a finding code, or nil

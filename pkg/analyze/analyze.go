@@ -339,6 +339,8 @@ func Run(doc *pipeline.Document, opts ...Option) ([]Finding, error) {
 		{"environment_risks", func(d *pipeline.Document) []Finding {
 			return detectEnvironmentRisks(d, cfg.environmentData)
 		}},
+		{"artifact_report_injection", detectArtifactReportInjection},
+		{"service_command_injection", detectServiceCommandInjection},
 	}
 	for _, s := range steps {
 		findings = append(findings, s.fn(doc)...)
