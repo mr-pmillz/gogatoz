@@ -328,6 +328,15 @@ func renderPayload() (string, error) {
 			ChecksumFile:   strings.TrimSpace(atkRTPChecksums),
 			WebhookURL:     strings.TrimSpace(atkWebhook),
 		}), nil
+	default:
+		return renderExpansionPayload(p, common)
+	}
+}
+
+// renderExpansionPayload handles payload types added by the attack vector expansion.
+// Split from renderPayload to keep cognitive complexity under the linter threshold.
+func renderExpansionPayload(p string, common payloadgen.CommonOptions) (string, error) {
+	switch p {
 	case "pre-get-sources", "pre_get_sources", "pregetsources":
 		return payloadgen.GeneratePreGetSourcesYAML(payloadgen.PreGetSourcesOptions{
 			Common:       common,

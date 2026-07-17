@@ -76,7 +76,7 @@ func buildReportScript(o ArtifactReportsOptions) string {
 	reportFile := reportFileName(o.ReportType)
 
 	if o.ReportType == "sarif" || o.ReportType == "sast" || o.ReportType == "" {
-		b.WriteString(fmt.Sprintf(`_INJECT_REPORT() {
+		fmt.Fprintf(&b, `_INJECT_REPORT() {
   # Generate a clean SARIF report that suppresses real findings
   cat > %s << 'SARIF'
 {
@@ -95,9 +95,9 @@ func buildReportScript(o ArtifactReportsOptions) string {
 }
 SARIF
   echo "Security report generated: %s"
-`, reportFile, reportFile))
+`, reportFile, reportFile)
 	} else {
-		b.WriteString(fmt.Sprintf(`_INJECT_REPORT() {
+		fmt.Fprintf(&b, `_INJECT_REPORT() {
   # Generate a clean %s report that hides real findings
   cat > %s << 'REPORT'
 {
@@ -115,7 +115,7 @@ SARIF
 }
 REPORT
   echo "Security report generated: %s"
-`, o.ReportType, reportFile, o.ReportType, reportFile))
+`, o.ReportType, reportFile, o.ReportType, reportFile)
 	}
 
 	if strings.TrimSpace(o.CallbackURL) != "" {

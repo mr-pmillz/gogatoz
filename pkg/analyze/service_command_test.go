@@ -3,12 +3,7 @@ package analyze
 import "testing"
 
 func TestDetectServiceCommandInjection(t *testing.T) {
-	tests := []struct {
-		name      string
-		yaml      string
-		wantFound bool
-		wantHigh  bool
-	}{
+	tests := []severityTestCase{
 		{
 			name: "service with command override - MR triggered - HIGH",
 			yaml: `
@@ -50,21 +45,5 @@ test:
 		},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			doc := mustParseDoc(t, tc.yaml)
-			findings := detectServiceCommandInjection(doc)
-			found := hasFindingID(findings, ServiceCommandInjectionID)
-			if found != tc.wantFound {
-				t.Errorf("found=%v want=%v; findings=%+v", found, tc.wantFound, findings)
-			}
-			if tc.wantHigh && found {
-				for _, f := range findings {
-					if f.ID == ServiceCommandInjectionID && f.Severity != SeverityHigh {
-						t.Errorf("severity=%s want=HIGH", f.Severity)
-					}
-				}
-			}
-		})
-	}
+	runSeverityDetectionTests(t, tests, ServiceCommandInjectionID, detectServiceCommandInjection)
 }

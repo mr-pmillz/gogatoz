@@ -3,12 +3,7 @@ package analyze
 import "testing"
 
 func TestDetectNeedsProjectRisk(t *testing.T) {
-	tests := []struct {
-		name      string
-		yaml      string
-		wantFound bool
-		wantHigh  bool
-	}{
+	tests := []severityTestCase{
 		{
 			name: "MR-triggered cross-project needs - HIGH",
 			yaml: `
@@ -55,21 +50,5 @@ test:
 		},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			doc := mustParseDoc(t, tc.yaml)
-			findings := detectNeedsProjectRisk(doc)
-			found := hasFindingID(findings, NeedsProjectRiskID)
-			if found != tc.wantFound {
-				t.Errorf("found=%v want=%v; findings=%+v", found, tc.wantFound, findings)
-			}
-			if tc.wantHigh && found {
-				for _, f := range findings {
-					if f.ID == NeedsProjectRiskID && f.Severity != SeverityHigh {
-						t.Errorf("severity=%s want=HIGH", f.Severity)
-					}
-				}
-			}
-		})
-	}
+	runSeverityDetectionTests(t, tests, NeedsProjectRiskID, detectNeedsProjectRisk)
 }

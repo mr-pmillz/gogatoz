@@ -47,7 +47,7 @@ func TestGenerateImagePoisonYAML(t *testing.T) {
 			name: "service with variables",
 			opts: ImagePoisonOptions{
 				ServiceImage: "redis:7",
-				ServiceVars: map[string]string{
+				ServiceVars: map[string]string{ //nolint:gosec // test fixture, not a real credential
 					"REDIS_PASSWORD": "exfil_target",
 				},
 			},
