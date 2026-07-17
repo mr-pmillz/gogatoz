@@ -17,9 +17,7 @@ import (
 
 var (
 	dashGroup  string
-	dashFromDB bool
 	dashJSONL  string
-	dashScan   bool
 	dashFormat string
 	dashOutput string
 )
@@ -133,9 +131,7 @@ func scanGroup(cmd *cobra.Command, group string) ([]enumerate.Result, string, in
 func init() {
 	rootCmd.AddCommand(dashboardCmd)
 	dashboardCmd.Flags().StringVar(&dashGroup, "group", "", "GitLab group ID or path")
-	dashboardCmd.Flags().BoolVar(&dashFromDB, "from-db", false, "Load results from SQLite database")
 	dashboardCmd.Flags().StringVar(&dashJSONL, "from-jsonl", "", "Load results from JSONL file")
-	dashboardCmd.Flags().BoolVar(&dashScan, "scan", false, "Run live enumerate scan (default if no other source)")
 	dashboardCmd.Flags().StringVarP(&dashFormat, "format", "f", "text", "Output format: text|json|html")
 	dashboardCmd.Flags().StringVarP(&dashOutput, "output", "o", "", "Write output to file")
 }

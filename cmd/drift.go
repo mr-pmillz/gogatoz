@@ -99,7 +99,7 @@ func buildDriftReport(
 
 	switch {
 	case driftCompareBaseline:
-		doc, ref, err := loadBaselineDoc(cmd, projectID)
+		doc, ref, err := loadBaselineDoc(projectID)
 		if err != nil {
 			return drift.DriftReport{}, err
 		}
@@ -128,7 +128,7 @@ func buildDriftReport(
 	return report, nil
 }
 
-func loadBaselineDoc(_ *cobra.Command, projectID int64) (*pipeline.Document, string, error) {
+func loadBaselineDoc(projectID int64) (*pipeline.Document, string, error) {
 	if cliStore == nil {
 		return nil, "", fmt.Errorf("database not available (use --db to specify path or remove --no-db)")
 	}

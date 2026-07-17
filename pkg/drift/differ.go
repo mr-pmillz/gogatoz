@@ -18,7 +18,6 @@ const (
 	CategoryInclude  = "include"
 	CategoryStage    = "stage"
 	CategoryScript   = "script"
-	CategoryRule     = "rule"
 )
 
 // Change represents a single structural difference between two CI configs.
