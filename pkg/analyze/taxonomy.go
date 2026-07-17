@@ -42,7 +42,7 @@ var (
 	owaspSec10 = OWASPCICDRef{ID: "CICD-SEC-10", Name: "Insufficient Logging and Visibility"}
 )
 
-// Commonly referenced CWEs.
+// Commonly referenced CWEs and MITRE ATT&CK techniques.
 var (
 	cwe78   = CWERef{ID: 78, Name: "Improper Neutralization of Special Elements used in an OS Command ('OS Command Injection')"}
 	cwe94   = CWERef{ID: 94, Name: "Improper Control of Generation of Code ('Code Injection')"}
@@ -62,18 +62,16 @@ var (
 	cwe522  = CWERef{ID: 522, Name: "Insufficiently Protected Credentials"}
 	cwe532  = CWERef{ID: 532, Name: "Insertion of Sensitive Information into Log File"}
 	cwe538  = CWERef{ID: 538, Name: "Insertion of Sensitive Information into Externally-Accessible File or Directory"}
+	cwe668  = CWERef{ID: 668, Name: "Exposure of Resource to Wrong Sphere"}
 	cwe693  = CWERef{ID: 693, Name: "Protection Mechanism Failure"}
+	cwe807  = CWERef{ID: 807, Name: "Reliance on Untrusted Inputs in a Security Decision"}
 	cwe829  = CWERef{ID: 829, Name: "Inclusion of Functionality from Untrusted Control Sphere"}
 	cwe913  = CWERef{ID: 913, Name: "Improper Control of Dynamically-Managed Code Resources"}
 	cwe915  = CWERef{ID: 915, Name: "Improperly Controlled Modification of Dynamically-Determined Object Attributes"}
 	cwe940  = CWERef{ID: 940, Name: "Improper Verification of Source of a Communication Channel"}
 	cwe1104 = CWERef{ID: 1104, Name: "Use of Unmaintained Third-Party Components"}
-	cwe668  = CWERef{ID: 668, Name: "Exposure of Resource to Wrong Sphere"}
-	cwe807  = CWERef{ID: 807, Name: "Reliance on Untrusted Inputs in a Security Decision"}
-)
 
-// Commonly referenced MITRE ATT&CK techniques.
-var (
+	attackT1027     = ATTACKRef{ID: "T1027", Name: "Obfuscated Files or Information"}
 	attackT1059     = ATTACKRef{ID: "T1059", Name: "Command and Scripting Interpreter"}
 	attackT1078     = ATTACKRef{ID: "T1078", Name: "Valid Accounts"}
 	attackT1098     = ATTACKRef{ID: "T1098", Name: "Account Manipulation"}
@@ -85,6 +83,7 @@ var (
 	attackT1204     = ATTACKRef{ID: "T1204", Name: "User Execution"}
 	attackT1210     = ATTACKRef{ID: "T1210", Name: "Exploitation of Remote Services"}
 	attackT1528     = ATTACKRef{ID: "T1528", Name: "Steal Application Access Token"}
+	attackT1530     = ATTACKRef{ID: "T1530", Name: "Data from Cloud Storage Object"}
 	attackT1550     = ATTACKRef{ID: "T1550", Name: "Use Alternate Authentication Material"}
 	attackT1552     = ATTACKRef{ID: "T1552", Name: "Unsecured Credentials"}
 	attackT1552_001 = ATTACKRef{ID: "T1552.001", Name: "Unsecured Credentials: Credentials In Files"}
@@ -98,8 +97,6 @@ var (
 	attackT1610     = ATTACKRef{ID: "T1610", Name: "Deploy Container"}
 	attackT1611     = ATTACKRef{ID: "T1611", Name: "Escape to Host"}
 	attackT1612     = ATTACKRef{ID: "T1612", Name: "Build Image on Host"}
-	attackT1027     = ATTACKRef{ID: "T1027", Name: "Obfuscated Files or Information"}
-	attackT1530     = ATTACKRef{ID: "T1530", Name: "Data from Cloud Storage Object"}
 )
 
 // taxonomyRegistry maps finding IDs to their standard taxonomy references.
