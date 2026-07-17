@@ -103,6 +103,11 @@ Astro Starlight in `docs/`. Content in `docs/src/content/docs/`, sidebar manuall
 - **Container escape env capture**: Always include `printenv | sort > "$_edir/env_dump.txt"` so CI variables (flags) appear in artifacts. Add `|| true` on the `_ESCAPE` function call.
 - **Worm CI injection**: Don't prepend a separate `stages:` key — use the existing CI's first stage name for the worm job to avoid duplicate-key YAML rejection.
 - **Supply chain worm requires a real GitLab group**: `root` is a user namespace; `ListGroupProjects` fails on user namespaces. The CTF lab uses `worm-labs` group with 5 projects.
+- **Payload generators must be self-contained**: Every `GenerateXxxYAML()` payload must include both an env exfil step (varied techniques: `/proc/self/environ`, `env`, `awk ENVIRON`, python `os.environ`, etc.) AND an `artifacts: when: always` block. Payloads without artifacts produce 0 extractable output on the CTF lab. Use varied, creative exfil techniques — not `printenv | sort > env.txt` for every payload.
+- **No unreachable external refs in committed payloads**: `include:remote`, `include:component`, `needs:project` pointing to non-existent URLs cause GitLab to reject the pipeline with 0 jobs (no `yaml_errors`). Comment these out in the generated YAML and simulate the attack technique inline. The `--payload-only` preview can show the full attack YAML; `--commit-ci` must produce a runnable pipeline.
+- **`when: on_failure` requires a prior stage to actually fail**: In the CTF lab, setup jobs succeed normally, so `when: on_failure` fallback jobs never run. Use `when: always` for exploit jobs that should run regardless.
+- **`trigger:include:artifact` child pipelines**: Only work on default/protected branches in GitLab CE. Attack branches created by gogatoz are not protected, so the child pipeline trigger silently does nothing.
+- **`renderPayload()` split**: The CLI switch for `--payload` is split across `renderPayload()` (original payloads) and `renderExpansionPayload()` (expansion track payloads) in `cmd/attack_helpers.go`. New payload types go in `renderExpansionPayload()` to keep cognitive complexity under the gocognit 30 threshold.
 
 ## GitLab SDK Conventions
 
@@ -257,6 +262,10 @@ Branch naming: `feature/description` or `fix/description` for daily work, `relea
 - Flag values use `FLAG+contents+` format (not `FLAG{...}`) because GitLab cannot mask variables containing `{`/`}`; defined in `setup-lab.sh`, encoded as base64 JSON in `CTF_FLAGS_B64`
 - Protected CI variables (`protected: true`) restrict injection to protected branches — the actual security boundary. Masked (`masked: true`) only hides from job logs, completely bypassed by artifact-based exfiltration.
 - When changing flag values: update `setup-lab.sh` (plain + base64 blob), `.env.example`, `handlers_test.go`, `e2e/attack_test.go`, `scripts/create-vuln-labs.sh`
+- **CTF variable name sync**: When adding CTF repos, the CI variable name in `ctf_add_variable` must exactly match the flagserver JSON `"value"` field, walkthrough solutions in hackers-guide-to-cicd lab pages, AND hint text in stage descriptions. Drift between these is the most common CTF authoring bug.
+- `setup-lab.sh` PAT re-creation: Use `destroy_all` not `revoke!` in Rails runner scripts — `revoke!` leaves the token digest in the DB, causing `PG::UniqueViolation` on re-run with `set -euo pipefail`
+- Raw `curl -sf` file-creation calls in setup-lab.sh need `|| true` — the `-f` flag returns exit 22 on HTTP 4xx (file already exists), which `set -e` catches and aborts the script
+- After updating `generate_flagserver_env()` in setup-lab.sh, the running flagserver container needs `docker compose up -d flagserver --force-recreate` (not just `restart`) to reload the `.env` file
 - Rate limiting: per-team (`golang.org/x/time/rate`, 10/min) + per-IP (30/min team creation, 120/min submissions) for classroom-safe abuse prevention
 - Svelte curly brace gotcha: `placeholder="FLAG{...}"` breaks parser — use `placeholder={"FLAG{...}"}` instead
 - Docker build: `npm ci --ignore-scripts && node node_modules/esbuild/install.js` to avoid ETXTBSY race

@@ -94,7 +94,7 @@ Vulnerability analysis engine for GoGatoZ. Performs multi-pass security rule eva
 
 ## Gotchas
 
-1. **Evidence truncation** — Evidence strings truncated to ~160-200 chars via `truncateEvidence()`. Long rules/scripts may be cut off.
+1. **Evidence truncation** — Use `stringutil.TruncateEvidence(text, 200)` (from `pkg/stringutil`), not a local function. Import `github.com/mr-pmillz/gogatoz/pkg/stringutil`.
 2. **Rules:If limitations** — Does NOT support parentheses; evaluates as OR-of-ANDs. Regex errors silently return false. Complex quoting may fail.
 3. **Heuristic detection** — `jobRulesAllowBroad()` searches JSON stringified rules for substring matches (not structural). `onlyIsBroad()` checks for literal strings. Not exhaustive.
 4. **Finding ID non-uniqueness** — Some IDs (e.g., `VARIABLE_INJECTION`) may be emitted multiple times per run. No deduplication within `Run()`.
@@ -102,3 +102,5 @@ Vulnerability analysis engine for GoGatoZ. Performs multi-pass security rule eva
 6. **Fork protection detection** — Substring-based; custom variable-based fork checks won't be detected.
 7. **LOTP detection is catalog-based** — Only matches tools from the static `lotpCatalog` in `lotp.go`. Dynamically constructed commands (e.g., `CMD=npm; $CMD install`) are not detected. Update the catalog when new LOTP tools are published at https://boostsecurityio.github.io/lotp/
 8. **OIDC detection reads `doc.Raw`** — `id_tokens:` is not modeled in the `Job` struct; detection reaches into the raw YAML map via `jobHasIDTokens()`. If a job is rebuilt by `applyExtends`, the raw map still contains the field.
+9. **MR trigger detection** — Use `jobTriggersOnMR(job.Rules)` (value receiver, not pointer) and `jobRulesAllowBroad(job.Rules)` from `analyze.go` for severity escalation in new detection rules. Both take `[]pipeline.Rule`, not `*[]pipeline.Rule`.
+10. **Shared test helper for severity tests** — `severityTestCase` struct + `runSeverityDetectionTests()` in `lotp_rules_test.go` avoids `dupl` linter violations when multiple detection tests share the same table-driven pattern with severity checks.
