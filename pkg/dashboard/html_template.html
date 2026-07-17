@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GoGatoZ Security Dashboard — {{.GroupName}}</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.datatables.net/2.1.8/css/dataTables.bootstrap5.min.css" rel="stylesheet">
+  <style>
+    body { background: #f8f9fa; }
+    .card-stat { text-align: center; }
+    .card-stat .display-4 { font-size: 2rem; font-weight: 700; }
+    .card-stat .card-title { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px; color: #6c757d; }
+    .bg-purple { background-color: #9b59b6 !important; }
+    .navbar-brand { font-weight: 700; letter-spacing: 1px; }
+    canvas { max-height: 300px; }
+    .chart-card { min-height: 350px; }
+    .table td, .table th { vertical-align: middle; }
+    .tier-critical { color: #9b59b6; font-weight: bold; }
+    .tier-high { color: #dc3545; font-weight: bold; }
+    .tier-medium { color: #fd7e14; font-weight: bold; }
+    .tier-low { color: #ffc107; font-weight: bold; }
+    .tier-clean { color: #198754; font-weight: bold; }
+    .score-gauge { font-size: 3rem; font-weight: 800; }
+    footer { border-top: 1px solid #dee2e6; padding: 1rem 0; }
+  </style>
+</head>
+<body>
+
+  <nav class="navbar navbar-dark bg-dark mb-3">
+    <div class="container-fluid">
+      <span class="navbar-brand">GoGatoZ Security Dashboard</span>
+      <span class="navbar-text text-muted">Generated: {{.GeneratedAt.Format "2006-01-02 15:04:05 MST"}}</span>
+    </div>
+  </nav>
+
+  <div class="container-fluid">
+    <!-- Group Header -->
+    <div class="row g-3 mb-4">
+      <div class="col-md-4">
+        <div class="card h-100">
+          <div class="card-body text-center">
+            <h5 class="card-title text-muted">GROUP</h5>
+            <h3>{{.GroupName}}</h3>
+            <div class="score-gauge" id="overallScore">{{.Aggregate.MeanScore}}</div>
+            <p class="text-muted">Mean Security Score</p>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-8">
+        <div class="row g-3">
+          <div class="col-sm-6 col-lg-3">
+            <div class="card card-stat h-100">
+              <div class="card-body">
+                <h6 class="card-title">Projects</h6>
+                <p class="display-4">{{.ProjectCount}}</p>
+              </div>
+            </div>
+          </div>
+          <div class="col-sm-6 col-lg-3">
+            <div class="card card-stat h-100">
+              <div class="card-body">
+                <h6 class="card-title">Total Findings</h6>
+                <p class="display-4">{{.Aggregate.TotalFindings}}</p>
+              </div>
+            </div>
+          </div>
+          <div class="col-sm-6 col-lg-3">
+            <div class="card card-stat h-100" style="border-color:#9b59b6">
+              <div class="card-body">
+                <h6 class="card-title">Critical</h6>
+                <p class="display-4" style="color:#9b59b6">{{.Aggregate.TotalCritical}}</p>
+              </div>
+            </div>
+          </div>
+          <div class="col-sm-6 col-lg-3">
+            <div class="card card-stat h-100 border-danger">
+              <div class="card-body">
+                <h6 class="card-title">High</h6>
+                <p class="display-4 text-danger">{{.Aggregate.TotalHigh}}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Coverage Cards -->
+    <div class="row g-3 mb-4">
+      <div class="col-sm-4">
+        <div class="card card-stat h-100">
+          <div class="card-body">
+            <h6 class="card-title">CI Coverage</h6>
+            <p class="display-4">{{printf "%.0f" .Aggregate.CICoverage}}%</p>
+          </div>
+        </div>
+      </div>
+      <div class="col-sm-4">
+        <div class="card card-stat h-100">
+          <div class="card-body">
+            <h6 class="card-title">Security Job Coverage</h6>
+            <p class="display-4">{{printf "%.0f" .Aggregate.SecurityJobCoverage}}%</p>
+          </div>
+        </div>
+      </div>
+      <div class="col-sm-4">
+        <div class="card card-stat h-100">
+          <div class="card-body">
+            <h6 class="card-title">Protected Branch Coverage</h6>
+            <p class="display-4">{{printf "%.0f" .Aggregate.ProtectedBranchCoverage}}%</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Charts Row -->
+    <div class="row g-3 mb-4">
+      <div class="col-md-5">
+        <div class="card chart-card h-100">
+          <div class="card-header"><strong>Risk Distribution</strong></div>
+          <div class="card-body d-flex align-items-center justify-content-center">
+            <canvas id="riskChart"></canvas>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-7">
+        <div class="card chart-card h-100">
+          <div class="card-header"><strong>Top Findings</strong></div>
+          <div class="card-body">
+            <canvas id="findingsChart"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Project Scorecard Table -->
+    <div class="card mb-4">
+      <div class="card-header"><strong>Project Scorecards</strong></div>
+      <div class="card-body" style="overflow-x:auto">
+        <table id="scorecardTable" class="table table-striped table-hover" style="width:100%">
+          <thead>
+            <tr>
+              <th>Project</th>
+              <th>Score</th>
+              <th>Tier</th>
+              <th>CRIT</th>
+              <th>HIGH</th>
+              <th>MED</th>
+              <th>LOW</th>
+              <th>CI</th>
+              <th>Sec Jobs</th>
+              <th>Protected</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{range .Scorecards}}
+            <tr>
+              <td>{{.ProjectPath}}</td>
+              <td>{{.Score}}</td>
+              <td><span class="tier-{{- if eq .RiskTier "Critical"}}critical{{else if eq .RiskTier "High"}}high{{else if eq .RiskTier "Medium"}}medium{{else if eq .RiskTier "Low"}}low{{else}}clean{{end}}">{{.RiskTier}}</span></td>
+              <td>{{index .FindingsBySeverity "CRITICAL"}}</td>
+              <td>{{index .FindingsBySeverity "HIGH"}}</td>
+              <td>{{index .FindingsBySeverity "MEDIUM"}}</td>
+              <td>{{index .FindingsBySeverity "LOW"}}</td>
+              <td>{{if .HasCI}}yes{{else}}no{{end}}</td>
+              <td>{{if .HasSecurityJobs}}yes{{else}}no{{end}}</td>
+              <td>{{if .HasProtectedBranches}}yes{{else}}no{{end}}</td>
+            </tr>
+            {{end}}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <footer class="text-center text-muted">
+    <small>GoGatoZ {{.Version}} &mdash; Group Security Dashboard</small>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <script src="https://code.jquery.com/jquery-3.7.1.slim.min.js"></script>
+  <script src="https://cdn.datatables.net/2.1.8/js/dataTables.min.js"></script>
+  <script src="https://cdn.datatables.net/2.1.8/js/dataTables.bootstrap5.min.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      // Risk distribution doughnut
+      var riskDist = {{.RiskDistJSON}};
+      new Chart(document.getElementById('riskChart'), {
+        type: 'doughnut',
+        data: {
+          labels: ['Critical', 'High', 'Medium', 'Low', 'Clean'],
+          datasets: [{
+            data: [riskDist.critical, riskDist.high, riskDist.medium, riskDist.low, riskDist.clean],
+            backgroundColor: ['#9b59b6', '#dc3545', '#fd7e14', '#ffc107', '#198754']
+          }]
+        },
+        options: { responsive: true, plugins: { legend: { position: 'bottom' } } }
+      });
+
+      // Top findings bar chart
+      var findings = {{.TopFindingsJSON}};
+      var topN = findings.slice(0, 10);
+      var sevColors = { 'CRITICAL': '#9b59b6', 'HIGH': '#dc3545', 'MEDIUM': '#fd7e14', 'LOW': '#ffc107', 'INFORMATIONAL': '#17a2b8' };
+      new Chart(document.getElementById('findingsChart'), {
+        type: 'bar',
+        data: {
+          labels: topN.map(function(f) { return f.finding_id; }),
+          datasets: [{
+            label: 'Occurrences',
+            data: topN.map(function(f) { return f.count; }),
+            backgroundColor: topN.map(function(f) { return sevColors[f.severity] || '#6c757d'; })
+          }]
+        },
+        options: {
+          indexAxis: 'y',
+          responsive: true,
+          plugins: { legend: { display: false } },
+          scales: { x: { beginAtZero: true, ticks: { stepSize: 1 } } }
+        }
+      });
+
+      // DataTable
+      new DataTable('#scorecardTable', {
+        order: [[1, 'asc']],
+        pageLength: 25
+      });
+    });
+  </script>
+</body>
+</html>

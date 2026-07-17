@@ -25,6 +25,7 @@ docs/.astro/
 *.html
 # Embedded report template must be tracked (consumed by //go:embed in pkg/enumerate/report/html.go)
 !pkg/enumerate/report/html_template.html
+!pkg/dashboard/html_template.html
 ./test/
 *.xml
 public/
