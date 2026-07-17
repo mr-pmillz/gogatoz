@@ -65,10 +65,11 @@ var ErrPartial = errors.New("partial analysis")
 
 // runConfig holds optional behavior toggles for Run.
 type runConfig struct {
-	redactSecrets bool
-	controls      *config.ControlsConfig
-	threatIntel   *config.ThreatIntelFeed
-	variableData  *VariableData
+	redactSecrets   bool
+	controls        *config.ControlsConfig
+	threatIntel     *config.ThreatIntelFeed
+	variableData    *VariableData
+	environmentData []EnvironmentInfo
 }
 
 // Option configures Run behavior.
@@ -95,6 +96,11 @@ func WithControls(cfg *config.ControlsConfig) Option {
 // WithVariableData injects API-fetched CI/CD variable metadata for inheritance analysis.
 func WithVariableData(data *VariableData) Option {
 	return func(c *runConfig) { c.variableData = data }
+}
+
+// WithEnvironmentData injects API-fetched environment metadata for deployment risk analysis.
+func WithEnvironmentData(envs []EnvironmentInfo) Option {
+	return func(c *runConfig) { c.environmentData = envs }
 }
 
 // Run executes core checks against the parsed CI document.
@@ -311,6 +317,9 @@ func Run(doc *pipeline.Document, opts ...Option) ([]Finding, error) {
 				return nil
 			}
 			return detectVariableInheritanceRisk(d, cfg.variableData.ProjectVars, cfg.variableData.GroupVars)
+		}},
+		{"environment_risks", func(d *pipeline.Document) []Finding {
+			return detectEnvironmentRisks(d, cfg.environmentData)
 		}},
 	}
 	for _, s := range steps {

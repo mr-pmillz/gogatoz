@@ -388,6 +388,28 @@ var taxonomyRegistry = map[string]Taxonomy{
 		OWASPCICDRefs: []OWASPCICDRef{owaspSec4},
 	},
 
+	// --- Environment/deployment risks ---
+	EnvUnprotectedDeployID: {
+		CWEs:          []CWERef{cwe284},
+		ATTACKRefs:    []ATTACKRef{attackT1195_002},
+		OWASPCICDRefs: []OWASPCICDRef{owaspSec5},
+	},
+	EnvNoApprovalGateID: {
+		CWEs:          []CWERef{{ID: 862, Name: "Missing Authorization"}},
+		ATTACKRefs:    []ATTACKRef{attackT1195_002},
+		OWASPCICDRefs: []OWASPCICDRef{owaspSec5},
+	},
+	EnvMRDeployRiskID: {
+		CWEs:          []CWERef{cwe284},
+		ATTACKRefs:    []ATTACKRef{attackT1195_002},
+		OWASPCICDRefs: []OWASPCICDRef{owaspSec3},
+	},
+	EnvStaleDeploymentID: {
+		CWEs:          []CWERef{{ID: 1188, Name: "Initialization with Hard-Coded Network Resource Configuration Data"}},
+		ATTACKRefs:    []ATTACKRef{{ID: "T1190", Name: "Exploit Public-Facing Application"}},
+		OWASPCICDRefs: []OWASPCICDRef{owaspSec7},
+	},
+
 	// --- Pages risks ---
 	PagesPublicDeployID: {
 		CWEs:          []CWERef{cwe538},

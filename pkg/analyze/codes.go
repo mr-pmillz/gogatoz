@@ -423,6 +423,36 @@ var findingCodeRegistry = map[string]FindingCodeInfo{
 		Remediation: "Protect variables referenced in security-sensitive scripts or restrict MR pipeline access to those scripts.",
 	},
 
+	// --- Environment/deployment risks ---
+	EnvUnprotectedDeployID: {
+		ID:          EnvUnprotectedDeployID,
+		Severity:    SeverityHigh,
+		Title:       "Job deploys to unprotected environment",
+		Description: "A CI job deploys to an environment with no protection rules.",
+		Remediation: "Configure environment protection rules: require approvals, restrict to protected branches. See: https://docs.gitlab.com/ee/ci/environments/protected_environments.html",
+	},
+	EnvNoApprovalGateID: {
+		ID:          EnvNoApprovalGateID,
+		Severity:    SeverityMedium,
+		Title:       "Production environment lacks required approvals",
+		Description: "A production-tier environment has zero required approvals for deployment.",
+		Remediation: "Set required_approval_count > 0 for production environments. See: https://docs.gitlab.com/ee/ci/environments/deployment_approvals.html",
+	},
+	EnvMRDeployRiskID: {
+		ID:          EnvMRDeployRiskID,
+		Severity:    SeverityHigh,
+		Title:       "MR-triggered job deploys to environment",
+		Description: "A merge request pipeline can trigger deployment to an environment without proper authorization.",
+		Remediation: "Restrict deployment jobs to protected branches only and configure environment protection rules.",
+	},
+	EnvStaleDeploymentID: {
+		ID:          EnvStaleDeploymentID,
+		Severity:    SeverityLow,
+		Title:       "Stale environment with no recent deployments",
+		Description: "An environment has not been deployed to in over 90 days, potentially running outdated code.",
+		Remediation: "Review stale environments and either update deployments or stop/delete unused environments.",
+	},
+
 	// --- Pages risks ---
 	PagesPublicDeployID: {
 		ID:          PagesPublicDeployID,
