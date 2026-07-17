@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"maps"
@@ -326,6 +327,46 @@ func renderPayload() (string, error) {
 			PayloadContent: strings.TrimSpace(atkRTPPayload),
 			ChecksumFile:   strings.TrimSpace(atkRTPChecksums),
 			WebhookURL:     strings.TrimSpace(atkWebhook),
+		}), nil
+	case "pre-get-sources", "pre_get_sources", "pregetsources":
+		return payloadgen.GeneratePreGetSourcesYAML(payloadgen.PreGetSourcesOptions{
+			Common:       common,
+			HookScript:   strings.TrimSpace(atkCmd),
+			CallbackURL:  strings.TrimSpace(atkWebhook),
+			ModifyGitURL: strings.TrimSpace(atkScriptURL),
+		}), nil
+	case "cache-key-poison", "cache_key_poison", "cachekeypoison":
+		var keyFiles []string
+		if s := strings.TrimSpace(atkCacheKeyFiles); s != "" {
+			for f := range strings.SplitSeq(s, ",") {
+				f = strings.TrimSpace(f)
+				if f != "" {
+					keyFiles = append(keyFiles, f)
+				}
+			}
+		}
+		return payloadgen.GenerateCacheKeyPoisonYAML(payloadgen.CacheKeyPoisonOptions{
+			Common:    common,
+			KeyPrefix: strings.TrimSpace(atkCacheKeyPrefix),
+			KeyFiles:  keyFiles,
+			PoisonCmd: strings.TrimSpace(atkPoisonCmd),
+		}), nil
+	case "parallel-matrix", "parallel_matrix", "parallelmatrix":
+		var matrixVars map[string][]string
+		if s := strings.TrimSpace(atkMatrixVars); s != "" {
+			if err := json.Unmarshal([]byte(s), &matrixVars); err != nil {
+				return "", fmt.Errorf("--matrix-vars: %w", err)
+			}
+		}
+		return payloadgen.GenerateParallelMatrixYAML(payloadgen.ParallelMatrixOptions{
+			Common:      common,
+			MatrixVars:  matrixVars,
+			CallbackURL: strings.TrimSpace(atkWebhook),
+		}), nil
+	case "interruptible", "interruptible-attack", "interruptible_attack":
+		return payloadgen.GenerateInterruptibleAttackYAML(payloadgen.InterruptibleOptions{
+			Common:         common,
+			FallbackScript: strings.TrimSpace(atkCmd),
 		}), nil
 	default:
 		return "", fmt.Errorf("unsupported --payload: %s", atkPayload)

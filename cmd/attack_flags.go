@@ -242,6 +242,11 @@ var (
 	atkRTPChecksums          string // checksums file to recalculate
 	// Shared co-author trailer
 	atkCoAuthor string // co-authored-by trailer for commits
+	// Cache key poison payload options (distinct from cache-poison)
+	atkCacheKeyPrefix string // attacker-controlled cache key prefix
+	atkCacheKeyFiles  string // comma-separated files for cache:key:files
+	// Parallel matrix payload options
+	atkMatrixVars string // JSON map of key→[]values for parallel:matrix
 )
 
 func init() {
@@ -483,4 +488,9 @@ func init() {
 	attackCmd.Flags().StringVar(&atkRTPChecksums, "rtp-checksums", "", "Checksums file to recalculate after tampering")
 	// Shared co-author trailer
 	attackCmd.Flags().StringVar(&atkCoAuthor, "co-author", "", "Co-Authored-By trailer for commits")
+	// Cache key poison payload options (structured cache:key:prefix injection)
+	attackCmd.Flags().StringVar(&atkCacheKeyPrefix, "cache-key-prefix", "", "Attacker-controlled cache key prefix (cache-key-poison payload)")
+	attackCmd.Flags().StringVar(&atkCacheKeyFiles, "cache-key-files", "", "Comma-separated files for cache:key:files (cache-key-poison payload)")
+	// Parallel matrix payload options
+	attackCmd.Flags().StringVar(&atkMatrixVars, "matrix-vars", "", `JSON map of key→values for parallel:matrix (e.g. '{"KEY":["v1","v2"]}')`)
 }
