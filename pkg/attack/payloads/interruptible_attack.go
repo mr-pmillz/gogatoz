@@ -57,7 +57,7 @@ func GenerateInterruptibleAttackYAML(o InterruptibleOptions) string {
 
 	fmt.Fprintf(&b, `%s:
   stage: exploit%s%s
-  when: on_failure
+  when: always
   script:
     - |
 %s

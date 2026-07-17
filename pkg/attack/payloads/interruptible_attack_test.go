@@ -20,7 +20,7 @@ func TestGenerateInterruptibleAttackYAML(t *testing.T) {
 				"critical-setup:",
 				"interruptible: true",
 				"sleep 30",
-				"when: on_failure",
+				"when: always",
 				"interruptible-exploit-trigger:",
 				"interruptible-exploit:",
 				"_FALLBACK()",
