@@ -20,10 +20,10 @@ import (
 
 // ttl cache for remote includes across calls
 var (
-	remoteCacheMu    sync.Mutex
-	remoteCache      = map[string]remoteCacheEntry{}
-	cacheEvictOnce   sync.Once
-	cacheEvictStop   chan struct{}
+	remoteCacheMu     sync.Mutex
+	remoteCache       = map[string]remoteCacheEntry{}
+	cacheEvictOnce    sync.Once
+	cacheEvictStop    chan struct{}
 	cacheEvictStopped chan struct{}
 )
 
