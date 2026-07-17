@@ -59,3 +59,4 @@ NEW_FEATURES.md
 .playwright-mcp/
 .claude/reviews/
 .claude/worktrees/
+scrape_gitlab_ci.mjs
