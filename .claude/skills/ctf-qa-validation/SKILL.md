@@ -133,6 +133,22 @@ Tests payload generators without touching GitLab — safe and fast.
 
 Verify: each produces valid YAML starting with `stages:`.
 
+**Expansion track payloads** (Flags 35-47) — test all 13:
+
+```bash
+for p in remote-include-cache workflow-vars spec-inputs rules-bypass interruptible \
+         oidc-federation artifact-reports image-poison parallel-matrix \
+         pre-get-sources cache-key-poison trigger-artifact needs-project; do
+  if ./gogatoz attack --payload-only --payload "$p" 2>/dev/null | head -1 | grep -qE '(stages:|include:|workflow:)'; then
+    echo "  $p: OK"
+  else
+    echo "  $p: FAIL"
+  fi
+done
+```
+
+Verify: all 13 produce valid YAML.
+
 ### 3c. Discover Tags (attack --discover-tags)
 
 ```bash
@@ -316,6 +332,102 @@ done
 echo "Lab cleanup verification complete"
 ```
 
+## Phase 5: Flag Submission Validation (run when flags or flagserver change)
+
+Validates that captured flags can be submitted to the CTF platform and accepted.
+
+### 5a. Flagserver API Reference
+
+The flagserver runs at `http://127.0.0.1:31337` (host port 31337 → container port 8080).
+
+**Endpoints:**
+- `POST /api/auth/register` — `{"name":"<team>","password":"<8+ chars>"}` → `{"team":{...},"token":"<JWT>"}`
+- `POST /api/auth/login` — same body → `{"token":"<JWT>"}`
+- `POST /api/submit` — `{"flag":"FLAG+...+"}` + `Authorization: Bearer <JWT>` → `{"correct":true/false,"flag_name":"..."}`
+- `GET /api/scoreboard` — `Authorization: Bearer <JWT>` → `{"teams":[...],"total_flags":N}`
+
+**Field names:** `name` and `password` (NOT `team_name`). Flag field: `flag` (NOT `value`).
+
+### 5b. Register/Login and Submit Flags
+
+```bash
+FLAGSERVER="http://127.0.0.1:31337"
+
+# Register (or login if team exists)
+REG=$(curl -sf -X POST "$FLAGSERVER/api/auth/register" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"qa-team","password":"qa-password-2026!"}')
+JWT=$(echo "$REG" | jq -r '.token')
+
+if [ -z "$JWT" ] || [ "$JWT" = "null" ]; then
+  JWT=$(curl -sf -X POST "$FLAGSERVER/api/auth/login" \
+    -H "Content-Type: application/json" \
+    -d '{"name":"qa-team","password":"qa-password-2026!"}' | jq -r '.token')
+fi
+
+# Submit a flag
+curl -sf -X POST "$FLAGSERVER/api/submit" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $JWT" \
+  -d '{"flag":"FLAG+value_here+"}'
+```
+
+### 5c. Rate Limiting
+
+The flagserver enforces per-team (10/min) and per-IP (120/min submissions, 30/min team creation) rate limits. When submitting multiple flags in batch, add `sleep 2` between submissions to avoid hitting the limit. Empty responses indicate rate limiting — wait 15-30 seconds and retry.
+
+### 5d. Flagserver .env Sync
+
+If setup-lab.sh's `generate_flagserver_env()` has been updated but the running container still has old flags, sync manually:
+
+```bash
+cd ~/projects/gogatoz-ctf
+# Extract base64 from setup-lab.sh and update .env
+python3 -c "
+import re
+with open('setup-lab.sh') as f:
+    content = f.read()
+parts = re.findall(r'flags_b64\+?=\"([^\"]+)\"', content)
+b64 = ''.join(parts)
+with open('flagserver/.env') as f:
+    lines = f.readlines()
+with open('flagserver/.env', 'w') as f:
+    for line in lines:
+        if line.startswith('CTF_FLAGS_B64='):
+            f.write(f'CTF_FLAGS_B64={b64}\n')
+        else:
+            f.write(line)
+"
+
+# Force-recreate (restart alone does NOT reload .env)
+docker compose up -d flagserver --force-recreate
+sleep 3
+
+# Verify flag count
+docker compose exec flagserver sh -c 'echo $CTF_FLAGS_B64' | \
+  base64 -d 2>/dev/null | python3 -c "import json,sys; f=json.load(sys.stdin); print(f'flags: {len(f)}')"
+```
+
+### 5e. Expansion Track Payload Names
+
+All 13 expansion payloads (Flags 35-47) for `--payload-only` and `--commit-ci --payload`:
+
+| Payload Name | Flag | Technique |
+|-------------|------|-----------|
+| `remote-include-cache` | 35 | Remote include cache poisoning |
+| `workflow-vars` | 36 | workflow:rules:variables injection |
+| `spec-inputs` | 37 | spec:inputs interpolation injection |
+| `rules-bypass` | 38 | rules:changes/exists security scan evasion |
+| `interruptible` | 39 | interruptible race condition exploit |
+| `oidc-federation` | 40 | OIDC id_tokens cloud credential exchange |
+| `artifact-reports` | 41 | Artifact report SARIF spoofing |
+| `image-poison` | 42 | Image/service container command hijack |
+| `parallel-matrix` | 43 | parallel:matrix credential path sweep |
+| `pre-get-sources` | 44 | pre_get_sources_script hook injection |
+| `cache-key-poison` | 45 | cache:key:prefix shared cache poisoning |
+| `trigger-artifact` | 46 | trigger:include:artifact child pipeline |
+| `needs-project` | 47 | needs:project cross-project artifact injection |
+
 ## Pass/Fail Criteria
 
 | Phase | Pass Condition |
@@ -324,6 +436,7 @@ echo "Lab cleanup verification complete"
 | Phase 2 | All smoke commands return expected output, no panics |
 | Phase 3 | Each tested feature produces expected output per section |
 | Phase 4 | All cleanup steps return SUCCESS, no leftover gogatoz branches |
+| Phase 5 | All flags accepted by flagserver, scoreboard shows correct total |
 
 Flag values in the CTF always use `FLAG+...+` format (never `FLAG{...}`) because GitLab cannot mask variables containing curly braces.
 
