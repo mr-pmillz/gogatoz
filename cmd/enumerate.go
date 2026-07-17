@@ -50,6 +50,7 @@ var (
 	// inventory
 	enumFetchProtected bool
 	enumFetchRunners   bool
+	enumFetchVariables bool
 	runnerScope        string
 	allowAdminScope    bool
 	// logs scraping
@@ -196,6 +197,7 @@ var enumerateCmd = &cobra.Command{
 		// Inventory
 		opts.FetchProtected = enumFetchProtected
 		opts.FetchRunners = enumFetchRunners
+		opts.FetchVariables = enumFetchVariables
 		opts.RunnerScope = runnerScope
 		opts.AllowAdmin = allowAdminScope
 		// Logs scraping
@@ -507,6 +509,7 @@ func init() {
 	// Inventory
 	enumerateCmd.Flags().BoolVar(&enumFetchProtected, "protected-branches", false, "Fetch and include names of protected branches for each project")
 	enumerateCmd.Flags().BoolVar(&enumFetchRunners, "runners", false, "Fetch runner summary (counts and executors); combine with --runners-scope")
+	enumerateCmd.Flags().BoolVar(&enumFetchVariables, "fetch-variables", false, "Fetch project and group CI/CD variable metadata (requires api scope)")
 	enumerateCmd.Flags().StringVar(&runnerScope, "runners-scope", "project", "Runner scope to query when --runners is set: project|group|instance")
 	enumerateCmd.Flags().BoolVar(&allowAdminScope, "allow-admin-scope", false, "Allow admin-only operations (required for --runners-scope=instance)")
 	// Log scraping (optional)

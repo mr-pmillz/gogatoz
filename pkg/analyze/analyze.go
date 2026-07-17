@@ -68,6 +68,7 @@ type runConfig struct {
 	redactSecrets bool
 	controls      *config.ControlsConfig
 	threatIntel   *config.ThreatIntelFeed
+	variableData  *VariableData
 }
 
 // Option configures Run behavior.
@@ -89,6 +90,11 @@ func WithThreatIntel(feed *config.ThreatIntelFeed) Option {
 // A nil value is safe and means "use hardcoded defaults".
 func WithControls(cfg *config.ControlsConfig) Option {
 	return func(c *runConfig) { c.controls = cfg }
+}
+
+// WithVariableData injects API-fetched CI/CD variable metadata for inheritance analysis.
+func WithVariableData(data *VariableData) Option {
+	return func(c *runConfig) { c.variableData = data }
 }
 
 // Run executes core checks against the parsed CI document.
@@ -300,6 +306,12 @@ func Run(doc *pipeline.Document, opts ...Option) ([]Finding, error) {
 		{"oidc_provenance_anomaly", detectOIDCProvenanceAnomaly},
 		{"pages_risks", detectPagesRisks},
 		{"sbom_issues", detectSBOMIssues},
+		{"variable_inheritance", func(d *pipeline.Document) []Finding {
+			if cfg.variableData == nil {
+				return nil
+			}
+			return detectVariableInheritanceRisk(d, cfg.variableData.ProjectVars, cfg.variableData.GroupVars)
+		}},
 	}
 	for _, s := range steps {
 		findings = append(findings, s.fn(doc)...)

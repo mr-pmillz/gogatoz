@@ -49,6 +49,9 @@ type Result struct {
 	RunnerTagHits        map[string]int            `json:"runner_tag_hits,omitempty"`
 	RunnerRiskyExecutors map[string]int            `json:"runner_risky_executors,omitempty"`
 	RunnerTagExecutors   map[string]map[string]int `json:"runner_tag_executors,omitempty"`
+	// Variable metadata (optional)
+	ProjectVariables []analyze.VariableInfo `json:"project_variables,omitempty"`
+	GroupVariables   []analyze.VariableInfo `json:"group_variables,omitempty"`
 	// Log scraping (optional)
 	LogFindingsCount int    `json:"log_findings_count,omitempty"`
 	DurationMS       int64  `json:"duration_ms,omitempty"`
@@ -79,6 +82,8 @@ type Options struct {
 	LogScrape       bool // scrape recent job logs for key=value findings
 	LogMaxPipelines int  // cap pipelines per ref
 	LogMaxJobs      int  // cap jobs per pipeline
+	// Variable metadata
+	FetchVariables bool // fetch project and group CI/CD variable metadata (requires api scope)
 	// Analysis
 	SkipAnalyze bool                    // when true, parse and summarize but skip analyzer passes
 	Redact      bool                    // when true, mask plaintext secret values in findings (default: unredacted)
@@ -268,6 +273,25 @@ func scanOne(ctx context.Context, cl *gitlabx.Client, ident string, opts Options
 		}
 	}
 
+	// Optional: fetch CI/CD variable metadata for inheritance analysis
+	var projectVars, groupVars []analyze.VariableInfo
+	if opts.FetchVariables {
+		if pv, err := FetchProjectVariables(ctx, cl, proj.ID); err == nil {
+			projectVars = pv
+			r.ProjectVariables = pv
+		} else {
+			appendError(&r, fmt.Sprintf("project variables: %v", err))
+		}
+		if proj.Namespace != nil && proj.Namespace.ID != 0 {
+			if gv, err := FetchGroupVariables(ctx, cl, proj.Namespace.ID); err == nil {
+				groupVars = gv
+				r.GroupVariables = gv
+			} else {
+				appendError(&r, fmt.Sprintf("group variables: %v", err))
+			}
+		}
+	}
+
 	refToUse := strings.TrimSpace(ref)
 	if refToUse == "" {
 		refToUse = proj.DefaultBranch
@@ -401,6 +425,12 @@ func scanOne(ctx context.Context, cl *gitlabx.Client, ident string, opts Options
 	}
 	if opts.ThreatIntel != nil {
 		aopts = append(aopts, analyze.WithThreatIntel(opts.ThreatIntel))
+	}
+	if opts.FetchVariables && (len(projectVars) > 0 || len(groupVars) > 0) {
+		aopts = append(aopts, analyze.WithVariableData(&analyze.VariableData{
+			ProjectVars: projectVars,
+			GroupVars:   groupVars,
+		}))
 	}
 	findings, ferr := analyze.Run(ciDocResolved, aopts...)
 	if ferr != nil && !errors.Is(ferr, analyze.ErrPartial) {

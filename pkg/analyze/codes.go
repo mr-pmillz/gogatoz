@@ -393,6 +393,36 @@ var findingCodeRegistry = map[string]FindingCodeInfo{
 		Remediation: "Remove the job and delete any uploaded artifacts containing secrets. Rotate all CI/CD secrets. Set artifact expiration policies (expire_in) on all jobs. Restrict artifact download permissions.",
 	},
 
+	// --- Variable inheritance risks ---
+	VarInheritanceShadowID: {
+		ID:          VarInheritanceShadowID,
+		Severity:    SeverityMedium,
+		Title:       "Job variable shadows a protected CI/CD variable",
+		Description: "A job-level YAML variable shadows a protected project or group CI/CD variable, bypassing protection controls.",
+		Remediation: "Remove the job-level variable override or ensure it does not conflict with protected variables. Use variable inheritance intentionally.",
+	},
+	VarUnmaskedSecretID: {
+		ID:          VarUnmaskedSecretID,
+		Severity:    SeverityHigh,
+		Title:       "CI/CD variable with secret-like name is not masked",
+		Description: "A variable whose name suggests it holds a secret is not masked. The value will be visible in job logs.",
+		Remediation: "Enable masking on CI/CD variables that hold secrets (Settings > CI/CD > Variables > Masked). See: https://docs.gitlab.com/ee/ci/variables/#mask-a-cicd-variable",
+	},
+	VarUnprotectedSecretID: {
+		ID:          VarUnprotectedSecretID,
+		Severity:    SeverityHigh,
+		Title:       "Masked CI/CD variable is not protected",
+		Description: "A masked variable is accessible from unprotected branches and MR pipelines, enabling exfiltration.",
+		Remediation: "Enable protection on masked variables so they are only available on protected branches. See: https://docs.gitlab.com/ee/ci/variables/#protect-a-cicd-variable",
+	},
+	VarMROverrideRiskID: {
+		ID:          VarMROverrideRiskID,
+		Severity:    SeverityMedium,
+		Title:       "MR pipeline can override unprotected variable used in script",
+		Description: "An unprotected CI/CD variable is referenced in a script that runs on MR pipelines. An attacker can override it via MR pipeline variables.",
+		Remediation: "Protect variables referenced in security-sensitive scripts or restrict MR pipeline access to those scripts.",
+	},
+
 	// --- Pages risks ---
 	PagesPublicDeployID: {
 		ID:          PagesPublicDeployID,

@@ -68,6 +68,8 @@ var (
 	cwe915  = CWERef{ID: 915, Name: "Improperly Controlled Modification of Dynamically-Determined Object Attributes"}
 	cwe940  = CWERef{ID: 940, Name: "Improper Verification of Source of a Communication Channel"}
 	cwe1104 = CWERef{ID: 1104, Name: "Use of Unmaintained Third-Party Components"}
+	cwe668  = CWERef{ID: 668, Name: "Exposure of Resource to Wrong Sphere"}
+	cwe807  = CWERef{ID: 807, Name: "Reliance on Untrusted Inputs in a Security Decision"}
 )
 
 // Commonly referenced MITRE ATT&CK techniques.
@@ -362,6 +364,28 @@ var taxonomyRegistry = map[string]Taxonomy{
 		CWEs:          []CWERef{cwe506},
 		ATTACKRefs:    []ATTACKRef{attackT1195_002},
 		OWASPCICDRefs: []OWASPCICDRef{owaspSec3, owaspSec10},
+	},
+
+	// --- Variable inheritance risks ---
+	VarInheritanceShadowID: {
+		CWEs:          []CWERef{cwe807},
+		ATTACKRefs:    []ATTACKRef{attackT1574},
+		OWASPCICDRefs: []OWASPCICDRef{owaspSec4},
+	},
+	VarUnmaskedSecretID: {
+		CWEs:          []CWERef{cwe312},
+		ATTACKRefs:    []ATTACKRef{attackT1552_001},
+		OWASPCICDRefs: []OWASPCICDRef{owaspSec2},
+	},
+	VarUnprotectedSecretID: {
+		CWEs:          []CWERef{cwe668},
+		ATTACKRefs:    []ATTACKRef{attackT1552_001},
+		OWASPCICDRefs: []OWASPCICDRef{owaspSec2},
+	},
+	VarMROverrideRiskID: {
+		CWEs:          []CWERef{cwe807},
+		ATTACKRefs:    []ATTACKRef{attackT1574},
+		OWASPCICDRefs: []OWASPCICDRef{owaspSec4},
 	},
 
 	// --- Pages risks ---
