@@ -45,6 +45,7 @@ func Open(dbPath string) (*Store, error) {
 		&ExfiltratedSecret{},
 		&GraphNode{},
 		&GraphEdge{},
+		&KeyPair{},
 	); err != nil {
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
@@ -247,4 +248,34 @@ func (s *Store) GetGraphEdges(sessionID uint) ([]GraphEdge, error) {
 	var edges []GraphEdge
 	err := s.db.Where("session_id = ?", sessionID).Find(&edges).Error
 	return edges, err
+}
+
+// SaveKeyPair persists an RSA keypair for later decryption.
+func (s *Store) SaveKeyPair(kp *KeyPair) error {
+	return s.db.Create(kp).Error
+}
+
+// GetKeyPair retrieves a keypair by ID.
+func (s *Store) GetKeyPair(id uint) (*KeyPair, error) {
+	var kp KeyPair
+	if err := s.db.First(&kp, id).Error; err != nil {
+		return nil, err
+	}
+	return &kp, nil
+}
+
+// GetKeyPairByLabel retrieves the most recent keypair matching label.
+func (s *Store) GetKeyPairByLabel(label string) (*KeyPair, error) {
+	var kp KeyPair
+	if err := s.db.Where("label = ?", label).Order("created_at DESC").First(&kp).Error; err != nil {
+		return nil, err
+	}
+	return &kp, nil
+}
+
+// ListKeyPairs returns all stored keypairs ordered by creation time.
+func (s *Store) ListKeyPairs() ([]KeyPair, error) {
+	var kps []KeyPair
+	err := s.db.Order("created_at DESC").Find(&kps).Error
+	return kps, err
 }

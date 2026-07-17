@@ -183,6 +183,18 @@ type ExfiltratedSecret struct {
 	Value             string `gorm:"not null"` //nolint:gosec // exfiltrated value, not a credential
 }
 
+// KeyPair stores an RSA keypair used for encrypted exfiltration.
+// The private key is stored PEM-encoded so artifacts from completed pipelines
+// can be decrypted in later sessions (e.g. via gogatoz attack --decrypt-session).
+type KeyPair struct {
+	gorm.Model
+	Label      string `gorm:"not null;index"` // human-readable label (e.g. "auto-2026-07-17T20:00:00Z")
+	PublicPEM  string `gorm:"type:text;not null"`
+	PrivatePEM string `gorm:"type:text;not null"`
+	KeyBits    int    `gorm:"not null;default:4096"`
+	SessionID  uint   `gorm:"index"` // optional link to ScanSession
+}
+
 // GraphNode stores a BloodHound graph node for re-export.
 type GraphNode struct {
 	gorm.Model

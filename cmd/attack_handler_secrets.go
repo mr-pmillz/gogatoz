@@ -2,10 +2,13 @@ package cmd
 
 import (
 	"context"
+	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"strings"
 	"time"
@@ -14,6 +17,8 @@ import (
 	rorpkg "github.com/mr-pmillz/gogatoz/pkg/attack/ror"
 	secdump "github.com/mr-pmillz/gogatoz/pkg/attack/secretsdump"
 	"github.com/mr-pmillz/gogatoz/pkg/gitlabx"
+	"github.com/mr-pmillz/gogatoz/pkg/pivot"
+	"github.com/mr-pmillz/gogatoz/pkg/store"
 	"github.com/spf13/cobra"
 )
 
@@ -129,6 +134,14 @@ func runAttackSecrets(ctx context.Context, cmd *cobra.Command, client *gitlabx.C
 	privkeyPEM, err := readOptionalKeyFile(atkPrivkeyFile, "privkey-file")
 	if err != nil {
 		return err
+	}
+
+	if atkAutoEncrypt && len(pubkeyBytes) == 0 {
+		var genErr error
+		pubkeyBytes, privkeyPEM, genErr = generateAndStoreKeyPair()
+		if genErr != nil {
+			return genErr
+		}
 	}
 	sr := newSecretsRunner(client, strings.TrimSpace(gitlabURL), atkAuthorName, atkAuthorEmail, 0)
 	exfil := attack.ExfilOptions{Method: atkExfilMethod, Target: atkExfilTarget}
@@ -308,4 +321,35 @@ func runAttackCommitCI(ctx context.Context, cmd *cobra.Command, client *gitlabx.
 		renderInfo(cmd.OutOrStdout(), fmt.Sprintf("Merge Request: %s", mrURL))
 	}
 	return nil
+}
+
+// generateAndStoreKeyPair creates an RSA-4096 keypair for auto-encrypt mode,
+// returns the PEM-encoded public and private keys, and persists the pair to
+// the CLI store if available.
+func generateAndStoreKeyPair() (pubPEMBytes, privPEMBytes []byte, err error) {
+	slog.Info("auto-encrypt: generating RSA-4096 keypair")
+	privKey, pubPEM, err := pivot.GenerateKeyPair(4096)
+	if err != nil {
+		return nil, nil, fmt.Errorf("auto-encrypt keygen: %w", err)
+	}
+	privDER, err := x509.MarshalPKCS8PrivateKey(privKey)
+	if err != nil {
+		return nil, nil, fmt.Errorf("auto-encrypt marshal: %w", err)
+	}
+	privPEMBytes = pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: privDER})
+
+	if cliStore != nil {
+		label := "auto-" + time.Now().UTC().Format(time.RFC3339)
+		if storeErr := cliStore.SaveKeyPair(&store.KeyPair{
+			Label:      label,
+			PublicPEM:  pubPEM,
+			PrivatePEM: string(privPEMBytes),
+			KeyBits:    4096,
+		}); storeErr != nil {
+			slog.Warn("auto-encrypt: failed to persist keypair", "error", storeErr)
+		} else {
+			slog.Info("auto-encrypt: keypair stored in DB", "label", label)
+		}
+	}
+	return []byte(pubPEM), privPEMBytes, nil
 }

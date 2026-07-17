@@ -285,3 +285,101 @@ func TestClose(t *testing.T) {
 		t.Errorf("Close: %v", err)
 	}
 }
+
+func TestKeyPair_SaveAndRetrieve(t *testing.T) {
+	st := openTestStore(t)
+
+	kp := &KeyPair{
+		Label:      "test-keypair",
+		PublicPEM:  "-----BEGIN PUBLIC KEY-----\nMIIB...\n-----END PUBLIC KEY-----",
+		PrivatePEM: "-----BEGIN PRIVATE KEY-----\nMIIE...\n-----END PRIVATE KEY-----",
+		KeyBits:    4096,
+	}
+	if err := st.SaveKeyPair(kp); err != nil {
+		t.Fatalf("SaveKeyPair: %v", err)
+	}
+	if kp.ID == 0 {
+		t.Fatal("expected non-zero ID after save")
+	}
+
+	got, err := st.GetKeyPair(kp.ID)
+	if err != nil {
+		t.Fatalf("GetKeyPair: %v", err)
+	}
+	if got.Label != "test-keypair" {
+		t.Errorf("label = %q, want %q", got.Label, "test-keypair")
+	}
+	if got.PublicPEM != kp.PublicPEM {
+		t.Error("public PEM mismatch")
+	}
+	if got.PrivatePEM != kp.PrivatePEM {
+		t.Error("private PEM mismatch")
+	}
+	if got.KeyBits != 4096 {
+		t.Errorf("key bits = %d, want 4096", got.KeyBits)
+	}
+}
+
+func TestKeyPair_GetByLabel(t *testing.T) {
+	st := openTestStore(t)
+
+	for i, label := range []string{"session-a", "session-b", "session-a"} {
+		if err := st.SaveKeyPair(&KeyPair{
+			Label:      label,
+			PublicPEM:  "pub",
+			PrivatePEM: "priv",
+			KeyBits:    4096,
+			SessionID:  uint(i + 1),
+		}); err != nil {
+			t.Fatalf("SaveKeyPair[%d]: %v", i, err)
+		}
+	}
+
+	got, err := st.GetKeyPairByLabel("session-a")
+	if err != nil {
+		t.Fatalf("GetKeyPairByLabel: %v", err)
+	}
+	if got.SessionID != 3 {
+		t.Errorf("expected most recent session-a (SessionID=3), got %d", got.SessionID)
+	}
+
+	_, err = st.GetKeyPairByLabel("nonexistent")
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		t.Errorf("expected ErrRecordNotFound, got %v", err)
+	}
+}
+
+func TestKeyPair_List(t *testing.T) {
+	st := openTestStore(t)
+
+	for _, label := range []string{"first", "second", "third"} {
+		if err := st.SaveKeyPair(&KeyPair{
+			Label:      label,
+			PublicPEM:  "pub",
+			PrivatePEM: "priv",
+			KeyBits:    4096,
+		}); err != nil {
+			t.Fatalf("SaveKeyPair(%s): %v", label, err)
+		}
+	}
+
+	kps, err := st.ListKeyPairs()
+	if err != nil {
+		t.Fatalf("ListKeyPairs: %v", err)
+	}
+	if len(kps) != 3 {
+		t.Fatalf("expected 3 keypairs, got %d", len(kps))
+	}
+	if kps[0].Label != "third" {
+		t.Errorf("expected most recent first, got %q", kps[0].Label)
+	}
+}
+
+func TestKeyPair_NotFound(t *testing.T) {
+	st := openTestStore(t)
+
+	_, err := st.GetKeyPair(9999)
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		t.Errorf("expected ErrRecordNotFound, got %v", err)
+	}
+}

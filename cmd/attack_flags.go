@@ -59,6 +59,7 @@ var (
 	atkNoWait      bool
 	atkAllVars     bool
 	atkWaitTimeout time.Duration
+	atkAutoEncrypt bool // auto-generate RSA-4096 keypair for encrypted exfil
 	// secrets API dump options
 	atkWithProjVars     bool
 	atkWithGroupVars    bool
@@ -319,6 +320,7 @@ func init() {
 	attackCmd.Flags().StringVar(&atkPrivkeyFile, "privkey-file", "", "RSA private key PEM for decrypting exfil artifacts (pairs with --pubkey-file)")
 	attackCmd.Flags().BoolVar(&atkNoWait, "no-wait", false, "Skip waiting for the exfiltrate job to finish (disables artifact download, decrypt, and DB store)")
 	attackCmd.Flags().BoolVar(&atkAllVars, "all-vars", false, "Show all exfiltrated variables including GitLab CI built-ins and OS variables (default: filtered)")
+	attackCmd.Flags().BoolVar(&atkAutoEncrypt, "auto-encrypt", false, "Auto-generate RSA-4096 keypair for encrypted exfil (keys stored in DB for later decryption)")
 	attackCmd.Flags().DurationVar(&atkWaitTimeout, "wait-timeout", 5*time.Minute, "Max time to wait for the exfiltrate job to complete (default: 5m)")
 	// secrets API dump options (for --secrets JSON output)
 	attackCmd.Flags().BoolVar(&atkWithProjVars, "project-vars", false, "Include project variables in JSON output for --secrets")
