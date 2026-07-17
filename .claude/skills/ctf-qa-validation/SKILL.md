@@ -419,7 +419,7 @@ All 13 expansion payloads (Flags 35-47) for `--payload-only` and `--commit-ci --
 | `spec-inputs` | 37 | spec:inputs interpolation injection |
 | `rules-bypass` | 38 | rules:changes/exists security scan evasion |
 | `interruptible` | 39 | interruptible race condition exploit |
-| `oidc-federation` | 40 | OIDC id_tokens cloud credential exchange |
+| `oidc-federation` | 40 | OIDC id_tokens cloud credential exchange (see note below) |
 | `artifact-reports` | 41 | Artifact report SARIF spoofing |
 | `image-poison` | 42 | Image/service container command hijack |
 | `parallel-matrix` | 43 | parallel:matrix credential path sweep |
@@ -488,6 +488,17 @@ bash setup-lab.sh
 If it fails with exit code 22 or 1, check for:
 - Raw `curl -sf` calls missing `|| true` (file creation that fails on re-run)
 - Rails runner PAT creation using `revoke!` instead of `destroy_all` (token digest collision)
+
+### OIDC Challenge Limitation (Flag 40)
+
+The `id_tokens:` keyword requires **GitLab Premium/Ultimate**. On the GitLab CE lab, OIDC tokens are not minted at runtime. However:
+
+- `gogatoz enumerate` still detects `OIDC_TOKEN_MR_RISK` because the CI YAML pattern is present
+- The flag (`CLOUD_SECRET`) is a masked CI variable representing the cloud credential
+- Solve with `--payload secrets` (artifact-based env dump) instead of `--payload oidc-federation`
+- The `oidc-federation` payload generator works correctly and produces valid YAML, but the generated job's `$GITLAB_OIDC_TOKEN` variable will be empty on CE
+
+On a real GitLab Premium instance, use `--payload oidc-federation --oidc-provider aws|gcp|azure` to capture and exchange actual OIDC JWTs.
 
 ## Pass/Fail Criteria
 
