@@ -21,7 +21,7 @@ Exploitation and persistence modules for GoGatoZ. Provides CI pipeline injection
 
 | Directory | Files | Purpose |
 |-----------|-------|---------|
-| `payloads/` | `payloads.go`, `payloads_test.go`, `infostealer.go`, `infostealer_test.go`, `lotp.go`, `lotp_test.go` | YAML payload generators: RoR Shell, Pwn Request, Runner-on-Runner, Secrets Exfil, Git Hook, Cache Poison; LOTP config-file payload generators: Phantom Gyp (binding.gyp+index.js), npm, Make, pytest, goreleaser, gradle, terraform; Infostealer shell script |
+| `payloads/` | `payloads.go`, `infostealer.go`, `lotp.go`, + 25 more | YAML payload generators (37 total): original (RoR Shell, Pwn Request, Runner-on-Runner, Secrets Exfil, Git Hook, Cache Poison, Memory Dump, Supply Chain Worm, Container Escape, Variable Injection, C2 Channels, Branch Mutator, Sigstore, Dead Man Switch, K8s Secrets, NPM Tamper, Vault Enum, Workflow Exfil, Commit Prefix, Release Pipeline, Runner Var Dump, Dep Confusion, Nested Runner) + expansion track (Remote Include Cache, Workflow Rules Vars, Spec Inputs Injection, Rules Bypass, Interruptible, OIDC Federation, Artifact Reports, Image Poison, Parallel Matrix, Pre-Get Sources, Cache Key Poison, Trigger Artifact, Needs Project); LOTP config-file generators; Infostealer shell script |
 | `c2/` | `controller.go`, `controller_test.go` | C2 session orchestration with branch deconflict strategies (fail/force/suffix) |
 | `ror/` | `ror.go` | Runner discovery and tag filtering by executor heuristics |
 | `secretsdump/` | `secretsdump.go`, `artifacts.go`, `logs.go`, `consts.go`, `logs_test.go` | Variable enumeration, ZIP artifact scraping, job log scraping for secrets |

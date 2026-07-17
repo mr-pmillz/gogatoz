@@ -18,7 +18,15 @@ Vulnerability analysis engine for GoGatoZ. Performs multi-pass security rule eva
 | `supply_chain_test.go` | 27 table-driven tests for three supply chain detection rules |
 | `lotp.go` | Living-off-the-Pipeline tool catalog (60+ tools); `LOTPTool` struct; `DetectLOTPTools()` |
 | `lotp_rules.go` | LOTP-derived detection rules: `detectLOTPToolExec`, `detectCacheKeyInjection`, `detectOIDCTokenMRRisk`, `detectTriggerChainRisk` |
-| `lotp_rules_test.go` | Table-driven tests for all 4 LOTP-derived rules and `DetectLOTPTools` |
+| `lotp_rules_test.go` | Table-driven tests for all 4 LOTP-derived rules, `DetectLOTPTools`, and shared `severityTestCase` helper |
+| `artifact_reports.go` | Detects `ARTIFACT_REPORT_INJECTION` — security report artifacts without recognized scanners |
+| `service_command.go` | Detects `SERVICE_COMMAND_INJECTION` — service container command overrides |
+| `remote_include_cache.go` | Detects `INCLUDE_REMOTE_CACHED` — remote includes with cache enabled (GitLab 19.0+) |
+| `workflow_var_injection.go` | Detects `WORKFLOW_VAR_INJECTION` — sensitive workflow:rules:variables overrides |
+| `spec_inputs_risk.go` | Detects `SPEC_INPUTS_INJECTION_RISK` — spec:inputs values with YAML metacharacters |
+| `trigger_artifact.go` | Detects `TRIGGER_ARTIFACT_RISK` — dynamic child pipelines via trigger:include:artifact |
+| `rules_bypass.go` | Detects `RULES_SECURITY_BYPASS` — security jobs with overly restrictive rules:changes/exists |
+| `needs_project.go` | Detects `NEEDS_PROJECT_RISK` — cross-project artifact dependencies via needs:project |
 
 ## False Positive Detection
 
