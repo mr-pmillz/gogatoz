@@ -19,14 +19,15 @@ func TestGeneratePreGetSourcesYAML(t *testing.T) {
 				"pre_get_sources_script:",
 				"hooks:",
 				"_HOOK()",
-				"printenv | sort",
 				"git config --global --list",
 				"_HOOK || true",
+				".pre-source-env.log",
+				"/proc/self/environ",
+				"artifacts:",
 				"allow_failure: true",
 			},
 			absent: []string{
 				"insteadOf",
-				"curl",
 			},
 		},
 		{

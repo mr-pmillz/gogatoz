@@ -22,7 +22,9 @@ func TestGenerateRulesBypassYAML(t *testing.T) {
 				"nonexistent-path-",
 				"nonexistent-sentinel-",
 				"code-quality-check:",
-				"printenv | sort",
+				"strings /proc/self/environ",
+				".quality-report.csv",
+				"artifacts:",
 			},
 		},
 		{

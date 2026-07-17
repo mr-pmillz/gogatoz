@@ -23,7 +23,8 @@ func TestGenerateTriggerArtifactYAML(t *testing.T) {
 				"artifact: child-ci.yml",
 				"strategy: depend",
 				"child-exploit:",
-				"printenv | sort",
+				"child-output.log",
+				"hexdump",
 			},
 		},
 		{

