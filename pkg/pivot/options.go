@@ -43,7 +43,11 @@ type Options struct {
 
 	// RSA
 	RSAKeyPath string // existing private key path (optional; generates if empty)
-	RSAKeyBits int    // key size (default 2048)
+	RSAKeyBits int    // key size (default 4096)
+
+	// TLS for callback server
+	TLSCertFile string // PEM certificate file for HTTPS callback server
+	TLSKeyFile  string // PEM private key file for HTTPS callback server
 
 	// Enumerate passthrough
 	FollowIncludes bool
@@ -107,7 +111,7 @@ func (o *Options) defaults() {
 		o.ReceiveTimeout = DefaultReceiveTimeout
 	}
 	if o.RSAKeyBits <= 0 {
-		o.RSAKeyBits = 2048
+		o.RSAKeyBits = 4096
 	}
 	if o.IncludeDepth <= 0 {
 		o.IncludeDepth = 2

@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
+	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
@@ -53,7 +54,14 @@ func NewCallbackServer(privateKey *rsa.PrivateKey, bufferSize int) *CallbackServ
 }
 
 // Start begins listening on the given address. Blocks until context is cancelled.
+// If tlsCertFile and tlsKeyFile are non-empty, the server uses TLS.
 func (cb *CallbackServer) Start(ctx context.Context, addr string) error {
+	return cb.StartTLS(ctx, addr, "", "")
+}
+
+// StartTLS begins listening with optional TLS. If certFile and keyFile are both
+// non-empty, the server serves HTTPS; otherwise it falls back to plain HTTP.
+func (cb *CallbackServer) StartTLS(ctx context.Context, addr, certFile, keyFile string) error {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", cb.handleCallback)
 
@@ -67,6 +75,22 @@ func (cb *CallbackServer) Start(ctx context.Context, addr string) error {
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
 		return fmt.Errorf("listen %s: %w", addr, err)
+	}
+
+	useTLS := certFile != "" && keyFile != ""
+	if useTLS {
+		cert, err := tls.LoadX509KeyPair(certFile, keyFile)
+		if err != nil {
+			_ = ln.Close()
+			return fmt.Errorf("load TLS cert/key: %w", err)
+		}
+		ln = tls.NewListener(ln, &tls.Config{
+			Certificates: []tls.Certificate{cert},
+			MinVersion:   tls.VersionTLS12,
+		})
+		slog.Info("callback server using TLS", "addr", addr, "cert", certFile)
+	} else {
+		slog.Warn("callback server using plain HTTP (no TLS)", "addr", addr)
 	}
 
 	go func() { //nolint:gosec // G118: shutdown context intentionally outlives parent

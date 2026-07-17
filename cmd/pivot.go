@@ -27,6 +27,8 @@ var (
 	pivotConcurrency    int
 	pivotDryRun         bool
 	pivotCleanup        bool
+	pivotTLSCert        string
+	pivotTLSKey         string
 	pivotBranch         string
 	pivotFollowIncl     bool
 	pivotFetchRunners   bool
@@ -97,6 +99,8 @@ func runPivot(cmd *cobra.Command, _ []string) error {
 		ListenAddr:        pivotListenAddr,
 		ExternalURL:       pivotExternalURL,
 		RSAKeyPath:        pivotRSAKeyPath,
+		TLSCertFile:       pivotTLSCert,
+		TLSKeyFile:        pivotTLSKey,
 		FollowIncludes:    pivotFollowIncl,
 		FetchRunners:      pivotFetchRunners,
 		DryRun:            pivotDryRun,
@@ -309,6 +313,8 @@ func init() {
 	pivotCmd.Flags().BoolVar(&pivotFetchRunners, "fetch-runners", false, "Fetch runner info for severity correlation")
 	pivotCmd.Flags().StringVar(&pivotAttackDelay, "attack-delay", "", "Delay between attack launches (e.g. 2s, 500ms) to avoid abuse detection")
 	pivotCmd.Flags().StringVar(&pivotReceiveTimeout, "receive-timeout", "", "Timeout for waiting for exfil callbacks per depth (default 5m)")
+	pivotCmd.Flags().StringVar(&pivotTLSCert, "tls-cert", "", "PEM certificate file for HTTPS callback server")
+	pivotCmd.Flags().StringVar(&pivotTLSKey, "tls-key", "", "PEM private key file for HTTPS callback server")
 
 	rootCmd.AddCommand(pivotCmd)
 }

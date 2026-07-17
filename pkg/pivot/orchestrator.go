@@ -96,7 +96,7 @@ func (o *Orchestrator) Run(ctx context.Context) (*PivotStats, error) {
 	if !o.opts.DryRun {
 		o.callback = NewCallbackServer(privKey, 100)
 		go func() {
-			if err := o.callback.Start(ctx, o.opts.ListenAddr); err != nil {
+			if err := o.callback.StartTLS(ctx, o.opts.ListenAddr, o.opts.TLSCertFile, o.opts.TLSKeyFile); err != nil {
 				o.emit(PivotEvent{Type: "error", Message: "callback server: " + err.Error()})
 			}
 		}()
