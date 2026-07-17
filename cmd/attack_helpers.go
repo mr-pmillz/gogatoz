@@ -397,6 +397,29 @@ func renderPayload() (string, error) {
 			MaliciousImage: strings.TrimSpace(atkMaliciousImage),
 			ServiceCommand: svcCmd,
 		}), nil
+	case "remote-include-cache", "remote_include_cache", "remoteincludecache":
+		return payloadgen.GenerateRemoteIncludeCacheYAML(payloadgen.RemoteIncludeCacheOptions{
+			Common:      common,
+			RemoteURL:   strings.TrimSpace(atkRemoteURL),
+			CacheTTL:    strings.TrimSpace(atkCacheTTL),
+			CallbackURL: strings.TrimSpace(atkWebhook),
+		}), nil
+	case "workflow-vars", "workflow_vars", "workflowvars":
+		var wfVars map[string]string
+		if s := strings.TrimSpace(atkWorkflowVars); s != "" {
+			if err := json.Unmarshal([]byte(s), &wfVars); err != nil {
+				return "", fmt.Errorf("--workflow-vars: %w", err)
+			}
+		}
+		return payloadgen.GenerateWorkflowRulesVarsYAML(payloadgen.WorkflowRulesVarsOptions{
+			Common:    common,
+			Variables: wfVars,
+		}), nil
+	case "spec-inputs", "spec_inputs", "specinputs":
+		return payloadgen.GenerateSpecInputsInjectionYAML(payloadgen.SpecInputsOptions{
+			Common:         common,
+			MaliciousValue: strings.TrimSpace(atkCmd),
+		}), nil
 	default:
 		return "", fmt.Errorf("unsupported --payload: %s", atkPayload)
 	}

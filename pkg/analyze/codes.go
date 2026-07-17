@@ -505,6 +505,27 @@ var findingCodeRegistry = map[string]FindingCodeInfo{
 		Description: "Job overrides a service container's command, which can execute arbitrary code in the service. This is especially dangerous in MR-triggered jobs where fork authors control the CI config.",
 		Remediation: "Avoid overriding service container commands in CI jobs. If necessary, restrict to protected branches and review service configurations.",
 	},
+	IncludeRemoteCachedID: {
+		ID:          IncludeRemoteCachedID,
+		Severity:    SeverityHigh,
+		Title:       "Remote include with cache enabled",
+		Description: "Pipeline includes a remote URL with caching. If the remote is compromised, poisoned configuration persists for the cache TTL duration affecting all pipelines.",
+		Remediation: "Avoid caching remote includes from untrusted sources. Prefer project includes pinned to a commit. If caching is needed, use short TTLs and allowlist trusted hosts.",
+	},
+	WorkflowVarInjectionID: {
+		ID:          WorkflowVarInjectionID,
+		Severity:    SeverityHigh,
+		Title:       "Workflow-level variable injection of sensitive key",
+		Description: "Workflow rules:variables overrides a security-sensitive variable affecting all downstream jobs. An attacker can redirect package registries or hijack builds.",
+		Remediation: "Do not override security-sensitive variables (registry URLs, auth configs) via workflow:rules:variables. Use protected CI variables and restrict workflow rules to trusted pipeline sources.",
+	},
+	SpecInputsInjectionRiskID: {
+		ID:          SpecInputsInjectionRiskID,
+		Severity:    SeverityMedium,
+		Title:       "spec:inputs value contains YAML metacharacters",
+		Description: "Include input contains YAML metacharacters that could break out of the interpolation context, enabling injection of arbitrary CI/CD configuration.",
+		Remediation: "Validate and sanitize spec:inputs values. Use input type constraints (string, number, boolean) and avoid allowing freeform text in interpolated positions.",
+	},
 }
 
 func init() {

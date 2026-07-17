@@ -256,6 +256,11 @@ var (
 	// Image poison payload options
 	atkMaliciousImage string // attacker-controlled container image
 	atkServiceCommand string // service container command override
+	// Remote include cache payload options
+	atkRemoteURL string // attacker-controlled remote URL
+	atkCacheTTL  string // cache TTL duration
+	// Workflow vars payload options
+	atkWorkflowVars string // JSON map of workflow-level variables
 )
 
 func init() {
@@ -511,4 +516,9 @@ func init() {
 	// Image poison payload options
 	attackCmd.Flags().StringVar(&atkMaliciousImage, "malicious-image", "", "Attacker-controlled container image for image-poison payload")
 	attackCmd.Flags().StringVar(&atkServiceCommand, "service-command", "", "Service container command override (comma-separated)")
+	// Remote include cache payload options
+	attackCmd.Flags().StringVar(&atkRemoteURL, "remote-url", "", "Remote URL for include cache poisoning payload")
+	attackCmd.Flags().StringVar(&atkCacheTTL, "cache-ttl", "1h", "Cache TTL for remote include cache poisoning")
+	// Workflow vars payload options
+	attackCmd.Flags().StringVar(&atkWorkflowVars, "workflow-vars", "", `JSON map of workflow-level variables (e.g. '{"KEY":"value"}')`)
 }

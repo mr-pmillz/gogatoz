@@ -341,6 +341,9 @@ func Run(doc *pipeline.Document, opts ...Option) ([]Finding, error) {
 		}},
 		{"artifact_report_injection", detectArtifactReportInjection},
 		{"service_command_injection", detectServiceCommandInjection},
+		{"include_remote_cached", detectIncludeRemoteCached},
+		{"workflow_var_injection", detectWorkflowVarInjection},
+		{"spec_inputs_risk", detectSpecInputsRisk},
 	}
 	for _, s := range steps {
 		findings = append(findings, s.fn(doc)...)
