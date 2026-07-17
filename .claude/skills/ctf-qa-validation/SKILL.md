@@ -428,6 +428,67 @@ All 13 expansion payloads (Flags 35-47) for `--payload-only` and `--commit-ci --
 | `trigger-artifact` | 46 | trigger:include:artifact child pipeline |
 | `needs-project` | 47 | needs:project cross-project artifact injection |
 
+## Phase 6: Post-QA Cleanup
+
+Always clean up after QA runs. Attack branches, CI files, and pipelines should not persist on the lab.
+
+### 6a. Clean up attack branches
+
+After each challenge solve, clean up with:
+
+```bash
+./gogatoz attack --gitlab-url $GL --token $ADMIN \
+  --target root/<repo> --cleanup \
+  --cleanup-branch <attack-branch>
+```
+
+### 6b. Bulk cleanup across all expansion repos
+
+```bash
+# Read ADMIN token from setup-lab.sh (see Credential Lookup section)
+ADMIN="$CTF_ADMIN_BACKUP_PAT"
+GL="http://gitlab.local:8929"
+
+for repo in shared-ci-templates monorepo-platform component-library secure-pipeline \
+            deploy-orchestrator cloud-deployer compliance-scanner microservice-build \
+            load-test-runner bootstrap-runner build-cache-manager release-orchestrator \
+            shared-artifacts; do
+  encoded=$(echo "root/$repo" | sed 's|/|%2F|g')
+  branches=$(curl -sf -H "PRIVATE-TOKEN: $ADMIN" \
+    "$GL/api/v4/projects/$encoded/repository/branches" | \
+    jq -r '.[].name' | grep -E "gogatoz-" || true)
+  for branch in $branches; do
+    ./gogatoz attack --gitlab-url $GL --token $ADMIN \
+      --target "root/$repo" --cleanup --cleanup-branch "$branch"
+  done
+done
+echo "Expansion track cleanup complete"
+```
+
+### 6c. Flagserver team cleanup
+
+The flagserver database persists across container restarts. To reset scores (e.g., between QA runs), recreate the flagserver container which drops the in-container Postgres data:
+
+```bash
+cd ~/projects/gogatoz-ctf
+docker compose down flagserver
+docker compose up -d flagserver
+```
+
+### 6d. Setup-lab.sh re-run verification
+
+The setup script must be fully idempotent. After any changes to setup-lab.sh, verify with:
+
+```bash
+cd ~/projects/gogatoz-ctf
+bash setup-lab.sh
+# Must exit 0. All existing repos show "already exists", variables show "Updated".
+```
+
+If it fails with exit code 22 or 1, check for:
+- Raw `curl -sf` calls missing `|| true` (file creation that fails on re-run)
+- Rails runner PAT creation using `revoke!` instead of `destroy_all` (token digest collision)
+
 ## Pass/Fail Criteria
 
 | Phase | Pass Condition |
