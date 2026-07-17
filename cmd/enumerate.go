@@ -147,137 +147,10 @@ var enumerateCmd = &cobra.Command{
 			return fmt.Errorf("no targets provided; use --input or --group/--groups to supply projects")
 		}
 
-		// Options mapping
-		opts := enumerate.Options{}
-		if enumConc <= 0 {
-			enumConc = runtime.GOMAXPROCS(0)
+		opts, err := buildEnumerateOptions(controlsCfg)
+		if err != nil {
+			return err
 		}
-		if enumConc > 128 {
-			enumConc = 128
-		}
-		opts.Concurrency = enumConc
-		if strings.TrimSpace(enumTimeout) != "" {
-			if d, e := time.ParseDuration(enumTimeout); e != nil {
-				return fmt.Errorf("invalid --timeout: %w", e)
-			} else {
-				opts.Timeout = d
-			}
-		}
-		// Map include and analysis knobs
-		opts.FollowIncludes = followIncludes
-		if deepIncludes {
-			opts.FollowIncludes = true
-			if includeDepth < 3 {
-				includeDepth = 3
-			}
-		}
-		// Mode overrides flags if provided
-		mode := strings.ToLower(strings.TrimSpace(enumMode))
-		switch mode {
-		case "quick":
-			opts.FollowIncludes = false
-			includeDepth = 0
-			opts.SkipAnalyze = false
-			allowRemoteInc = false
-		case "deep":
-			opts.FollowIncludes = true
-			if includeDepth < 3 {
-				includeDepth = 3
-			}
-			// allowRemoteInc honored from flag
-			opts.SkipAnalyze = false
-		case "pipeline-only", "pipeline_only", "pipelineonly":
-			// speed-first: no analyzer
-			opts.SkipAnalyze = true
-			// keep include minimal for speed
-			opts.FollowIncludes = false
-			includeDepth = 0
-		}
-		opts.IncludeDepth = includeDepth
-		opts.AllowRemoteIncludes = allowRemoteInc
-		// Inventory
-		opts.FetchProtected = enumFetchProtected
-		opts.FetchRunners = enumFetchRunners
-		opts.FetchVariables = enumFetchVariables
-		opts.FetchEnvironments = enumFetchEnvironments
-		opts.RunnerScope = runnerScope
-		opts.AllowAdmin = allowAdminScope
-		// Logs scraping
-		opts.LogScrape = logScrape
-		opts.LogMaxPipelines = logMaxPipelines
-		opts.LogMaxJobs = logMaxJobs
-		// Redaction (off by default: findings show real secret values)
-		opts.Redact = enumRedact
-		// Pass analysis controls from config file
-		opts.Controls = controlsCfg
-		// Threat intelligence feed
-		if u := strings.TrimSpace(enumThreatIntelURL); u != "" {
-			feed, ferr := config.LoadThreatIntelFeed(u)
-			if ferr != nil {
-				return fmt.Errorf("load threat intel feed: %w", ferr)
-			}
-			opts.ThreatIntel = feed
-		} else if p := strings.TrimSpace(enumThreatIntelFile); p != "" {
-			feed, ferr := config.LoadThreatIntelFile(p)
-			if ferr != nil {
-				return fmt.Errorf("load threat intel file: %w", ferr)
-			}
-			opts.ThreatIntel = feed
-		}
-		if strings.TrimSpace(remoteAllowlist) != "" {
-			parts := strings.SplitSeq(remoteAllowlist, ",")
-			for p := range parts {
-				p = strings.TrimSpace(p)
-				if p != "" {
-					opts.RemoteAllowlist = append(opts.RemoteAllowlist, p)
-				}
-			}
-		}
-		opts.RemoteMaxBytes = remoteMaxBytes
-		if strings.TrimSpace(remoteTimeout) != "" {
-			if d, e := time.ParseDuration(remoteTimeout); e != nil {
-				return fmt.Errorf("invalid --remote-timeout: %w", e)
-			} else {
-				opts.RemoteTimeout = d
-			}
-		}
-		if strings.TrimSpace(remoteCacheTTL) != "" {
-			if d, e := time.ParseDuration(remoteCacheTTL); e != nil {
-				return fmt.Errorf("invalid --remote-cache-ttl: %w", e)
-			} else {
-				opts.RemoteCacheTTL = d
-			}
-		}
-		// Refs selection
-		var refs []string
-		if strings.TrimSpace(refOne) != "" {
-			refs = append(refs, strings.TrimSpace(refOne))
-		}
-		if strings.TrimSpace(refsMany) != "" {
-			for r := range strings.SplitSeq(refsMany, ",") {
-				r = strings.TrimSpace(r)
-				if r != "" {
-					refs = append(refs, r)
-				}
-			}
-		}
-		if len(refs) > 0 {
-			// dedupe while preserving order
-			seen := map[string]struct{}{}
-			uniq := make([]string, 0, len(refs))
-			for _, r := range refs {
-				if _, ok := seen[r]; ok {
-					continue
-				}
-				seen[r] = struct{}{}
-				uniq = append(uniq, r)
-			}
-			opts.Refs = uniq
-		}
-		if maxRefs < 0 {
-			maxRefs = 0
-		}
-		opts.MaxRefs = maxRefs
 
 		// Simple progress indicator when not JSON and verbose
 		if !outputJSON && verbose {
@@ -732,6 +605,130 @@ func writeSidecarGLSAST(path string, findings []analyze.Finding, toolVersion str
 	}
 	defer f.Close()
 	return WriteGLSAST(f, findings, toolVersion, start, time.Now())
+}
+
+// buildEnumerateOptions maps CLI flags to enumerate.Options.
+//
+//nolint:gocognit // flag-to-option mapping with validation; linear and self-contained
+func buildEnumerateOptions(controlsCfg *config.ControlsConfig) (enumerate.Options, error) {
+	opts := enumerate.Options{}
+	if enumConc <= 0 {
+		enumConc = runtime.GOMAXPROCS(0)
+	}
+	if enumConc > 128 {
+		enumConc = 128
+	}
+	opts.Concurrency = enumConc
+	if strings.TrimSpace(enumTimeout) != "" {
+		if d, e := time.ParseDuration(enumTimeout); e != nil {
+			return opts, fmt.Errorf("invalid --timeout: %w", e)
+		} else {
+			opts.Timeout = d
+		}
+	}
+	opts.FollowIncludes = followIncludes
+	if deepIncludes {
+		opts.FollowIncludes = true
+		if includeDepth < 3 {
+			includeDepth = 3
+		}
+	}
+	mode := strings.ToLower(strings.TrimSpace(enumMode))
+	switch mode {
+	case "quick":
+		opts.FollowIncludes = false
+		includeDepth = 0
+		opts.SkipAnalyze = false
+		allowRemoteInc = false
+	case "deep":
+		opts.FollowIncludes = true
+		if includeDepth < 3 {
+			includeDepth = 3
+		}
+		opts.SkipAnalyze = false
+	case "pipeline-only", "pipeline_only", "pipelineonly":
+		opts.SkipAnalyze = true
+		opts.FollowIncludes = false
+		includeDepth = 0
+	}
+	opts.IncludeDepth = includeDepth
+	opts.AllowRemoteIncludes = allowRemoteInc
+	opts.FetchProtected = enumFetchProtected
+	opts.FetchRunners = enumFetchRunners
+	opts.FetchVariables = enumFetchVariables
+	opts.FetchEnvironments = enumFetchEnvironments
+	opts.RunnerScope = runnerScope
+	opts.AllowAdmin = allowAdminScope
+	opts.LogScrape = logScrape
+	opts.LogMaxPipelines = logMaxPipelines
+	opts.LogMaxJobs = logMaxJobs
+	opts.Redact = enumRedact
+	opts.Controls = controlsCfg
+	if u := strings.TrimSpace(enumThreatIntelURL); u != "" {
+		feed, ferr := config.LoadThreatIntelFeed(u)
+		if ferr != nil {
+			return opts, fmt.Errorf("load threat intel feed: %w", ferr)
+		}
+		opts.ThreatIntel = feed
+	} else if p := strings.TrimSpace(enumThreatIntelFile); p != "" {
+		feed, ferr := config.LoadThreatIntelFile(p)
+		if ferr != nil {
+			return opts, fmt.Errorf("load threat intel file: %w", ferr)
+		}
+		opts.ThreatIntel = feed
+	}
+	if strings.TrimSpace(remoteAllowlist) != "" {
+		for p := range strings.SplitSeq(remoteAllowlist, ",") {
+			p = strings.TrimSpace(p)
+			if p != "" {
+				opts.RemoteAllowlist = append(opts.RemoteAllowlist, p)
+			}
+		}
+	}
+	opts.RemoteMaxBytes = remoteMaxBytes
+	if strings.TrimSpace(remoteTimeout) != "" {
+		if d, e := time.ParseDuration(remoteTimeout); e != nil {
+			return opts, fmt.Errorf("invalid --remote-timeout: %w", e)
+		} else {
+			opts.RemoteTimeout = d
+		}
+	}
+	if strings.TrimSpace(remoteCacheTTL) != "" {
+		if d, e := time.ParseDuration(remoteCacheTTL); e != nil {
+			return opts, fmt.Errorf("invalid --remote-cache-ttl: %w", e)
+		} else {
+			opts.RemoteCacheTTL = d
+		}
+	}
+	var refs []string
+	if strings.TrimSpace(refOne) != "" {
+		refs = append(refs, strings.TrimSpace(refOne))
+	}
+	if strings.TrimSpace(refsMany) != "" {
+		for r := range strings.SplitSeq(refsMany, ",") {
+			r = strings.TrimSpace(r)
+			if r != "" {
+				refs = append(refs, r)
+			}
+		}
+	}
+	if len(refs) > 0 {
+		seen := map[string]struct{}{}
+		uniq := make([]string, 0, len(refs))
+		for _, r := range refs {
+			if _, ok := seen[r]; ok {
+				continue
+			}
+			seen[r] = struct{}{}
+			uniq = append(uniq, r)
+		}
+		opts.Refs = uniq
+	}
+	if maxRefs < 0 {
+		maxRefs = 0
+	}
+	opts.MaxRefs = maxRefs
+	return opts, nil
 }
 
 // upsertMRComment creates or updates the GoGatoZ compliance comment on a merge request.

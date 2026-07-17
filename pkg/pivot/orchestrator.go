@@ -123,8 +123,8 @@ func (o *Orchestrator) Run(ctx context.Context) (*PivotStats, error) {
 	for depth := 0; depth < o.opts.MaxDepth && len(credQueue) > 0; depth++ {
 		o.emit(PivotEvent{Type: "depth_start", Depth: depth, Message: fmt.Sprintf("starting depth %d with %d credential(s)", depth, len(credQueue))})
 		nextQueue := o.processDepth(ctx, credQueue, pubPEM, depth, &totalAttacked)
-		o.stats.MaxDepthReached = depth + 1
-		o.emit(PivotEvent{Type: "depth_end", Depth: depth, Message: fmt.Sprintf("completed depth %d", depth)})
+		o.stats.MaxDepthReached = depth
+		o.emit(PivotEvent{Type: "depth_end", Depth: depth, Message: fmt.Sprintf("completed depth %d, harvested %d new credential(s)", depth, len(nextQueue))})
 		credQueue = nextQueue
 	}
 

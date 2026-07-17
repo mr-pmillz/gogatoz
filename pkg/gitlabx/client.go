@@ -387,7 +387,7 @@ func (r *retryingRoundTripper) RoundTrip(req *http.Request) (*http.Response, err
 
 func isRetryable(code int) bool {
 	switch code {
-	case http.StatusTooManyRequests, http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout:
+	case http.StatusTooManyRequests, http.StatusInternalServerError, http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout:
 		return true
 	default:
 		return false

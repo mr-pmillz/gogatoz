@@ -20,9 +20,11 @@ import (
 
 // ttl cache for remote includes across calls
 var (
-	remoteCacheMu  sync.Mutex
-	remoteCache    = map[string]remoteCacheEntry{}
-	cacheEvictOnce sync.Once
+	remoteCacheMu    sync.Mutex
+	remoteCache      = map[string]remoteCacheEntry{}
+	cacheEvictOnce   sync.Once
+	cacheEvictStop   chan struct{}
+	cacheEvictStopped chan struct{}
 )
 
 const maxRemoteCacheEntries = 1000
@@ -36,21 +38,42 @@ type remoteCacheEntry struct {
 // entries every 30 seconds, preventing unbounded memory growth between full-cache events.
 func startCacheEvictor() {
 	cacheEvictOnce.Do(func() {
+		cacheEvictStop = make(chan struct{})
+		cacheEvictStopped = make(chan struct{})
 		go func() {
+			defer close(cacheEvictStopped)
 			ticker := time.NewTicker(30 * time.Second)
 			defer ticker.Stop()
-			for range ticker.C {
-				remoteCacheMu.Lock()
-				now := time.Now()
-				for k, e := range remoteCache {
-					if now.After(e.exp) {
-						delete(remoteCache, k)
+			for {
+				select {
+				case <-cacheEvictStop:
+					return
+				case <-ticker.C:
+					remoteCacheMu.Lock()
+					now := time.Now()
+					for k, e := range remoteCache {
+						if now.After(e.exp) {
+							delete(remoteCache, k)
+						}
 					}
+					remoteCacheMu.Unlock()
 				}
-				remoteCacheMu.Unlock()
 			}
 		}()
 	})
+}
+
+// StopCacheEvictor stops the background cache eviction goroutine.
+// Safe to call even if the evictor was never started.
+func StopCacheEvictor() {
+	if cacheEvictStop != nil {
+		select {
+		case <-cacheEvictStop:
+		default:
+			close(cacheEvictStop)
+		}
+		<-cacheEvictStopped
+	}
 }
 
 // ClearRemoteCache removes all entries from the cross-call remote include cache.

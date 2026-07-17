@@ -13,6 +13,7 @@ import (
 	"encoding/pem"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"time"
@@ -175,7 +176,7 @@ func (cb *CallbackServer) handleCallback(w http.ResponseWriter, r *http.Request)
 	select {
 	case cb.incoming <- &payload:
 	default:
-		// Channel full, drop oldest if possible
+		slog.Warn("callback channel full, dropping payload", "project", payload.Project)
 	}
 
 	w.WriteHeader(http.StatusOK)

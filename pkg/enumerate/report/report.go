@@ -23,12 +23,13 @@ type Options struct {
 type ProjectView struct {
 	Project enumerate.Result
 	// Derived
-	FindingCount  int
-	Critical      int
-	High          int
-	Medium        int
-	Low           int
-	Informational int
+	FindingCount    int
+	RawFindingCount int
+	Critical        int
+	High            int
+	Medium          int
+	Low             int
+	Informational   int
 }
 
 // RunnersView provides basic runner exposure aggregation derived from findings.
@@ -151,6 +152,7 @@ func Build(results []enumerate.Result, opts Options) Report {
 			continue
 		}
 		pv := ProjectView{Project: r}
+		pv.RawFindingCount = len(r.Findings)
 		pv.FindingCount = len(r.Findings)
 		fpCount := 0
 		for _, f := range r.Findings {
