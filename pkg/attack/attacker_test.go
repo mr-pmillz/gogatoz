@@ -3,6 +3,7 @@ package attack
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -465,14 +466,16 @@ func TestUpsertFile_FallbackToCreate(t *testing.T) {
 func TestUpsertFile_DualFailure_JoinsErrors(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/v4/projects/1/repository/files/fail.yml", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.Copy(io.Discard, r.Body)
+		_ = r.Body.Close()
 		if r.Method == http.MethodPut {
 			w.WriteHeader(http.StatusNotFound)
 			json.NewEncoder(w).Encode(map[string]string{"message": "404 File Not Found"})
 			return
 		}
 		if r.Method == http.MethodPost {
-			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(map[string]string{"message": "500 Internal Server Error"})
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{"message": "400 Bad Request"})
 			return
 		}
 		w.WriteHeader(http.StatusMethodNotAllowed)
@@ -488,7 +491,7 @@ func TestUpsertFile_DualFailure_JoinsErrors(t *testing.T) {
 	if !strings.Contains(errStr, "upsert fail.yml") {
 		t.Errorf("expected 'upsert fail.yml' in error, got: %s", errStr)
 	}
-	if !strings.Contains(errStr, "404") || !strings.Contains(errStr, "500") {
+	if !strings.Contains(errStr, "404") || !strings.Contains(errStr, "400") {
 		t.Errorf("expected both status codes in joined error, got: %s", errStr)
 	}
 }
