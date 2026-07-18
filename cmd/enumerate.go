@@ -84,6 +84,8 @@ var (
 	// threat intelligence
 	enumThreatIntelURL  string
 	enumThreatIntelFile string
+	// local/offline scanning
+	enumLocalPath string
 )
 
 var enumerateFunc = enumerate.EnumerateProjects
@@ -93,106 +95,121 @@ var enumerateCmd = &cobra.Command{
 	Short: "Enumerate GitLab projects for CI/CD risks",
 	Long:  "Enumerate scans a list of GitLab projects (IDs or path-with-namespace) and reports CI/CD configuration risks.",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if token == "" && !noToken {
-			return fmt.Errorf("GitLab token is required. Provide --token, set GITLAB_TOKEN, or use --no-token for unauthenticated access")
-		}
-		idents, err := loadIdents(enumInput)
-		if err != nil {
-			return err
-		}
-
-		// Build client (reuse global reliability + TLS flags)
 		ctx := context.Background()
-		client, err := newGitLabClient()
-		if err != nil {
-			return err
-		}
-
-		// Expand groups into project identifiers if requested
-		var groupIdents []string
-		if strings.TrimSpace(enumGroup) != "" {
-			groupIdents = append(groupIdents, strings.TrimSpace(enumGroup))
-		}
-		if strings.TrimSpace(enumGroups) != "" {
-			for g := range strings.SplitSeq(enumGroups, ",") {
-				g = strings.TrimSpace(g)
-				if g != "" {
-					groupIdents = append(groupIdents, g)
-				}
-			}
-		}
-		if len(groupIdents) > 0 {
-			for _, g := range groupIdents {
-				projs, gerr := enumorg.ListGroupProjects(ctx, client, g, enumGroupRecursive)
-				if gerr != nil {
-					return fmt.Errorf("list group projects (%s): %w", g, gerr)
-				}
-				idents = append(idents, projs...)
-			}
-		}
-		if enumSelf {
-			slog.Info("discovering projects via token membership")
-			projs, serr := enumorg.ListAccessibleProjects(ctx, client)
-			if serr != nil {
-				return fmt.Errorf("list accessible projects: %w", serr)
-			}
-			slog.Info("discovered member projects", "count", len(projs))
-			idents = append(idents, projs...)
-		}
-		if enumAllProjects {
-			slog.Info("discovering all visible projects on instance")
-			projs, aerr := enumorg.ListAllProjects(ctx, client)
-			if aerr != nil {
-				return fmt.Errorf("list all projects: %w", aerr)
-			}
-			slog.Info("discovered instance projects", "count", len(projs))
-			idents = append(idents, projs...)
-		}
-		// de-duplicate identifiers collected from file + groups
-		{
-			seen := map[string]struct{}{}
-			uniq := make([]string, 0, len(idents))
-			for _, s := range idents {
-				s = strings.TrimSpace(s)
-				if s == "" {
-					continue
-				}
-				if _, ok := seen[s]; ok {
-					continue
-				}
-				seen[s] = struct{}{}
-				uniq = append(uniq, s)
-			}
-			idents = uniq
-		}
-		if len(idents) == 0 {
-			return fmt.Errorf("no targets provided; use --input, --group/--groups, --self, or --all-projects to supply projects")
-		}
-
-		opts, err := buildEnumerateOptions(controlsCfg)
-		if err != nil {
-			return err
-		}
-
-		// Simple progress indicator when not JSON and verbose
-		if !outputJSON && verbose {
-			opts.Progress = func(r enumerate.Result) {
-				_, err := fmt.Fprint(cmd.ErrOrStderr(), ".")
-				if err != nil {
-					return
-				}
-			}
-		}
-
+		var results []enumerate.Result
+		var client *gitlabx.Client
 		scanStart := time.Now()
-		results, err := enumerateFunc(ctx, client, idents, opts)
-		if err != nil {
-			// Non-fatal: still print any results gathered
-			_, err := fmt.Fprintf(cmd.ErrOrStderr(), "warning: %v\n", err)
+
+		// Local enumerate mode — no token or API needed
+		if lp := strings.TrimSpace(enumLocalPath); lp != "" {
+			localOpts, lerr := buildEnumerateOptions(controlsCfg)
+			if lerr != nil {
+				return lerr
+			}
+			results, lerr = enumerate.EnumerateLocal(ctx, []string{lp}, localOpts)
+			if lerr != nil {
+				return lerr
+			}
+		} else {
+			if token == "" && !noToken {
+				return fmt.Errorf("GitLab token is required. Provide --token, set GITLAB_TOKEN, or use --no-token for unauthenticated access")
+			}
+			idents, err := loadIdents(enumInput)
 			if err != nil {
 				return err
 			}
-		}
+
+			// Build client (reuse global reliability + TLS flags)
+			var cerr error
+			client, cerr = newGitLabClient()
+			if cerr != nil {
+				return cerr
+			}
+
+			// Expand groups into project identifiers if requested
+			var groupIdents []string
+			if strings.TrimSpace(enumGroup) != "" {
+				groupIdents = append(groupIdents, strings.TrimSpace(enumGroup))
+			}
+			if strings.TrimSpace(enumGroups) != "" {
+				for g := range strings.SplitSeq(enumGroups, ",") {
+					g = strings.TrimSpace(g)
+					if g != "" {
+						groupIdents = append(groupIdents, g)
+					}
+				}
+			}
+			if len(groupIdents) > 0 {
+				for _, g := range groupIdents {
+					projs, gerr := enumorg.ListGroupProjects(ctx, client, g, enumGroupRecursive)
+					if gerr != nil {
+						return fmt.Errorf("list group projects (%s): %w", g, gerr)
+					}
+					idents = append(idents, projs...)
+				}
+			}
+			if enumSelf {
+				slog.Info("discovering projects via token membership")
+				projs, serr := enumorg.ListAccessibleProjects(ctx, client)
+				if serr != nil {
+					return fmt.Errorf("list accessible projects: %w", serr)
+				}
+				slog.Info("discovered member projects", "count", len(projs))
+				idents = append(idents, projs...)
+			}
+			if enumAllProjects {
+				slog.Info("discovering all visible projects on instance")
+				projs, aerr := enumorg.ListAllProjects(ctx, client)
+				if aerr != nil {
+					return fmt.Errorf("list all projects: %w", aerr)
+				}
+				slog.Info("discovered instance projects", "count", len(projs))
+				idents = append(idents, projs...)
+			}
+			// de-duplicate identifiers collected from file + groups
+			{
+				seen := map[string]struct{}{}
+				uniq := make([]string, 0, len(idents))
+				for _, s := range idents {
+					s = strings.TrimSpace(s)
+					if s == "" {
+						continue
+					}
+					if _, ok := seen[s]; ok {
+						continue
+					}
+					seen[s] = struct{}{}
+					uniq = append(uniq, s)
+				}
+				idents = uniq
+			}
+			if len(idents) == 0 {
+				return fmt.Errorf("no targets provided; use --input, --group/--groups, --self, or --all-projects to supply projects")
+			}
+
+			opts, err := buildEnumerateOptions(controlsCfg)
+			if err != nil {
+				return err
+			}
+
+			// Simple progress indicator when not JSON and verbose
+			if !outputJSON && verbose {
+				opts.Progress = func(r enumerate.Result) {
+					_, err := fmt.Fprint(cmd.ErrOrStderr(), ".")
+					if err != nil {
+						return
+					}
+				}
+			}
+
+			scanStart = time.Now()
+			var eerr error
+			results, eerr = enumerateFunc(ctx, client, idents, opts)
+			if eerr != nil {
+				// Non-fatal: still print any results gathered
+				fmt.Fprintf(cmd.ErrOrStderr(), "warning: %v\n", eerr) //nolint:errcheck
+			}
+		} // end else (API enumerate)
 
 		// Apply false positive filtering if requested
 		if enumFilterFP {
@@ -290,7 +307,7 @@ var enumerateCmd = &cobra.Command{
 		rep.Score = scoreResult
 
 		// Post-analysis: MR comment (requires single-project scan with known project ID)
-		if enumMRComment > 0 && len(results) > 0 && results[0].ProjectID > 0 {
+		if client != nil && enumMRComment > 0 && len(results) > 0 && results[0].ProjectID > 0 {
 			if len(results) > 1 {
 				fmt.Fprintf(cmd.ErrOrStderr(), "warning: --mr-comment with multi-project scan posts only to project %d (%s)\n", results[0].ProjectID, results[0].ProjectPathWithNS)
 			}
@@ -300,7 +317,7 @@ var enumerateCmd = &cobra.Command{
 			}
 		}
 		// Post-analysis: Badge (requires single-project scan with known project ID + score)
-		if enumBadge && scoreResult != nil && len(results) == 1 && results[0].ProjectID > 0 {
+		if client != nil && enumBadge && scoreResult != nil && len(results) == 1 && results[0].ProjectID > 0 {
 			if badgeErr := client.UpsertComplianceBadge(cmd.Context(), results[0].ProjectID, scoreResult.Score, gitlabURL); badgeErr != nil {
 				fmt.Fprintf(cmd.ErrOrStderr(), "warning: badge update failed: %v\n", badgeErr)
 			}
@@ -433,6 +450,8 @@ func init() {
 	// Threat intelligence
 	enumerateCmd.Flags().StringVar(&enumThreatIntelURL, "threat-intel-url", "", "URL to a JSON threat intelligence feed (blocked domains/IPs)")
 	enumerateCmd.Flags().StringVar(&enumThreatIntelFile, "threat-intel-file", "", "Path to a local JSON threat intelligence feed file")
+	// Local/offline scanning
+	enumerateCmd.Flags().StringVar(&enumLocalPath, "local", "", "Scan local directory or CI YAML file (no GitLab token required)")
 }
 
 // loadIdents reads project identifiers from --input according to --input-format (auto|text|json|jsonl).
