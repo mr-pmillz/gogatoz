@@ -1,0 +1,4 @@
+interface:
+  display_name: "Add Analysis Rule"
+  short_description: "Add CI/CD vulnerability analysis rules"
+  default_prompt: "Use $add-analysis-rule to add a tested GoGatoZ CI/CD vulnerability detection rule."
