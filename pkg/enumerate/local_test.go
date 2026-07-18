@@ -2,6 +2,7 @@ package enumerate
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -107,7 +108,7 @@ func TestEnumerateLocal_ContextCancelled(t *testing.T) {
 	cancel() // cancel immediately
 
 	_, err := EnumerateLocal(ctx, []string{dir}, Options{})
-	if err != context.Canceled {
+	if !errors.Is(err, context.Canceled) {
 		t.Errorf("expected context.Canceled, got %v", err)
 	}
 }
