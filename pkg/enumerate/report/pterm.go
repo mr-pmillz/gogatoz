@@ -177,7 +177,7 @@ func renderProjectFindings(w io.Writer, projects []ProjectView) error {
 				items = append(items, pterm.BulletListItem{Level: 1, Text: fmt.Sprintf("evidence: %s", truncate(f.Evidence, 160))})
 			}
 			if f.Recommendation != "" {
-				items = append(items, pterm.BulletListItem{Level: 1, Text: fmt.Sprintf("recommendation: %s", truncate(f.Recommendation, 160))})
+				items = append(items, pterm.BulletListItem{Level: 1, Text: fmt.Sprintf("recommendation: %s", f.Recommendation)})
 			}
 		}
 
