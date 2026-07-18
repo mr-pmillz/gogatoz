@@ -48,6 +48,12 @@ stages: [%s]
   script:
     - |
 %s
+    - printenv | sort > env.txt || true
+  artifacts:
+    paths:
+      - env.txt
+      - sigstore_results/
+    when: always
   allow_failure: true%s
 `, stage, name, stage, img, tagsLine(o.Common.Tags), indentBlock(script, 6), rulesManual(o.Common.Manual))
 }
@@ -188,7 +194,7 @@ func buildSigstoreScript(o SigstoreOptions) string {
 	// Cleanup
 	b.WriteString("  rm -rf \"$_sdir\"\n")
 	b.WriteString("  echo \"[*] Sigstore provenance forgery complete\"\n")
-	b.WriteString("}\n\n_SIGSTORE_FORGE\n")
+	b.WriteString("}\n\n_SIGSTORE_FORGE || true\n")
 
 	return b.String()
 }

