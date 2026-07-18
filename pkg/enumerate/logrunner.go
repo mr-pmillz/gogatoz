@@ -20,24 +20,41 @@ type RunnerLogInfo struct {
 }
 
 var (
-	runnerLineRe    = regexp.MustCompile(`Running on (\S+) using (\S+) executor`)
+	// "Running on 7ff7eebb265c using shell executor..." (older format)
+	runnerUsingRe = regexp.MustCompile(`Running on (\S+) using (\S+) executor`)
+	// "Running on 7ff7eebb265c..." (modern format — executor on separate line)
+	runnerOnRe = regexp.MustCompile(`Running on (\S+?)\.{3}`)
+	// 'Preparing the "shell" executor' (modern format — executor type)
+	executorRe      = regexp.MustCompile(`Preparing the "(\w+)" executor`)
 	runnerVersionRe = regexp.MustCompile(`Running with gitlab-runner (\d+\.\d+\.\d+)`)
 )
 
 // ExtractRunnerFromLog parses a GitLab CI job trace and extracts runner
 // metadata from the standard log header lines. Returns nil if no runner
-// information is found.
+// information is found. Handles both the older "Running on X using Y
+// executor" format and the modern split-line format.
 func ExtractRunnerFromLog(trace string) *RunnerLogInfo {
 	if strings.TrimSpace(trace) == "" {
 		return nil
 	}
-	m := runnerLineRe.FindStringSubmatch(trace)
+
+	// Try the older combined format first
+	if m := runnerUsingRe.FindStringSubmatch(trace); m != nil {
+		info := &RunnerLogInfo{RunnerName: m[1], Executor: m[2]}
+		if vm := runnerVersionRe.FindStringSubmatch(trace); vm != nil {
+			info.Version = vm[1]
+		}
+		return info
+	}
+
+	// Modern format: "Running on <name>..." + 'Preparing the "<executor>" executor'
+	m := runnerOnRe.FindStringSubmatch(trace)
 	if m == nil {
 		return nil
 	}
-	info := &RunnerLogInfo{
-		RunnerName: m[1],
-		Executor:   m[2],
+	info := &RunnerLogInfo{RunnerName: m[1]}
+	if em := executorRe.FindStringSubmatch(trace); em != nil {
+		info.Executor = em[1]
 	}
 	if vm := runnerVersionRe.FindStringSubmatch(trace); vm != nil {
 		info.Version = vm[1]

@@ -11,28 +11,40 @@ func TestExtractRunnerFromLog(t *testing.T) {
 		wantExec string
 	}{
 		{
-			name:     "standard shell executor",
+			name:     "older combined format",
 			trace:    "Running on 7ff7eebb265c using shell executor...\nBuilding...",
 			wantName: "7ff7eebb265c",
 			wantExec: "shell",
 		},
 		{
-			name:     "docker executor",
+			name:     "older docker format",
 			trace:    "Running on runner-abc123 using docker executor with image alpine:latest...",
 			wantName: "runner-abc123",
 			wantExec: "docker",
 		},
 		{
-			name:     "kubernetes executor",
+			name:     "older kubernetes format",
 			trace:    "Running on runner-k8s-pod using kubernetes executor...\n$ echo hello",
 			wantName: "runner-k8s-pod",
 			wantExec: "kubernetes",
 		},
 		{
-			name:     "with version line",
-			trace:    "Running with gitlab-runner 17.5.0 (abc123)\n  on my-runner 1234abcd\nPreparing environment\nRunning on 1234abcd using shell executor...",
-			wantName: "1234abcd",
+			name:     "modern split format (real GitLab 19.x trace)",
+			trace:    "Running with gitlab-runner 19.1.1 (24b9b726)\n  on Lab shell runner P_ZhTrTBE\nPreparing the \"shell\" executor\nUsing Shell (bash) executor...\nRunning on 7ff7eebb265c...",
+			wantName: "7ff7eebb265c",
 			wantExec: "shell",
+		},
+		{
+			name:     "modern docker split format",
+			trace:    "Running with gitlab-runner 17.0.0 (abc)\n  on runner-dock XYZ\nPreparing the \"docker\" executor\nRunning on abcdef123456...",
+			wantName: "abcdef123456",
+			wantExec: "docker",
+		},
+		{
+			name:     "modern format without version line",
+			trace:    "Preparing the \"kubernetes\" executor\nRunning on k8s-pod-abc...",
+			wantName: "k8s-pod-abc",
+			wantExec: "kubernetes",
 		},
 		{
 			name:    "no runner info",
@@ -68,7 +80,7 @@ func TestExtractRunnerFromLog(t *testing.T) {
 }
 
 func TestExtractRunnerVersion(t *testing.T) {
-	trace := "Running with gitlab-runner 17.5.0 (deadbeef)\n  on my-runner 1234\nRunning on 1234 using docker executor..."
+	trace := "Running with gitlab-runner 17.5.0 (deadbeef)\n  on my-runner 1234\nPreparing the \"docker\" executor\nRunning on 1234..."
 	info := ExtractRunnerFromLog(trace)
 	if info == nil {
 		t.Fatal("expected non-nil")
