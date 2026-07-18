@@ -9,7 +9,7 @@ Vulnerability analysis engine for GoGatoZ. Performs multi-pass security rule eva
 | File | Purpose |
 |------|---------|
 | `analyze.go` | Main entry point with `Run()` function; defines `Finding` struct and `Severity` constants; orchestrates all analysis checks; `effectiveScripts()` helper for before/script/after aggregation; attaches recommendations by finding ID |
-| `rules.go` | Expression evaluator for GitLab `rules:if` conditions; minimal parser supporting `==`, `!=`, `=~`, `!~`, `&&`, `||`, `!` operators |
+| `rules.go` | AST-based recursive descent parser/evaluator for GitLab `rules:if` expressions; full syntax: `==`, `!=`, `=~`, `!~`, `&&`, `||`, `!`, parentheses, `null`, variable truthiness, `${VAR}`, case-insensitive regex `/pattern/i` |
 | `injection.go` | Detects variable injection, fork MR risks, and artifact poisoning; defines unsafe CI variables and command sinks |
 | `dispatch.go` | Detects TOCTOU risks in manual/triggered jobs, Pwn Request deployments, and privileged runner usage |
 | `falsepositive.go` | False positive rules engine: `FPRule` struct, `DefaultFPRules()`, `ApplyFPRules()`, `FilterTruePositives()` |
@@ -77,7 +77,7 @@ Vulnerability analysis engine for GoGatoZ. Performs multi-pass security rule eva
 
 **Before/After Script Coverage**: All rules that inspect job scripts use `effectiveScripts(job, doc)` instead of `job.Script` directly. This resolves global vs. job-level before_script/after_script inheritance and ensures injection/LOTP checks cover all script phases.
 
-**Rules:If Expression Evaluator**: Lightweight custom parser in `rules.go`. Tokenization splits by operators at top-level only. Quote-aware splitting via `splitKeepOuter()` avoids splitting inside `"..."`, `'...'`, or `/.../`. Operator precedence: OR over AND (disjunctive normal form). Regex support extracts pattern between `/` delimiters.
+**Rules:If Expression Evaluator**: Full recursive descent parser in `rules.go`. Lexer tokenizes into typed tokens (variable, string, regex, null, operators, parens). Parser implements the grammar: `or_expr → and_expr ('||' and_expr)*`, `and_expr → not_expr ('&&' not_expr)*`, `not_expr → '!' not_expr | primary`, `primary → '(' expr ')' | comparison`, `comparison → atom (op atom)?`. Correct operator precedence: `!` > `&&` > `||`, with parentheses for grouping. Supports `null` keyword, variable truthiness (`$VAR` is truthy if defined and non-empty), `${VAR}` brace syntax, and case-insensitive regex via `/pattern/i`.
 
 **Unsafe Variables & Sinks**: 13+ known attacker-controllable CI variables (e.g., `$CI_MERGE_REQUEST_TITLE`, `$CI_COMMIT_MESSAGE`) plus regex patterns. ~30 code-execution sinks (make, npm, pip, bash, eval, terraform, etc.) plus local script patterns.
 
@@ -103,7 +103,7 @@ Vulnerability analysis engine for GoGatoZ. Performs multi-pass security rule eva
 ## Gotchas
 
 1. **Evidence truncation** — Use `stringutil.TruncateEvidence(text, 200)` (from `pkg/stringutil`), not a local function. Import `github.com/mr-pmillz/gogatoz/pkg/stringutil`.
-2. **Rules:If limitations** — Does NOT support parentheses; evaluates as OR-of-ANDs. Regex errors silently return false. Complex quoting may fail.
+2. **Rules:If** — Full AST parser supports all GitLab expression syntax including parentheses, null, and truthiness. Regex compile errors silently return false (fail-open for analysis).
 3. **Heuristic detection** — `jobRulesAllowBroad()` searches JSON stringified rules for substring matches (not structural). `onlyIsBroad()` checks for literal strings. Not exhaustive.
 4. **Finding ID non-uniqueness** — Some IDs (e.g., `VARIABLE_INJECTION`) may be emitted multiple times per run. No deduplication within `Run()`.
 5. **Nil document** — Returns nil findings (not an error).
