@@ -141,7 +141,7 @@ func runAttackDeadManSwitch(ctx context.Context, cmd *cobra.Command, client *git
 			Tags:    parseTags(atkTags),
 			Manual:  atkManual,
 		},
-		MonitorURL:    strings.TrimSpace(atkDMSMonitorURL),
+		MonitorURL:    deadManSwitchMonitorURL(atkDMSMonitorURL, gitlabURL),
 		CheckInterval: strings.TrimSpace(atkDMSInterval),
 		TTL:           strings.TrimSpace(atkDMSTTL),
 		Handler:       strings.TrimSpace(atkDMSHandler),
@@ -167,6 +167,13 @@ func runAttackDeadManSwitch(ctx context.Context, cmd *cobra.Command, client *git
 	}
 	renderSuccess(cmd.OutOrStdout(), fmt.Sprintf("Dead Man's Switch payload committed to branch %s", finalBranch))
 	return nil
+}
+
+func deadManSwitchMonitorURL(configuredURL, baseURL string) string {
+	if configuredURL = strings.TrimSpace(configuredURL); configuredURL != "" {
+		return configuredURL
+	}
+	return strings.TrimRight(strings.TrimSpace(baseURL), "/") + "/api/v4/user"
 }
 
 // runAttackBranchMutator iterates unprotected branches and commits a file to each.

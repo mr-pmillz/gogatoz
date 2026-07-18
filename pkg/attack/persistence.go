@@ -55,12 +55,24 @@ func (p *Persistence) CreateDeployKey(ctx context.Context, projectID any, title,
 		return 0, "", err
 	}
 	privPem := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: privDer})
-	if err := os.WriteFile(keyPath, privPem, 0600); err != nil {
+	keyFile, err := os.OpenFile(keyPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+	if err != nil {
+		return 0, "", fmt.Errorf("create private key: %w", err)
+	}
+	removeKey := func() { _ = os.Remove(keyPath) }
+	if _, err := keyFile.Write(privPem); err != nil {
+		_ = keyFile.Close()
+		removeKey()
 		return 0, "", fmt.Errorf("write private key: %w", err)
+	}
+	if err := keyFile.Close(); err != nil {
+		removeKey()
+		return 0, "", fmt.Errorf("close private key: %w", err)
 	}
 	// Public key in OpenSSH authorized_keys format
 	pub, err := ssh.NewPublicKey(&priv.PublicKey)
 	if err != nil {
+		removeKey()
 		return 0, "", err
 	}
 	pubKeyStr := string(ssh.MarshalAuthorizedKey(pub))
@@ -73,6 +85,7 @@ func (p *Persistence) CreateDeployKey(ctx context.Context, projectID any, title,
 	}
 	dk, _, err := p.Client.GL.DeployKeys.AddDeployKey(projectID, opt, gitlab.WithContext(ctx))
 	if err != nil {
+		removeKey()
 		return 0, "", err
 	}
 	return dk.ID, pubKeyStr, nil
@@ -216,10 +229,13 @@ func (p *Persistence) RunAutoMerge(ctx context.Context, projectID any, branch, f
 		if err := p.MergeMergeRequest(ctx, projectID, mr.IID, true); err != nil {
 			result.MergeErr = err.Error()
 			if attempt < 9 {
+				timer := time.NewTimer(time.Duration(3+attempt*2) * time.Second)
 				select {
 				case <-ctx.Done():
-					break
-				case <-time.After(time.Duration(3+attempt*2) * time.Second):
+					timer.Stop()
+					result.MergeErr = ctx.Err().Error()
+					return result, ctx.Err()
+				case <-timer.C:
 				}
 			}
 		} else {

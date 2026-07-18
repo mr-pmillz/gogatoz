@@ -109,18 +109,13 @@ func TamperRelease(ctx context.Context, client *gitlabx.Client, projectID any, t
 			if !ok {
 				continue
 			}
-			// Delete old link.
-			_, _, derr := client.GL.ReleaseLinks.DeleteReleaseLink(projectID, tagName, link.ID, gitlab.WithContext(ctx))
-			if derr != nil {
-				return replaced, added, fmt.Errorf("delete link %q: %w", link.Name, derr)
-			}
-			// Create replacement with same name.
-			_, _, cerr := client.GL.ReleaseLinks.CreateReleaseLink(projectID, tagName, &gitlab.CreateReleaseLinkOptions{
-				Name: new(link.Name),
-				URL:  new(newURL),
+			// Update in place so the link ID, type, and direct asset metadata are
+			// preserved and a failed recreation cannot leave the release linkless.
+			_, _, uerr := client.GL.ReleaseLinks.UpdateReleaseLink(projectID, tagName, link.ID, &gitlab.UpdateReleaseLinkOptions{
+				URL: new(newURL),
 			}, gitlab.WithContext(ctx))
-			if cerr != nil {
-				return replaced, added, fmt.Errorf("create replacement link %q: %w", link.Name, cerr)
+			if uerr != nil {
+				return replaced, added, fmt.Errorf("update replacement link %q: %w", link.Name, uerr)
 			}
 			replaced++
 		}

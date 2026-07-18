@@ -198,8 +198,7 @@ func EnumerateProjects(ctx context.Context, cl *gitlabx.Client, idents []string,
 }
 
 //nolint:gocognit // scanOne orchestrates network calls + parsing + analysis; kept as a single flow for performance and simplicity
-func scanOne(ctx context.Context, cl *gitlabx.Client, ident string, opts Options, ref string) Result {
-	var r Result
+func scanOne(ctx context.Context, cl *gitlabx.Client, ident string, opts Options, ref string) (r Result) {
 	start := time.Now()
 	defer func() { r.DurationMS = time.Since(start).Milliseconds() }()
 	if opts.Timeout > 0 {
@@ -217,6 +216,7 @@ func scanOne(ctx context.Context, cl *gitlabx.Client, ident string, opts Options
 	r.WebURL = proj.WebURL
 	r.DefaultBranch = proj.DefaultBranch
 	r.StarCount = proj.StarCount
+	r.Findings = append(r.Findings, projectSettingFindings(proj)...)
 	// Optional: fetch protected branches inventory
 	if opts.FetchProtected {
 		if list, err := cl.GetProtectedBranches(ctx, proj.ID, 100, 0); err == nil {
@@ -460,9 +460,9 @@ func scanOne(ctx context.Context, cl *gitlabx.Client, ident string, opts Options
 	findings, ferr := analyze.Run(ciDocResolved, aopts...)
 	if ferr != nil && !errors.Is(ferr, analyze.ErrPartial) {
 		// Non-fatal; still return parsed info
-		r.Error = fmt.Sprintf("analysis error: %v", ferr)
+		appendError(&r, fmt.Sprintf("analysis error: %v", ferr))
 	}
-	r.Findings = findings
+	r.Findings = append(r.Findings, findings...)
 	// Post-analysis: emit executor-specific findings before severity adjustment
 	addExecutorFindings(&r, ciDocResolved)
 	// Post-analysis: adjust severities based on runner risk correlation, if available

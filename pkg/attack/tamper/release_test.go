@@ -147,7 +147,7 @@ func TestTamperRelease_UpdateMetadata(t *testing.T) {
 }
 
 func TestTamperRelease_ReplaceLink(t *testing.T) {
-	var deleteCalled, createCalled bool
+	var updateCalled bool
 
 	client := testClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
@@ -160,31 +160,24 @@ func TestTamperRelease_ReplaceLink(t *testing.T) {
 			paginationHeaders(w, 1, 0, 20, 1, 2)
 			writeJSON(t, w, links)
 
-		// Delete link (ID 10)
-		case r.Method == http.MethodDelete && strings.HasSuffix(r.URL.Path, "/links/10"):
-			deleteCalled = true
-			link := &gitlab.ReleaseLink{ID: 10, Name: "binary-linux", URL: "https://example.com/old-binary"}
-			writeJSON(t, w, link)
-
-		// Create replacement link
-		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/links"):
-			createCalled = true
+		// Update link in place (ID 10)
+		case r.Method == http.MethodPut && strings.HasSuffix(r.URL.Path, "/links/10"):
+			updateCalled = true
 			var body map[string]any
 			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 				t.Fatalf("decode body: %v", err)
 			}
-			if body["name"] != "binary-linux" {
-				t.Errorf("expected name 'binary-linux', got %v", body["name"])
+			if _, ok := body["name"]; ok {
+				t.Errorf("replacement should preserve the existing name, got body %v", body)
 			}
 			if body["url"] != "https://evil.com/backdoored-binary" {
 				t.Errorf("expected evil URL, got %v", body["url"])
 			}
 			link := &gitlab.ReleaseLink{
-				ID:   20,
+				ID:   10,
 				Name: "binary-linux",
 				URL:  "https://evil.com/backdoored-binary",
 			}
-			w.WriteHeader(http.StatusCreated)
 			writeJSON(t, w, link)
 
 		default:
@@ -200,11 +193,8 @@ func TestTamperRelease_ReplaceLink(t *testing.T) {
 	if err != nil {
 		t.Fatalf("TamperRelease: %v", err)
 	}
-	if !deleteCalled {
-		t.Error("expected DELETE request for old link")
-	}
-	if !createCalled {
-		t.Error("expected POST request for replacement link")
+	if !updateCalled {
+		t.Error("expected PUT request to update the existing link")
 	}
 	if replaced != 1 {
 		t.Errorf("expected 1 replaced, got %d", replaced)

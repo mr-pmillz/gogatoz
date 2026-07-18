@@ -118,6 +118,41 @@ func ResolveIncludesWithOptions(ctx context.Context, cl *gitlabx.Client, project
 	var partials []string
 	var walkInclude func(ctx context.Context, proj any, ref string, inc Include, depth int) error
 	mergeDoc := func(dst *Document, src *Document, origin Include) {
+		// GitLab evaluates included configuration before the root document.
+		// Preserve root values while filling in global values supplied only by
+		// includes so analyzers see the same effective scripts and defaults.
+		if src.Raw != nil {
+			if dst.Raw == nil {
+				dst.Raw = map[string]any{}
+			}
+			for k, v := range src.Raw {
+				if _, exists := dst.Raw[k]; !exists {
+					dst.Raw[k] = v
+				}
+			}
+		}
+		if src.Default != nil {
+			if dst.Default == nil {
+				dst.Default = map[string]any{}
+			}
+			for k, v := range src.Default {
+				if _, exists := dst.Default[k]; !exists {
+					dst.Default[k] = v
+				}
+			}
+		}
+		if dst.Workflow.Name == "" && dst.Workflow.Rules == nil {
+			dst.Workflow = src.Workflow
+		}
+		if len(dst.BeforeScript) == 0 {
+			dst.BeforeScript = slices.Clone(src.BeforeScript)
+		}
+		if len(dst.AfterScript) == 0 {
+			dst.AfterScript = slices.Clone(src.AfterScript)
+		}
+		if len(dst.Cache) == 0 {
+			dst.Cache = cloneMapSlice(src.Cache)
+		}
 		// Merge stages (unique)
 		for _, s := range src.Stages {
 			if !contains(dst.Stages, s) {
@@ -177,6 +212,10 @@ func ResolveIncludesWithOptions(ctx context.Context, cl *gitlabx.Client, project
 		}
 		switch inc.Type {
 		case IncludeLocal:
+			if cl == nil || cl.GL == nil {
+				partials = append(partials, "local include cannot be fetched: missing GitLab client")
+				return nil
+			}
 			path := strings.TrimSpace(inc.Local)
 			if path == "" {
 				return nil
@@ -206,6 +245,10 @@ func ResolveIncludesWithOptions(ctx context.Context, cl *gitlabx.Client, project
 				_ = walkInclude(ctx, proj, ref, child, depth-1)
 			}
 		case IncludeProject:
+			if cl == nil || cl.GL == nil {
+				partials = append(partials, "project include cannot be fetched: missing GitLab client")
+				return nil
+			}
 			projPath := strings.TrimSpace(inc.Project)
 			if projPath == "" {
 				return nil
@@ -311,9 +354,33 @@ func ResolveIncludesWithOptions(ctx context.Context, cl *gitlabx.Client, project
 				if err != nil {
 					return nil, fmt.Errorf("remote include request build failed: %w", err)
 				}
-				hc := http.DefaultClient
+				baseClient := http.DefaultClient
 				if cl != nil && cl.HTTPClient() != nil {
-					hc = cl.HTTPClient()
+					baseClient = cl.HTTPClient()
+				}
+				// Copy the client so the shared GitLab client is not mutated.
+				// Validate every redirect target against the same allowlist used
+				// for the initial URL.
+				hc := *baseClient
+				priorCheck := hc.CheckRedirect
+				hc.CheckRedirect = func(next *http.Request, via []*http.Request) error {
+					if priorCheck != nil {
+						if err := priorCheck(next, via); err != nil {
+							return err
+						}
+					} else if len(via) >= 10 {
+						return errors.New("stopped after 10 redirects")
+					}
+					redirectHost := "<nil>"
+					if next.URL != nil {
+						redirectHost = next.URL.Host
+					}
+					if next.URL == nil ||
+						(next.URL.Scheme != "https" && next.URL.Scheme != "http") ||
+						!isAllowedHost(strings.ToLower(redirectHost)) {
+						return fmt.Errorf("remote include redirect host not allowed: %s", redirectHost)
+					}
+					return nil
 				}
 				resp, err := hc.Do(req) //nolint:gosec
 				if err != nil {
@@ -456,13 +523,17 @@ func cloneDocShallow(src *Document) *Document {
 		return nil
 	}
 	d := &Document{
-		Raw:        src.Raw,
-		Stages:     append([]string{}, src.Stages...),
-		Variables:  map[string]any{},
-		Includes:   append([]Include{}, src.Includes...),
-		Workflow:   src.Workflow,
-		Jobs:       append([]Job{}, src.Jobs...),
-		Provenance: map[string][]Include{},
+		Raw:          maps.Clone(src.Raw),
+		Stages:       slices.Clone(src.Stages),
+		Variables:    map[string]any{},
+		Includes:     slices.Clone(src.Includes),
+		Workflow:     src.Workflow,
+		Default:      maps.Clone(src.Default),
+		BeforeScript: slices.Clone(src.BeforeScript),
+		AfterScript:  slices.Clone(src.AfterScript),
+		Jobs:         slices.Clone(src.Jobs),
+		Cache:        cloneMapSlice(src.Cache),
+		Provenance:   map[string][]Include{},
 	}
 	maps.Copy(d.Variables, src.Variables)
 	// copy provenance if any
@@ -472,6 +543,17 @@ func cloneDocShallow(src *Document) *Document {
 		}
 	}
 	return d
+}
+
+func cloneMapSlice(src []map[string]any) []map[string]any {
+	if src == nil {
+		return nil
+	}
+	out := make([]map[string]any, len(src))
+	for i, value := range src {
+		out[i] = maps.Clone(value)
+	}
+	return out
 }
 
 func contains(arr []string, s string) bool {

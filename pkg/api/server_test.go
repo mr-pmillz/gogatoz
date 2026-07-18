@@ -9,8 +9,11 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
+	"github.com/mr-pmillz/gogatoz/pkg/enumerate"
 	"github.com/mr-pmillz/gogatoz/pkg/gitlabx"
 )
 
@@ -567,5 +570,86 @@ func TestHandleSearchProjects_FakeSearchFn(t *testing.T) {
 	}
 	if body.Projects[0].PathWithNamespace != "fake/project" {
 		t.Fatalf("expected path_with_namespace=fake/project, got %s", body.Projects[0].PathWithNamespace)
+	}
+}
+
+func TestResolveAuth_DoesNotForwardEnvironmentTokenToRequestURL(t *testing.T) {
+	t.Setenv("GITLAB_TOKEN", "environment-secret")
+	var hits atomic.Int64
+	untrusted := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hits.Add(1)
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer untrusted.Close()
+
+	s := NewServer(Config{BaseURL: "https://trusted.gitlab.example"})
+	ts := httptest.NewServer(s.engine)
+	defer ts.Close()
+
+	resp, err := postJSON(ts.URL+"/auth/validate", map[string]any{
+		"gitlab_url": untrusted.URL,
+	})
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", resp.StatusCode)
+	}
+	if hits.Load() != 0 {
+		t.Fatalf("environment token target was contacted %d times", hits.Load())
+	}
+}
+
+func TestResolveAuth_AllowsEnvironmentTokenOnlyForConfiguredBase(t *testing.T) {
+	t.Setenv("GITLAB_TOKEN", "environment-secret")
+	s := NewServer(Config{BaseURL: "https://trusted.gitlab.example"})
+
+	base, token, err := s.resolveAuth(authInput{})
+	if err != nil {
+		t.Fatalf("resolveAuth: %v", err)
+	}
+	if base != s.cfg.BaseURL || token != "environment-secret" {
+		t.Fatalf("unexpected auth resolution: base=%q token_set=%t", base, token != "")
+	}
+}
+
+func TestEnumerateOptions_MapsRemoteGuardrails(t *testing.T) {
+	got := (enumerateOptions{
+		Timeout:        "7s",
+		RemoteMaxBytes: 12345,
+		RemoteTimeout:  "3s",
+		RemoteCacheTTL: "2m",
+	}).toEnumerateOpts()
+
+	if got.Timeout != 7*time.Second || got.RemoteMaxBytes != 12345 ||
+		got.RemoteTimeout != 3*time.Second || got.RemoteCacheTTL != 2*time.Minute {
+		t.Fatalf("remote guardrails were not mapped: %+v", got)
+	}
+}
+
+func TestEnumerateWithClient_UsesInjectedEnumeratorAndPerProjectTimeout(t *testing.T) {
+	s := NewServer(Config{BaseURL: "https://gitlab.example"})
+	called := false
+	s.enumFn = func(ctx context.Context, _ *gitlabx.Client, idents []string, opts enumerate.Options) ([]enumerate.Result, error) {
+		called = true
+		if _, hasBatchDeadline := ctx.Deadline(); hasBatchDeadline {
+			t.Error("enumerateWithClient applied a batch-wide deadline")
+		}
+		if opts.Timeout != time.Millisecond {
+			t.Fatalf("expected per-project timeout to be preserved, got %s", opts.Timeout)
+		}
+		return []enumerate.Result{{ProjectPathWithNS: idents[0]}}, nil
+	}
+	cl, err := gitlabx.New("https://gitlab.example", "token")
+	if err != nil {
+		t.Fatalf("new client: %v", err)
+	}
+	results, err := s.enumerateWithClient(context.Background(), cl, []string{"g/p"}, enumerateOptions{Timeout: "1ms"})
+	if err != nil {
+		t.Fatalf("enumerateWithClient: %v", err)
+	}
+	if !called || len(results) != 1 {
+		t.Fatalf("injected enumerator was not used: called=%t results=%d", called, len(results))
 	}
 }

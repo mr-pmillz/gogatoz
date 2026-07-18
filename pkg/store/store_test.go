@@ -2,6 +2,9 @@ package store
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -381,5 +384,30 @@ func TestKeyPair_NotFound(t *testing.T) {
 	_, err := st.GetKeyPair(9999)
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
 		t.Errorf("expected ErrRecordNotFound, got %v", err)
+	}
+}
+
+func TestOpen_SecuresDatabaseFiles(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix permission bits are not enforced on Windows")
+	}
+	path := filepath.Join(t.TempDir(), "sensitive.db")
+	st, err := Open(path)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer st.Close()
+
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat database: %v", err)
+	}
+	if got := info.Mode().Perm(); got != 0600 {
+		t.Fatalf("database permissions=%#o want=0600", got)
+	}
+	for _, suffix := range []string{"-wal", "-shm"} {
+		if sidecar, statErr := os.Stat(path + suffix); statErr == nil && sidecar.Mode().Perm() != 0600 {
+			t.Fatalf("%s permissions=%#o want=0600", suffix, sidecar.Mode().Perm())
+		}
 	}
 }

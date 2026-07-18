@@ -303,3 +303,14 @@ func writeFile(path string, data []byte) error {
 func readFile(path string) ([]byte, error) {
 	return os.ReadFile(path)
 }
+
+func TestCallbackServer_RejectsOversizedBody(t *testing.T) {
+	cb := NewCallbackServer(nil, 1)
+	req := httptest.NewRequest(http.MethodPost, "/", bytes.NewReader(bytes.Repeat([]byte("x"), maxCallbackBody+1)))
+	recorder := httptest.NewRecorder()
+
+	cb.handleCallback(recorder, req)
+	if recorder.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("oversized callback status=%d want=%d", recorder.Code, http.StatusRequestEntityTooLarge)
+	}
+}

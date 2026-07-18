@@ -208,10 +208,13 @@ func NewCredentialStore() *CredentialStore {
 
 // Add registers a credential. No-op if token hash already known.
 func (s *CredentialStore) Add(c *Credential) {
+	if c == nil {
+		return
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if _, ok := s.creds[c.TokenHash]; !ok {
-		s.creds[c.TokenHash] = c
+		s.creds[c.TokenHash] = cloneCredential(c)
 	}
 }
 
@@ -236,9 +239,18 @@ func (s *CredentialStore) All() []*Credential {
 	defer s.mu.RUnlock()
 	out := make([]*Credential, 0, len(s.creds))
 	for _, c := range s.creds {
-		out = append(out, c)
+		out = append(out, cloneCredential(c))
 	}
 	return out
+}
+
+func cloneCredential(c *Credential) *Credential {
+	if c == nil {
+		return nil
+	}
+	clone := *c
+	clone.Scopes = slices.Clone(c.Scopes)
+	return &clone
 }
 
 // MarkVisited records that a (token, project) pair has been processed.
@@ -273,7 +285,7 @@ func (s *CredentialStore) ReusedTokens() map[string][]int64 {
 	out := make(map[string][]int64)
 	for hash, pids := range s.projectsByToken {
 		if len(pids) > 1 {
-			out[hash] = pids
+			out[hash] = slices.Clone(pids)
 		}
 	}
 	return out

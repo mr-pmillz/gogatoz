@@ -25,6 +25,7 @@ import (
 
 var (
 	// enumerate flags
+	enumTarget      string
 	enumInput       string
 	enumInputFormat string // auto|text|json|jsonl
 	enumConc        int
@@ -118,6 +119,9 @@ var enumerateCmd = &cobra.Command{
 			if err != nil {
 				return err
 			}
+			if target := strings.TrimSpace(enumTarget); target != "" {
+				idents = append(idents, target)
+			}
 
 			// Build client (reuse global reliability + TLS flags)
 			var cerr error
@@ -184,7 +188,7 @@ var enumerateCmd = &cobra.Command{
 				idents = uniq
 			}
 			if len(idents) == 0 {
-				return fmt.Errorf("no targets provided; use --input, --group/--groups, --self, or --all-projects to supply projects")
+				return fmt.Errorf("no targets provided; use --target, --input, --group/--groups, --self, or --all-projects to supply projects")
 			}
 
 			opts, err := buildEnumerateOptions(controlsCfg)
@@ -392,6 +396,7 @@ var enumerateCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(enumerateCmd)
+	enumerateCmd.Flags().StringVarP(&enumTarget, "target", "t", "", "Project identifier (ID or path-with-namespace); combine with --input or discovery flags")
 	enumerateCmd.Flags().StringVarP(&enumInput, "input", "i", "", "Path to file with project identifiers (ID or path-with-namespace), one per line. Use '-' for stdin")
 	enumerateCmd.Flags().IntVar(&enumConc, "concurrency", 16, "Number of concurrent workers")
 	enumerateCmd.Flags().StringVar(&enumTimeout, "timeout", "", "Per-project timeout (e.g., 20s)")

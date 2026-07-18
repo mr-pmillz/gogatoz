@@ -110,13 +110,31 @@ var attackCmd = &cobra.Command{
 			if atkSigstore {
 				modes++
 			}
+			if atkDepConfusion {
+				modes++
+			}
+			if atkRunnerVarDump {
+				modes++
+			}
+			if atkWorkflowExfil {
+				modes++
+			}
+			if atkCommitPrefix {
+				modes++
+			}
+			if atkReleaseTamperPipeline {
+				modes++
+			}
 			if modes != 1 {
-				return fmt.Errorf("select exactly one mode: --commit-ci, --secrets, --cleanup, --deploy-key, --add-member, --ai-inject, --inject-script, --lotp-inject, --auto-merge, --tamper-release, --tamper-package, --tamper-tag, --harvest, --ror-listen, --memory-dump, --supply-chain-worm, --container-escape, --variable-inject, --c2-channel, --npm-tamper, --vault-enum, --k8s-secrets, --dead-man-switch, --branch-mutator, or --sigstore (or use --payload-only or --discover-tags)")
+				return fmt.Errorf("select exactly one mode: --commit-ci, --secrets, --cleanup, --deploy-key, --add-member, --ai-inject, --inject-script, --lotp-inject, --auto-merge, --tamper-release, --tamper-package, --tamper-tag, --harvest, --ror-listen, --memory-dump, --supply-chain-worm, --container-escape, --variable-inject, --c2-channel, --npm-tamper, --vault-enum, --k8s-secrets, --dead-man-switch, --branch-mutator, --sigstore, --dep-confusion, --runner-var-dump, --workflow-exfil, --commit-prefix, or --release-tamper-pipeline (or use --payload-only or --discover-tags)")
 			}
 		}
 
 		// Build client with global knobs (reuse code style from search/enumerate)
-		ctx := context.Background()
+		ctx := cmd.Context()
+		if ctx == nil {
+			ctx = context.Background()
+		}
 		client, err := newGitLabClient()
 		if err != nil {
 			return err
@@ -176,6 +194,16 @@ var attackCmd = &cobra.Command{
 			return runAttackBranchMutator(ctx, cmd, client)
 		case atkSigstore:
 			return runAttackSigstore(ctx, cmd, client)
+		case atkDepConfusion:
+			return runAttackGeneratedPayload(ctx, cmd, client, "dep-confusion")
+		case atkRunnerVarDump:
+			return runAttackGeneratedPayload(ctx, cmd, client, "runner-var-dump")
+		case atkWorkflowExfil:
+			return runAttackGeneratedPayload(ctx, cmd, client, "workflow-exfil")
+		case atkCommitPrefix:
+			return runAttackCommitPrefix(ctx, cmd, client)
+		case atkReleaseTamperPipeline:
+			return runAttackGeneratedPayload(ctx, cmd, client, "release-tamper-pipeline")
 		case atkSecrets:
 			return runAttackSecrets(ctx, cmd, client)
 		default:

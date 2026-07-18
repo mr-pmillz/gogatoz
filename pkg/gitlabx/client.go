@@ -48,6 +48,9 @@ func normalizeBaseURL(in string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	if u.Hostname() == "" {
+		return "", fmt.Errorf("baseURL must include a host")
+	}
 	// Clean path: strip trailing slashes and any trailing /api or /api/v4 segments
 	p := strings.TrimRight(u.Path, "/")
 	for {
@@ -222,6 +225,12 @@ func New(baseURL, token string, opts ...Option) (*Client, error) {
 	for _, o := range opts {
 		o(&cfg)
 	}
+	if cfg.rateRPS <= 0 {
+		return nil, fmt.Errorf("rate limit requests per second must be positive")
+	}
+	if cfg.burst <= 0 {
+		return nil, fmt.Errorf("rate limit burst must be positive")
+	}
 
 	// Build tuned base transport
 	// TLS config supports internal/self-hosted instances with custom CAs or self-signed certs (opt-in)
@@ -315,24 +324,42 @@ func (r *retryingRoundTripper) RoundTrip(req *http.Request) (*http.Response, err
 	if attempts <= 0 {
 		attempts = 1
 	}
+	if !canRetryRequest(req) {
+		attempts = 1
+	}
 	var resp *http.Response
 	var err error
 	for i := 1; i <= attempts; i++ {
-		resp, err = r.next.RoundTrip(req)
+		attemptReq := req
+		if i > 1 && req.Body != nil {
+			body, bodyErr := req.GetBody()
+			if bodyErr != nil {
+				return nil, fmt.Errorf("rewind request body for retry: %w", bodyErr)
+			}
+			attemptReq = req.Clone(req.Context())
+			attemptReq.Body = body
+		}
+		resp, err = r.next.RoundTrip(attemptReq)
 		if err != nil {
-			// Network error: retry unless last attempt
+			// Network error: retry unless last attempt.
 			if i == attempts {
 				return resp, err
 			}
+			if resp != nil && resp.Body != nil {
+				_ = resp.Body.Close()
+			}
 		} else {
-			// If response status is not retryable, return immediately
+			// If response status is not retryable, return immediately.
 			if !isRetryable(resp.StatusCode) {
 				return resp, nil
 			}
-			// Close body before next attempt to avoid leaks
-			_ = resp.Body.Close()
 			if i == attempts {
 				return resp, nil
+			}
+			// Close only responses that will be discarded. The final response
+			// body belongs to the caller and must remain readable.
+			if resp.Body != nil {
+				_ = resp.Body.Close()
 			}
 		}
 		// Compute backoff
@@ -383,6 +410,25 @@ func (r *retryingRoundTripper) RoundTrip(req *http.Request) (*http.Response, err
 		}
 	}
 	return resp, err
+}
+
+// canRetryRequest prevents duplicate GitLab mutations and makes sure request
+// bodies can be replayed byte-for-byte. Callers may explicitly opt an unsafe
+// method into retries by providing an idempotency key.
+func canRetryRequest(req *http.Request) bool {
+	if req == nil {
+		return false
+	}
+	if req.Body != nil && req.GetBody == nil {
+		return false
+	}
+	switch req.Method {
+	case http.MethodGet, http.MethodHead, http.MethodOptions, http.MethodTrace,
+		http.MethodPut, http.MethodDelete:
+		return true
+	default:
+		return strings.TrimSpace(req.Header.Get("Idempotency-Key")) != ""
+	}
 }
 
 func isRetryable(code int) bool {

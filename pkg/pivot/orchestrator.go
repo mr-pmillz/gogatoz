@@ -235,12 +235,11 @@ func (o *Orchestrator) attackAndHarvest(ctx context.Context, cl *gitlabx.Client,
 	slog.Debug("processing callbacks", "received", len(payloads), "expected", len(attacked))
 	var harvested []*Credential
 	for i, payload := range payloads {
-		var target ExploitableTarget
-		if t, ok := pathIndex[payload.Project]; ok {
-			target = t
-		} else if i < len(attacked) {
-			target = attacked[i].target
-		} else {
+		target, ok := pathIndex[payload.Project]
+		if !ok {
+			// Concurrent callbacks have no stable order. Never attribute secrets
+			// to a target by slice position when the project identifier is absent
+			// or does not match an attacked target.
 			slog.Debug("skipping unmatched callback payload", "index", i, "project", payload.Project)
 			continue
 		}

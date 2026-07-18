@@ -280,3 +280,31 @@ func TestCredentialStore(t *testing.T) {
 		}
 	})
 }
+
+func TestCredentialStore_ReturnsDefensiveSnapshots(t *testing.T) {
+	store := NewCredentialStore()
+	original := &Credential{Token: "original", TokenHash: "hash", Scopes: []string{"api"}}
+	store.Add(original)
+
+	original.Token = "mutated-after-add"
+	original.Scopes[0] = "mutated"
+	first := store.All()
+	if len(first) != 1 || first[0].Token != "original" || first[0].Scopes[0] != "api" {
+		t.Fatalf("store retained caller-owned state: %+v", first)
+	}
+
+	first[0].Token = "mutated-snapshot"
+	first[0].Scopes[0] = "mutated-snapshot"
+	second := store.All()
+	if second[0].Token != "original" || second[0].Scopes[0] != "api" {
+		t.Fatalf("All returned internal state: %+v", second[0])
+	}
+
+	store.RecordTokenProject("hash", 1)
+	store.RecordTokenProject("hash", 2)
+	reused := store.ReusedTokens()
+	reused["hash"][0] = 999
+	if got := store.ReusedTokens()["hash"][0]; got != 1 {
+		t.Fatalf("ReusedTokens returned internal slice: %d", got)
+	}
+}

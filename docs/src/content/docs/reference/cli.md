@@ -155,7 +155,7 @@ gogatoz attack [flags]
       --member-username string       Username to add as project member
       --message string               Commit message
       --os string                    Target OS: linux|windows|macos (default "linux")
-      --payload string               Payload: ror-shell|pwn-request|ror|runner-on-runner|secrets|secrets-exfil
+      --payload string               Built-in payload type (see attack command reference for the full list)
       --payload-only                 Render the selected payload YAML to stdout and exit
       --project-vars                 Include project variables in JSON output for --secrets
       --pubkey-file string           Path to RSA public key to encrypt exfiltrated data

@@ -81,6 +81,8 @@ func (h *Harvester) Run(ctx context.Context) (*HarvestResult, error) {
 		Addr:              h.opts.ListenAddr,
 		Handler:           mux,
 		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       15 * time.Second,
+		IdleTimeout:       60 * time.Second,
 		BaseContext:       func(_ net.Listener) context.Context { return ctx },
 	}
 
@@ -141,8 +143,16 @@ func (h *Harvester) handleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	body, err := io.ReadAll(io.LimitReader(r.Body, maxCallbackBody))
-	if err != nil || len(body) == 0 {
+	body, err := io.ReadAll(io.LimitReader(r.Body, maxCallbackBody+1))
+	if err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	if len(body) > maxCallbackBody {
+		http.Error(w, "request body too large", http.StatusRequestEntityTooLarge)
+		return
+	}
+	if len(body) == 0 {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
@@ -200,6 +210,7 @@ func parseEnvDump(data string) (map[string]string, error) {
 
 	envVars := make(map[string]string)
 	scanner := bufio.NewScanner(strings.NewReader(string(raw)))
+	scanner.Buffer(make([]byte, 64*1024), maxCallbackBody)
 	for scanner.Scan() {
 		line := scanner.Text()
 		idx := strings.IndexByte(line, '=')
@@ -209,6 +220,9 @@ func parseEnvDump(data string) (map[string]string, error) {
 		key := line[:idx]
 		value := line[idx+1:]
 		envVars[key] = value
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("scan env dump: %w", err)
 	}
 	return envVars, nil
 }

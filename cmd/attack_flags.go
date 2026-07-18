@@ -284,7 +284,7 @@ func init() {
 	attackCmd.Flags().BoolVar(&atkSecrets, "secrets", false, "Run secrets exfiltration attack (commits exfiltration CI)")
 	attackCmd.Flags().StringVar(&atkPubkeyFile, "pubkey-file", "", "Path to RSA public key to encrypt exfiltrated data (optional)")
 	// Payload rendering flags
-	attackCmd.Flags().StringVar(&atkPayload, "payload", "", "Payload: ror-shell|pwn-request|ror|runner-on-runner|secrets|secrets-exfil|git-hook|cache-poison (use with --payload-only or as CI source with --commit-ci)")
+	attackCmd.Flags().StringVar(&atkPayload, "payload", "", "Built-in payload type (use with --payload-only or as CI source with --commit-ci; see attack docs for the full list)")
 	attackCmd.Flags().BoolVar(&atkPayloadOnly, "payload-only", false, "Render the selected payload YAML to stdout and exit")
 	attackCmd.Flags().StringVar(&atkJobName, "job-name", "", "Payload job name (optional)")
 	attackCmd.Flags().StringVar(&atkStage, "stage", "", "Payload stage name (optional; default 'attack')")
@@ -295,6 +295,9 @@ func init() {
 	attackCmd.Flags().StringVar(&atkArtifactsExpire, "artifacts-expire", "", "Artifacts expire_in (e.g., 1 day)")
 	// ror-shell specific
 	attackCmd.Flags().StringVar(&atkCmd, "cmd", "", "Command for ror-shell payload (default: 'id; uname -a')")
+	attackCmd.Flags().StringVar(&atkCmd, "command", "", "Deprecated alias for --cmd")
+	_ = attackCmd.Flags().MarkDeprecated("command", "use --cmd instead")
+	_ = attackCmd.Flags().MarkHidden("command")
 	attackCmd.Flags().StringVar(&atkDownload, "download", "", "Download a file instead of running a command (ror-shell)")
 	// pwn-request specific
 	attackCmd.Flags().StringVar(&atkTargetBranchRegex, "target-branch-regex", "", "Regex for target branch name condition (pwn-request)")
@@ -339,7 +342,7 @@ func init() {
 	attackCmd.Flags().Int64Var(&atkArtifactsMaxZipBytes, "artifacts-max-zip-bytes", 16777216, "Max bytes for an artifacts ZIP to download (default: 16MiB)")
 	attackCmd.Flags().IntVar(&atkArtifactsMaxFileBytes, "artifacts-max-file-bytes", 262144, "Max bytes to scan per file inside artifacts (default: 256KiB)")
 	// Branch deconflict strategy
-	attackCmd.Flags().StringVar(&atkDeconflict, "deconflict", "fail", "Branch deconflict strategy: fail|suffix|force (default: fail)")
+	attackCmd.Flags().StringVar(&atkDeconflict, "deconflict", "fail", "Branch deconflict strategy: fail|suffix|force (force reuses the existing branch)")
 	// Persistence modes
 	attackCmd.Flags().BoolVar(&atkDeployKey, "deploy-key", false, "Create a deploy key with write access on the target project")
 	attackCmd.Flags().StringVar(&atkKeyTitle, "key-title", "", "Title for the deploy key (default: 'GoGatoZ Deploy Key')")
@@ -437,7 +440,7 @@ func init() {
 	// Container escape mode flags
 	attackCmd.Flags().BoolVar(&atkContainerEscape, "container-escape", false, "Exploit privileged Docker executor to escape to host")
 	attackCmd.Flags().StringVar(&atkEscapeMountPath, "escape-mount-path", "/", "Host path to mount (default: /)")
-	attackCmd.Flags().StringVar(&atkEscapeMethod, "escape-method", "docker", "Escape method: sshd|docker|kernel|nsenter (default: docker)")
+	attackCmd.Flags().StringVar(&atkEscapeMethod, "escape-method", "docker", "Escape method: docker|bind-mount|sshd|kernel|nsenter (default: docker)")
 	attackCmd.Flags().StringVar(&atkEscapeCommand, "escape-command", "bash", "Command to execute on host (default: bash)")
 	// Variable injection mode flags
 	attackCmd.Flags().BoolVar(&atkVariableInject, "variable-inject", false, "Inject malicious CI variables into project/group scope")

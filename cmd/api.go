@@ -1,7 +1,9 @@
 package cmd
 
 import (
+	"fmt"
 	"log/slog"
+	"net"
 	"strings"
 
 	"github.com/mr-pmillz/gogatoz/pkg/api"
@@ -26,13 +28,16 @@ var apiCmd = &cobra.Command{
 			APIKey:     strings.TrimSpace(viper.GetString("api-key")),
 		}
 		if cfg.ListenAddr == "" {
-			cfg.ListenAddr = ":8088"
+			cfg.ListenAddr = "127.0.0.1:8088"
 		}
 		if cfg.BaseURL == "" {
 			cfg.BaseURL = strings.TrimSpace(viper.GetString("gitlab-url"))
 		}
 		if cfg.BaseURL == "" {
 			cfg.BaseURL = "https://gitlab.com"
+		}
+		if err := validateAPIListenSecurity(cfg.ListenAddr, cfg.APIKey); err != nil {
+			return err
 		}
 		srv := api.NewServer(cfg)
 		authMsg := "disabled"
@@ -44,9 +49,26 @@ var apiCmd = &cobra.Command{
 	},
 }
 
+func validateAPIListenSecurity(listenAddr, key string) error {
+	if strings.TrimSpace(key) != "" {
+		return nil
+	}
+	host, _, err := net.SplitHostPort(strings.TrimSpace(listenAddr))
+	if err != nil {
+		return fmt.Errorf("invalid API listen address: %w", err)
+	}
+	if strings.EqualFold(host, "localhost") {
+		return nil
+	}
+	if ip := net.ParseIP(host); ip != nil && ip.IsLoopback() {
+		return nil
+	}
+	return fmt.Errorf("refusing unauthenticated API listener on non-loopback address %q; configure --api-key", listenAddr)
+}
+
 func init() {
 	rootCmd.AddCommand(apiCmd)
-	apiCmd.Flags().StringVar(&apiListen, "listen", ":8088", "Listen address for API server (host:port)")
+	apiCmd.Flags().StringVar(&apiListen, "listen", "127.0.0.1:8088", "Listen address for API server (host:port)")
 	apiCmd.Flags().StringVar(&apiBaseURL, "base-url", "", "Default GitLab base URL for API requests (overridden by per-request)")
 	apiCmd.Flags().StringVar(&apiKey, "api-key", "", "API key required for all non-healthz requests (X-API-Key header)")
 	_ = viper.BindPFlag("api-listen", apiCmd.Flags().Lookup("listen"))

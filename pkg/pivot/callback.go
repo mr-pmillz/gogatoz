@@ -69,6 +69,8 @@ func (cb *CallbackServer) StartTLS(ctx context.Context, addr, certFile, keyFile 
 		Addr:              addr,
 		Handler:           mux,
 		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       15 * time.Second,
+		IdleTimeout:       60 * time.Second,
 		BaseContext:       func(_ net.Listener) context.Context { return ctx },
 	}
 
@@ -155,8 +157,16 @@ func (cb *CallbackServer) handleCallback(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	body, err := io.ReadAll(io.LimitReader(r.Body, maxCallbackBody))
-	if err != nil || len(body) == 0 {
+	body, err := io.ReadAll(io.LimitReader(r.Body, maxCallbackBody+1))
+	if err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	if len(body) > maxCallbackBody {
+		http.Error(w, "request body too large", http.StatusRequestEntityTooLarge)
+		return
+	}
+	if len(body) == 0 {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}

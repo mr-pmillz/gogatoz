@@ -1,7 +1,10 @@
 package store
 
 import (
+	"errors"
 	"fmt"
+	"os"
+	"strings"
 
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -16,6 +19,9 @@ type Store struct {
 // Open creates or opens a SQLite database at dbPath, enables WAL mode,
 // and runs AutoMigrate for all model types. Use ":memory:" for tests.
 func Open(dbPath string) (*Store, error) {
+	if strings.TrimSpace(dbPath) == "" {
+		return nil, fmt.Errorf("open store: database path is required")
+	}
 	db, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{
 		Logger: logger.Default.LogMode(logger.Silent),
 	})
@@ -27,8 +33,17 @@ func Open(dbPath string) (*Store, error) {
 	if err != nil {
 		return nil, fmt.Errorf("raw db: %w", err)
 	}
+	opened := false
+	defer func() {
+		if !opened {
+			_ = sqlDB.Close()
+		}
+	}()
 	if _, err := sqlDB.Exec("PRAGMA journal_mode=WAL"); err != nil {
 		return nil, fmt.Errorf("wal mode: %w", err)
+	}
+	if err := secureSQLiteFiles(dbPath); err != nil {
+		return nil, err
 	}
 
 	if err := db.AutoMigrate(
@@ -49,7 +64,23 @@ func Open(dbPath string) (*Store, error) {
 	); err != nil {
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
+	opened = true
 	return &Store{db: db}, nil
+}
+
+func secureSQLiteFiles(dbPath string) error {
+	if dbPath == ":memory:" || strings.HasPrefix(dbPath, "file:") {
+		return nil
+	}
+	for i, path := range []string{dbPath, dbPath + "-wal", dbPath + "-shm"} {
+		if err := os.Chmod(path, 0600); err != nil {
+			if i > 0 && errors.Is(err, os.ErrNotExist) {
+				continue
+			}
+			return fmt.Errorf("secure store file %s: %w", path, err)
+		}
+	}
+	return nil
 }
 
 // Close closes the underlying database connection.
