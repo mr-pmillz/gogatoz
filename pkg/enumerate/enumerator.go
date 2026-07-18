@@ -54,9 +54,10 @@ type Result struct {
 	GroupVariables   []analyze.VariableInfo    `json:"group_variables,omitempty"`
 	Environments     []analyze.EnvironmentInfo `json:"environments,omitempty"`
 	// Log scraping (optional)
-	LogFindingsCount int    `json:"log_findings_count,omitempty"`
-	DurationMS       int64  `json:"duration_ms,omitempty"`
-	Error            string `json:"error,omitempty"`
+	LogFindingsCount int            `json:"log_findings_count,omitempty"`
+	RunnerLog        *RunnerLogInfo `json:"runner_log,omitempty"`
+	DurationMS       int64          `json:"duration_ms,omitempty"`
+	Error            string         `json:"error,omitempty"`
 }
 
 // Options controls enumeration behavior.
@@ -423,6 +424,13 @@ func scanOne(ctx context.Context, cl *gitlabx.Client, ident string, opts Options
 			appendError(&r, fmt.Sprintf("log scrape: %v", lerr))
 		} else {
 			r.LogFindingsCount = len(finds)
+		}
+	}
+
+	// Run-log runner detection (fallback when --runners not available)
+	if r.RunnerLog == nil && !opts.FetchRunners {
+		if trace := fetchFirstJobTrace(ctx, cl, proj.ID, refToUse); trace != "" {
+			r.RunnerLog = ExtractRunnerFromLog(trace)
 		}
 	}
 
