@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"runtime"
 	"strings"
@@ -47,6 +48,9 @@ var (
 	enumGroup          string
 	enumGroups         string
 	enumGroupRecursive bool
+	// token-based discovery
+	enumSelf        bool
+	enumAllProjects bool
 	// inventory
 	enumFetchProtected    bool
 	enumFetchRunners      bool
@@ -126,6 +130,24 @@ var enumerateCmd = &cobra.Command{
 				idents = append(idents, projs...)
 			}
 		}
+		if enumSelf {
+			slog.Info("discovering projects via token membership")
+			projs, serr := enumorg.ListAccessibleProjects(ctx, client)
+			if serr != nil {
+				return fmt.Errorf("list accessible projects: %w", serr)
+			}
+			slog.Info("discovered member projects", "count", len(projs))
+			idents = append(idents, projs...)
+		}
+		if enumAllProjects {
+			slog.Info("discovering all visible projects on instance")
+			projs, aerr := enumorg.ListAllProjects(ctx, client)
+			if aerr != nil {
+				return fmt.Errorf("list all projects: %w", aerr)
+			}
+			slog.Info("discovered instance projects", "count", len(projs))
+			idents = append(idents, projs...)
+		}
 		// de-duplicate identifiers collected from file + groups
 		{
 			seen := map[string]struct{}{}
@@ -144,7 +166,7 @@ var enumerateCmd = &cobra.Command{
 			idents = uniq
 		}
 		if len(idents) == 0 {
-			return fmt.Errorf("no targets provided; use --input or --group/--groups to supply projects")
+			return fmt.Errorf("no targets provided; use --input, --group/--groups, --self, or --all-projects to supply projects")
 		}
 
 		opts, err := buildEnumerateOptions(controlsCfg)
@@ -378,6 +400,8 @@ func init() {
 	enumerateCmd.Flags().StringVar(&enumGroup, "group", "", "Group ID or full path to expand into projects")
 	enumerateCmd.Flags().StringVar(&enumGroups, "groups", "", "Comma-separated group IDs or full paths to expand into projects")
 	enumerateCmd.Flags().BoolVar(&enumGroupRecursive, "group-recursive", false, "Recursively include subgroup projects (best-effort)")
+	enumerateCmd.Flags().BoolVar(&enumSelf, "self", false, "Enumerate all projects the token owner is a member of")
+	enumerateCmd.Flags().BoolVar(&enumAllProjects, "all-projects", false, "Enumerate all projects visible to the token on the instance (use with caution on large instances)")
 	// Inventory
 	enumerateCmd.Flags().BoolVar(&enumFetchProtected, "protected-branches", false, "Fetch and include names of protected branches for each project")
 	enumerateCmd.Flags().BoolVar(&enumFetchRunners, "runners", false, "Fetch runner summary (counts and executors); combine with --runners-scope")
