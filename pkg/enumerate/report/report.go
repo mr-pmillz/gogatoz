@@ -119,6 +119,7 @@ type Report struct {
 	Attacks          []AttackView
 	AttackSummary    AttackSummary
 	Score            *analyze.ScoreResult `json:"score,omitempty"`
+	Recommendations  []Recommendation     `json:"recommendations,omitempty"`
 }
 
 // Build constructs a Report from raw enumeration results.
@@ -306,6 +307,8 @@ func Build(results []enumerate.Result, opts Options) Report {
 			rep.SupplyChain.TotalRisk++
 		}
 	}
+
+	rep.Recommendations = GenerateRecommendations(results)
 
 	return rep
 }

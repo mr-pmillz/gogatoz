@@ -113,7 +113,14 @@ func RenderPTerm(w io.Writer, r Report) error {
 	}
 
 	// Runner, pipeline, and log stats
-	return renderStatsSection(w, r)
+	if err := renderStatsSection(w, r); err != nil {
+		return err
+	}
+
+	// Attack surface recommendations
+	renderRecommendations(w, r.Recommendations)
+
+	return nil
 }
 
 // renderProjectsTable renders the projects overview table.
@@ -289,4 +296,38 @@ func renderSupplyChainSection(w io.Writer, sc SupplyChainView) {
 	if bl, err := pterm.DefaultBulletList.WithItems(items).Srender(); err == nil {
 		fmt.Fprintln(w, bl)
 	}
+}
+
+func renderRecommendations(w io.Writer, recs []Recommendation) {
+	if len(recs) == 0 {
+		return
+	}
+	hdr := pterm.DefaultSection.WithLevel(2)
+	fmt.Fprintln(w, hdr.Sprint("Attack Surface Recommendations"))
+
+	tableData := pterm.TableData{{"Category", "Risk", "Summary", "Projects"}}
+	for _, r := range recs {
+		risk := r.Risk
+		switch r.Risk {
+		case "CRITICAL":
+			risk = pterm.FgRed.Sprint(r.Risk)
+		case "HIGH":
+			risk = pterm.FgYellow.Sprint(r.Risk)
+		case "MEDIUM":
+			risk = pterm.FgCyan.Sprint(r.Risk)
+		}
+		projCount := fmt.Sprintf("%d", len(r.Projects))
+		tableData = append(tableData, []string{r.Category, risk, r.Summary, projCount})
+	}
+	tbl, _ := pterm.DefaultTable.WithHasHeader().WithData(tableData).Srender()
+	fmt.Fprintln(w, tbl)
+
+	// Print commands
+	for _, r := range recs {
+		if r.Command != "" {
+			prefix := pterm.FgLightCyan.Sprintf("  %s:", r.Category)
+			fmt.Fprintf(w, "%s %s\n", prefix, r.Command)
+		}
+	}
+	fmt.Fprintln(w)
 }
