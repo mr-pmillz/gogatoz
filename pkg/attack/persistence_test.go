@@ -504,3 +504,40 @@ func TestRunAutoMerge_FullChain(t *testing.T) {
 		t.Fatalf("unexpected merge error: %s", result.MergeErr)
 	}
 }
+
+func TestCreateDeployKey_DoesNotOverwriteExistingFile(t *testing.T) {
+	att := NewAttacker(nil, "https://gitlab.com", "Test", "t@t.com", 0)
+	p := NewPersistence(att)
+	keyPath := filepath.Join(t.TempDir(), "existing.pem")
+	if err := os.WriteFile(keyPath, []byte("keep-me"), 0600); err != nil {
+		t.Fatalf("write fixture: %v", err)
+	}
+
+	_, _, err := p.CreateDeployKey(context.Background(), "1", "test", keyPath)
+	if err == nil {
+		t.Fatal("expected existing key path to be rejected")
+	}
+	data, readErr := os.ReadFile(keyPath)
+	if readErr != nil || string(data) != "keep-me" {
+		t.Fatalf("existing file changed: data=%q err=%v", data, readErr)
+	}
+}
+
+func TestCreateDeployKey_RemovesFileWhenAPIRegistrationFails(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/v4/projects/1/deploy_keys", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(`{"message":"registration failed"}`))
+	})
+	att, ts := newMockAttacker(t, mux)
+	defer ts.Close()
+	keyPath := filepath.Join(t.TempDir(), "deploy.pem")
+
+	_, _, err := NewPersistence(att).CreateDeployKey(context.Background(), "1", "test", keyPath)
+	if err == nil {
+		t.Fatal("expected deploy key registration failure")
+	}
+	if _, statErr := os.Stat(keyPath); !os.IsNotExist(statErr) {
+		t.Fatalf("orphan private key remained after failure: %v", statErr)
+	}
+}

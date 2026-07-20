@@ -1,0 +1,4 @@
+interface:
+  display_name: "Filter False Positives"
+  short_description: "Triage and adjust GoGatoZ scan findings"
+  default_prompt: "Use $filter-false-positives to mark scan noise and produce an adjusted findings report."

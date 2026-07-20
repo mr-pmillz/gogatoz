@@ -100,6 +100,8 @@ Examples:
 			return WriteSARIF(w, collectReportFindings(results), version)
 		case fmtGLSAST:
 			return WriteGLSAST(w, collectReportFindings(results), version, rep.GeneratedAt, time.Now())
+		case fmtCSV:
+			return report.RenderCSV(w, results)
 		case "text":
 			return report.RenderPTerm(w, rep)
 		default: // html is the default for this command
@@ -235,7 +237,7 @@ func init() {
 	reportCmd.Flags().StringVarP(&reportInput, "input", "i", "", "Path to JSONL or JSON file with enumerate results")
 	reportCmd.Flags().StringVar(&reportDBPath, "db", "", "SQLite database path")
 	reportCmd.Flags().UintVar(&reportSessionID, "session", 0, "Session ID to load from database (required with --db)")
-	reportCmd.Flags().StringVar(&reportFormat, "format", "html", "Output format: html|text|json|jsonl|sarif|glsast")
+	reportCmd.Flags().StringVar(&reportFormat, "format", "html", "Output format: html|text|json|jsonl|csv|sarif|glsast")
 	reportCmd.Flags().StringVarP(&reportOutputPath, "output", "o", "", "Output file path (default: stdout)")
 	reportCmd.Flags().BoolVar(&reportOnlyFindings, "only-findings", false, "Only include projects with findings")
 	reportCmd.Flags().BoolVar(&reportFilterFP, "filter-false-positives", false, "Apply false positive detection rules and show adjusted counts")

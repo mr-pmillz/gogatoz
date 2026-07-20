@@ -14,13 +14,21 @@ import (
 )
 
 type fakeSecrets struct {
-	gotProject any
-	gotBranch  string
-	gotPubkey  string
-	gotTags    []string
-	gotExfil   attack.ExfilOptions
-	retURL     string
-	retErr     error
+	gotProject     any
+	gotBranch      string
+	gotPubkey      string
+	gotTags        []string
+	gotExfil       attack.ExfilOptions
+	retURL         string
+	retErr         error
+	impersonated   bool
+	impersonateErr error
+}
+
+func (f *fakeSecrets) ImpersonateMaintainer(_ context.Context, projectID any) error {
+	f.gotProject = projectID
+	f.impersonated = true
+	return f.impersonateErr
 }
 
 func (f *fakeSecrets) RunExfil(_ context.Context, projectID any, branch, pubkey string, runnerTags []string, exfil attack.ExfilOptions) (string, string, error) {
@@ -80,6 +88,31 @@ func TestAttack_Secrets_Success_DefaultBranchAndPubkeyTags(t *testing.T) {
 	}
 	if len(fr.gotTags) != 2 {
 		t.Fatalf("expected 2 tags, got %v", fr.gotTags)
+	}
+}
+
+func TestAttack_Secrets_ImpersonatesMaintainer(t *testing.T) {
+	token = "tok"
+	gitlabURL = "https://gitlab.local"
+	atkTarget = "group/proj"
+	atkSecrets = true
+	atkCommitCI = false
+	atkBranch = "attack"
+	atkTags = ""
+	atkPubkeyFile = ""
+	atkPrivkeyFile = ""
+	atkAutoEncrypt = false
+	atkNoWait = true
+	atkImpersonateMaintainer = true
+	defer func() { atkImpersonateMaintainer = false }()
+
+	fr := &fakeSecrets{retURL: "https://gitlab.local/group/proj/-/pipelines?ref=attack"}
+	defer withFakeSecrets(fr)()
+	if err := attackCmd.RunE(attackCmd, nil); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !fr.impersonated {
+		t.Fatal("expected secrets runner to impersonate a maintainer before committing")
 	}
 }
 

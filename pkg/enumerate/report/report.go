@@ -23,12 +23,13 @@ type Options struct {
 type ProjectView struct {
 	Project enumerate.Result
 	// Derived
-	FindingCount  int
-	Critical      int
-	High          int
-	Medium        int
-	Low           int
-	Informational int
+	FindingCount    int
+	RawFindingCount int
+	Critical        int
+	High            int
+	Medium          int
+	Low             int
+	Informational   int
 }
 
 // RunnersView provides basic runner exposure aggregation derived from findings.
@@ -91,17 +92,34 @@ type AttackSummary struct {
 	ByMode     map[string]int
 }
 
+// SupplyChainView aggregates supply chain risk findings.
+type SupplyChainView struct {
+	ExfilFindings     int `json:"exfil_findings"`
+	EncodedPayloads   int `json:"encoded_payloads"`
+	CampaignMatches   int `json:"campaign_matches"`
+	SuspiciousNetwork int `json:"suspicious_network"`
+	ObfuscationIssues int `json:"obfuscation_issues"`
+	WeakProtection    int `json:"weak_protection"`
+	DepConfusion      int `json:"dep_confusion"`
+	AIConfigRisk      int `json:"ai_config_risk"`
+	OIDCAnomaly       int `json:"oidc_anomaly"`
+	TotalRisk         int `json:"total_risk"`
+}
+
 // Report root for templates.
+// +kubebuilder:object:generate=true
 type Report struct {
 	GeneratedAt      time.Time
 	Projects         []ProjectView
 	Summary          Summary
 	Runners          RunnersView
 	Pipelines        PipelinesView
+	SupplyChain      SupplyChainView `json:"supply_chain,omitempty"`
 	LogFindingsTotal int
 	Attacks          []AttackView
 	AttackSummary    AttackSummary
 	Score            *analyze.ScoreResult `json:"score,omitempty"`
+	Recommendations  []Recommendation     `json:"recommendations,omitempty"`
 }
 
 // Build constructs a Report from raw enumeration results.
@@ -135,6 +153,7 @@ func Build(results []enumerate.Result, opts Options) Report {
 			continue
 		}
 		pv := ProjectView{Project: r}
+		pv.RawFindingCount = len(r.Findings)
 		pv.FindingCount = len(r.Findings)
 		fpCount := 0
 		for _, f := range r.Findings {
@@ -233,6 +252,64 @@ func Build(results []enumerate.Result, opts Options) Report {
 		return rep.Projects[i].FindingCount > rep.Projects[j].FindingCount
 	})
 	rep.Summary.Total = len(rep.Projects)
+
+	// Aggregate supply chain risk findings
+	for _, pv := range rep.Projects {
+		for _, f := range pv.Project.Findings {
+			switch f.ID {
+			case "SECRET_EXFIL_HTTP", "SECRET_EXFIL_ARTIFACT",
+				"WORKFLOW_SECRET_EXFIL", "WORKFLOW_ARTIFACT_EXFIL":
+				rep.SupplyChain.ExfilFindings++
+			case "SCRIPT_ENCODED_PAYLOAD":
+				rep.SupplyChain.EncodedPayloads++
+			case "CAMPAIGN_MATCH":
+				rep.SupplyChain.CampaignMatches++
+			case "SUSPICIOUS_NETWORK_TARGET":
+				rep.SupplyChain.SuspiciousNetwork++
+			case "SCRIPT_OBFUSCATION", "SCRIPT_WHITESPACE_HIDING", "CHARCODE_OBFUSCATION":
+				rep.SupplyChain.ObfuscationIssues++
+			case "WEAK_BRANCH_PROTECTION":
+				rep.SupplyChain.WeakProtection++
+			case "DEP_CONFUSION_RISK":
+				rep.SupplyChain.DepConfusion++
+			case "AI_CONFIG_CREDENTIAL_HARVESTER", "AI_CONFIG_PROMPT_INJECTION_ENHANCED":
+				rep.SupplyChain.AIConfigRisk++
+			case "OIDC_PROVENANCE_ANOMALY":
+				rep.SupplyChain.OIDCAnomaly++
+			}
+		}
+	}
+	rep.SupplyChain.TotalRisk = rep.SupplyChain.ExfilFindings + rep.SupplyChain.EncodedPayloads +
+		rep.SupplyChain.CampaignMatches + rep.SupplyChain.SuspiciousNetwork +
+		rep.SupplyChain.ObfuscationIssues + rep.SupplyChain.WeakProtection +
+		rep.SupplyChain.DepConfusion + rep.SupplyChain.AIConfigRisk +
+		rep.SupplyChain.OIDCAnomaly
+
+	// Monorepo correlation: extract signals from scan metadata and run cross-project detection.
+	// Uses supply-chain finding IDs as a proxy for CI config compromise since
+	// enumerate.Result does not yet carry commit message or author email.
+	var monoSignals []analyze.MonorepoSignal
+	for _, pv := range rep.Projects {
+		hasCIFindings := false
+		for _, f := range pv.Project.Findings {
+			if f.ID == "CAMPAIGN_MATCH" || f.ID == "WORKFLOW_SECRET_EXFIL" || f.ID == "WORKFLOW_ARTIFACT_EXFIL" {
+				hasCIFindings = true
+				break
+			}
+		}
+		monoSignals = append(monoSignals, analyze.MonorepoSignal{
+			ProjectPath:     pv.Project.ProjectPathWithNS,
+			CIConfigChanged: hasCIFindings,
+		})
+	}
+	if monoFindings := analyze.DetectMonorepoCorrelation(monoSignals); len(monoFindings) > 0 {
+		for range monoFindings {
+			rep.SupplyChain.TotalRisk++
+		}
+	}
+
+	rep.Recommendations = GenerateRecommendations(results)
+
 	return rep
 }
 

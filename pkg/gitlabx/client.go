@@ -23,6 +23,8 @@ import (
 	"golang.org/x/time/rate"
 )
 
+const maxResponseBytes = 10 << 20 // 10 MiB safety limit for HTTP response reads
+
 // normalizeBaseURL ensures the provided base URL is suitable for composing GitLab API endpoints.
 // It accepts inputs like:
 //   - gitlab.local
@@ -45,6 +47,9 @@ func normalizeBaseURL(in string) (string, error) {
 	u, err := url.Parse(v)
 	if err != nil {
 		return "", err
+	}
+	if u.Hostname() == "" {
+		return "", fmt.Errorf("baseURL must include a host")
 	}
 	// Clean path: strip trailing slashes and any trailing /api or /api/v4 segments
 	p := strings.TrimRight(u.Path, "/")
@@ -220,6 +225,12 @@ func New(baseURL, token string, opts ...Option) (*Client, error) {
 	for _, o := range opts {
 		o(&cfg)
 	}
+	if cfg.rateRPS <= 0 {
+		return nil, fmt.Errorf("rate limit requests per second must be positive")
+	}
+	if cfg.burst <= 0 {
+		return nil, fmt.Errorf("rate limit burst must be positive")
+	}
 
 	// Build tuned base transport
 	// TLS config supports internal/self-hosted instances with custom CAs or self-signed certs (opt-in)
@@ -313,24 +324,42 @@ func (r *retryingRoundTripper) RoundTrip(req *http.Request) (*http.Response, err
 	if attempts <= 0 {
 		attempts = 1
 	}
+	if !canRetryRequest(req) {
+		attempts = 1
+	}
 	var resp *http.Response
 	var err error
 	for i := 1; i <= attempts; i++ {
-		resp, err = r.next.RoundTrip(req)
+		attemptReq := req
+		if i > 1 && req.Body != nil {
+			body, bodyErr := req.GetBody()
+			if bodyErr != nil {
+				return nil, fmt.Errorf("rewind request body for retry: %w", bodyErr)
+			}
+			attemptReq = req.Clone(req.Context())
+			attemptReq.Body = body
+		}
+		resp, err = r.next.RoundTrip(attemptReq)
 		if err != nil {
-			// Network error: retry unless last attempt
+			// Network error: retry unless last attempt.
 			if i == attempts {
 				return resp, err
 			}
+			if resp != nil && resp.Body != nil {
+				_ = resp.Body.Close()
+			}
 		} else {
-			// If response status is not retryable, return immediately
+			// If response status is not retryable, return immediately.
 			if !isRetryable(resp.StatusCode) {
 				return resp, nil
 			}
-			// Close body before next attempt to avoid leaks
-			_ = resp.Body.Close()
 			if i == attempts {
 				return resp, nil
+			}
+			// Close only responses that will be discarded. The final response
+			// body belongs to the caller and must remain readable.
+			if resp.Body != nil {
+				_ = resp.Body.Close()
 			}
 		}
 		// Compute backoff
@@ -383,9 +412,28 @@ func (r *retryingRoundTripper) RoundTrip(req *http.Request) (*http.Response, err
 	return resp, err
 }
 
+// canRetryRequest prevents duplicate GitLab mutations and makes sure request
+// bodies can be replayed byte-for-byte. Callers may explicitly opt an unsafe
+// method into retries by providing an idempotency key.
+func canRetryRequest(req *http.Request) bool {
+	if req == nil {
+		return false
+	}
+	if req.Body != nil && req.GetBody == nil {
+		return false
+	}
+	switch req.Method {
+	case http.MethodGet, http.MethodHead, http.MethodOptions, http.MethodTrace,
+		http.MethodPut, http.MethodDelete:
+		return true
+	default:
+		return strings.TrimSpace(req.Header.Get("Idempotency-Key")) != ""
+	}
+}
+
 func isRetryable(code int) bool {
 	switch code {
-	case http.StatusTooManyRequests, http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout:
+	case http.StatusTooManyRequests, http.StatusInternalServerError, http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout:
 		return true
 	default:
 		return false
@@ -503,6 +551,51 @@ func (c *Client) GetCIYMLTemplate(ctx context.Context, name string) (string, err
 		return "", fmt.Errorf("empty template content: %s", name)
 	}
 	return payload.Content, nil
+}
+
+// BranchProtectionDetail holds access level info for a protected branch.
+type BranchProtectionDetail struct {
+	Name                    string `json:"name"`
+	PushAccessLevel         int    `json:"push_access_level"`
+	MergeAccessLevel        int    `json:"merge_access_level"`
+	AllowForcePush          bool   `json:"allow_force_push"`
+	CodeOwnerApprovalNeeded bool   `json:"code_owner_approval_required"`
+}
+
+// GetProtectedBranchDetails returns access level details for protected branches.
+func (c *Client) GetProtectedBranchDetails(ctx context.Context, projectID any, perPage int64) ([]BranchProtectionDetail, error) {
+	if c == nil || c.GL == nil {
+		return nil, fmt.Errorf("nil gitlab client")
+	}
+	if perPage <= 0 {
+		perPage = 100
+	}
+	opt := &gitlab.ListProtectedBranchesOptions{ListOptions: gitlab.ListOptions{PerPage: perPage, Page: 1}}
+	var out []BranchProtectionDetail
+	for {
+		list, resp, err := c.GL.ProtectedBranches.ListProtectedBranches(projectID, opt, gitlab.WithContext(ctx))
+		if err != nil {
+			return nil, err
+		}
+		for _, b := range list {
+			if b == nil {
+				continue
+			}
+			d := BranchProtectionDetail{Name: b.Name, AllowForcePush: b.AllowForcePush, CodeOwnerApprovalNeeded: b.CodeOwnerApprovalRequired}
+			if len(b.PushAccessLevels) > 0 {
+				d.PushAccessLevel = int(b.PushAccessLevels[0].AccessLevel)
+			}
+			if len(b.MergeAccessLevels) > 0 {
+				d.MergeAccessLevel = int(b.MergeAccessLevels[0].AccessLevel)
+			}
+			out = append(out, d)
+		}
+		if resp == nil || resp.NextPage == 0 || resp.CurrentPage >= resp.TotalPages || len(list) == 0 {
+			break
+		}
+		opt.Page = resp.NextPage
+	}
+	return out, nil
 }
 
 // GetProtectedBranches returns the list of protected branch names for a project.

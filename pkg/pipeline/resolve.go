@@ -20,13 +20,67 @@ import (
 
 // ttl cache for remote includes across calls
 var (
-	remoteCacheMu sync.Mutex
-	remoteCache   = map[string]remoteCacheEntry{}
+	remoteCacheMu     sync.Mutex
+	remoteCache       = map[string]remoteCacheEntry{}
+	cacheEvictOnce    sync.Once
+	cacheEvictStop    chan struct{}
+	cacheEvictStopped chan struct{}
 )
+
+const maxRemoteCacheEntries = 1000
 
 type remoteCacheEntry struct {
 	doc *Document
 	exp time.Time
+}
+
+// startCacheEvictor lazily starts a background goroutine that removes expired
+// entries every 30 seconds, preventing unbounded memory growth between full-cache events.
+func startCacheEvictor() {
+	cacheEvictOnce.Do(func() {
+		cacheEvictStop = make(chan struct{})
+		cacheEvictStopped = make(chan struct{})
+		go func() {
+			defer close(cacheEvictStopped)
+			ticker := time.NewTicker(30 * time.Second)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-cacheEvictStop:
+					return
+				case <-ticker.C:
+					remoteCacheMu.Lock()
+					now := time.Now()
+					for k, e := range remoteCache {
+						if now.After(e.exp) {
+							delete(remoteCache, k)
+						}
+					}
+					remoteCacheMu.Unlock()
+				}
+			}
+		}()
+	})
+}
+
+// StopCacheEvictor stops the background cache eviction goroutine.
+// Safe to call even if the evictor was never started.
+func StopCacheEvictor() {
+	if cacheEvictStop != nil {
+		select {
+		case <-cacheEvictStop:
+		default:
+			close(cacheEvictStop)
+		}
+		<-cacheEvictStopped
+	}
+}
+
+// ClearRemoteCache removes all entries from the cross-call remote include cache.
+func ClearRemoteCache() {
+	remoteCacheMu.Lock()
+	clear(remoteCache)
+	remoteCacheMu.Unlock()
 }
 
 // ResolveOptions control include resolution behavior for non-GitLab (remote) sources.
@@ -64,6 +118,41 @@ func ResolveIncludesWithOptions(ctx context.Context, cl *gitlabx.Client, project
 	var partials []string
 	var walkInclude func(ctx context.Context, proj any, ref string, inc Include, depth int) error
 	mergeDoc := func(dst *Document, src *Document, origin Include) {
+		// GitLab evaluates included configuration before the root document.
+		// Preserve root values while filling in global values supplied only by
+		// includes so analyzers see the same effective scripts and defaults.
+		if src.Raw != nil {
+			if dst.Raw == nil {
+				dst.Raw = map[string]any{}
+			}
+			for k, v := range src.Raw {
+				if _, exists := dst.Raw[k]; !exists {
+					dst.Raw[k] = v
+				}
+			}
+		}
+		if src.Default != nil {
+			if dst.Default == nil {
+				dst.Default = map[string]any{}
+			}
+			for k, v := range src.Default {
+				if _, exists := dst.Default[k]; !exists {
+					dst.Default[k] = v
+				}
+			}
+		}
+		if dst.Workflow.Name == "" && dst.Workflow.Rules == nil {
+			dst.Workflow = src.Workflow
+		}
+		if len(dst.BeforeScript) == 0 {
+			dst.BeforeScript = slices.Clone(src.BeforeScript)
+		}
+		if len(dst.AfterScript) == 0 {
+			dst.AfterScript = slices.Clone(src.AfterScript)
+		}
+		if len(dst.Cache) == 0 {
+			dst.Cache = cloneMapSlice(src.Cache)
+		}
 		// Merge stages (unique)
 		for _, s := range src.Stages {
 			if !contains(dst.Stages, s) {
@@ -123,6 +212,10 @@ func ResolveIncludesWithOptions(ctx context.Context, cl *gitlabx.Client, project
 		}
 		switch inc.Type {
 		case IncludeLocal:
+			if cl == nil || cl.GL == nil {
+				partials = append(partials, "local include cannot be fetched: missing GitLab client")
+				return nil
+			}
 			path := strings.TrimSpace(inc.Local)
 			if path == "" {
 				return nil
@@ -152,6 +245,10 @@ func ResolveIncludesWithOptions(ctx context.Context, cl *gitlabx.Client, project
 				_ = walkInclude(ctx, proj, ref, child, depth-1)
 			}
 		case IncludeProject:
+			if cl == nil || cl.GL == nil {
+				partials = append(partials, "project include cannot be fetched: missing GitLab client")
+				return nil
+			}
 			projPath := strings.TrimSpace(inc.Project)
 			if projPath == "" {
 				return nil
@@ -248,48 +345,84 @@ func ResolveIncludesWithOptions(ctx context.Context, cl *gitlabx.Client, project
 				}
 				remoteCacheMu.Unlock()
 			}
-			// Fetch with timeout and size cap
-			ctxTO, cancel := context.WithTimeout(ctx, remoteTO)
-			defer cancel()
-			req, err := http.NewRequestWithContext(ctxTO, http.MethodGet, u.String(), nil)
-			if err != nil {
-				partials = append(partials, fmt.Sprintf("remote include request build failed: %v", err))
-				return nil
-			}
-			hc := http.DefaultClient
-			if cl != nil && cl.HTTPClient() != nil {
-				hc = cl.HTTPClient()
-			}
-			resp, err := hc.Do(req) //nolint:gosec
-			if err != nil {
-				partials = append(partials, fmt.Sprintf("remote include fetch failed: %v", err))
-				return nil
-			}
-			defer resp.Body.Close()
-			if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-				partials = append(partials, fmt.Sprintf("remote include bad status: %s", resp.Status))
-				return nil
-			}
-			// Size-limited read
-			lim := &io.LimitedReader{R: resp.Body, N: remoteMax + 1}
-			b, rerr := io.ReadAll(lim)
-			if rerr != nil {
-				partials = append(partials, fmt.Sprintf("remote include read failed: %v", rerr))
-				return nil
-			}
-			if int64(len(b)) > remoteMax {
-				partials = append(partials, fmt.Sprintf("remote include exceeds max bytes (%d)", remoteMax))
-				return nil
-			}
-			doc, perr := Parse(strings.NewReader(string(b)))
-			if perr != nil {
-				partials = append(partials, fmt.Sprintf("remote include parse failed: %v", perr))
+			// Fetch with timeout and size cap — wrapped in IIFE so defer
+			// executes per-fetch, not when ResolveIncludesWithOptions returns.
+			doc, fetchErr := func() (*Document, error) {
+				ctxTO, cancel := context.WithTimeout(ctx, remoteTO)
+				defer cancel()
+				req, err := http.NewRequestWithContext(ctxTO, http.MethodGet, u.String(), nil)
+				if err != nil {
+					return nil, fmt.Errorf("remote include request build failed: %w", err)
+				}
+				baseClient := http.DefaultClient
+				if cl != nil && cl.HTTPClient() != nil {
+					baseClient = cl.HTTPClient()
+				}
+				// Copy the client so the shared GitLab client is not mutated.
+				// Validate every redirect target against the same allowlist used
+				// for the initial URL.
+				hc := *baseClient
+				priorCheck := hc.CheckRedirect
+				hc.CheckRedirect = func(next *http.Request, via []*http.Request) error {
+					if priorCheck != nil {
+						if err := priorCheck(next, via); err != nil {
+							return err
+						}
+					} else if len(via) >= 10 {
+						return errors.New("stopped after 10 redirects")
+					}
+					redirectHost := "<nil>"
+					if next.URL != nil {
+						redirectHost = next.URL.Host
+					}
+					if next.URL == nil ||
+						(next.URL.Scheme != "https" && next.URL.Scheme != "http") ||
+						!isAllowedHost(strings.ToLower(redirectHost)) {
+						return fmt.Errorf("remote include redirect host not allowed: %s", redirectHost)
+					}
+					return nil
+				}
+				resp, err := hc.Do(req) //nolint:gosec
+				if err != nil {
+					return nil, fmt.Errorf("remote include fetch failed: %w", err)
+				}
+				defer resp.Body.Close()
+				if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+					return nil, fmt.Errorf("remote include bad status: %s", resp.Status)
+				}
+				lim := &io.LimitedReader{R: resp.Body, N: remoteMax + 1}
+				b, rerr := io.ReadAll(lim)
+				if rerr != nil {
+					return nil, fmt.Errorf("remote include read failed: %w", rerr)
+				}
+				if int64(len(b)) > remoteMax {
+					return nil, fmt.Errorf("remote include exceeds max bytes (%d)", remoteMax)
+				}
+				d, perr := Parse(strings.NewReader(string(b)))
+				if perr != nil {
+					return nil, fmt.Errorf("remote include parse failed: %w", perr)
+				}
+				return d, nil
+			}()
+			if fetchErr != nil {
+				partials = append(partials, fetchErr.Error())
 				return nil
 			}
 			cache[key] = doc
-			// store in TTL cache if enabled
 			if ropts.RemoteCacheTTL > 0 {
+				startCacheEvictor()
 				remoteCacheMu.Lock()
+				if len(remoteCache) >= maxRemoteCacheEntries {
+					now := time.Now()
+					for k, e := range remoteCache {
+						if now.After(e.exp) {
+							delete(remoteCache, k)
+						}
+					}
+					if len(remoteCache) >= maxRemoteCacheEntries {
+						clear(remoteCache)
+					}
+				}
 				remoteCache[key] = remoteCacheEntry{doc: doc, exp: time.Now().Add(ropts.RemoteCacheTTL)}
 				remoteCacheMu.Unlock()
 			}
@@ -390,13 +523,17 @@ func cloneDocShallow(src *Document) *Document {
 		return nil
 	}
 	d := &Document{
-		Raw:        src.Raw,
-		Stages:     append([]string{}, src.Stages...),
-		Variables:  map[string]any{},
-		Includes:   append([]Include{}, src.Includes...),
-		Workflow:   src.Workflow,
-		Jobs:       append([]Job{}, src.Jobs...),
-		Provenance: map[string][]Include{},
+		Raw:          maps.Clone(src.Raw),
+		Stages:       slices.Clone(src.Stages),
+		Variables:    map[string]any{},
+		Includes:     slices.Clone(src.Includes),
+		Workflow:     src.Workflow,
+		Default:      maps.Clone(src.Default),
+		BeforeScript: slices.Clone(src.BeforeScript),
+		AfterScript:  slices.Clone(src.AfterScript),
+		Jobs:         slices.Clone(src.Jobs),
+		Cache:        cloneMapSlice(src.Cache),
+		Provenance:   map[string][]Include{},
 	}
 	maps.Copy(d.Variables, src.Variables)
 	// copy provenance if any
@@ -408,20 +545,32 @@ func cloneDocShallow(src *Document) *Document {
 	return d
 }
 
+func cloneMapSlice(src []map[string]any) []map[string]any {
+	if src == nil {
+		return nil
+	}
+	out := make([]map[string]any, len(src))
+	for i, value := range src {
+		out[i] = maps.Clone(value)
+	}
+	return out
+}
+
 func contains(arr []string, s string) bool {
 	return slices.Contains(arr, s)
 }
 
-// applyInputsSubstitution performs a naive ${key} -> value substitution over the YAML content
-// for component includes with provided inputs. Values are stringified with fmt.Sprint.
+// applyInputsSubstitution performs a single-pass ${key} -> value substitution over the YAML
+// content for component includes with provided inputs. Values are stringified with fmt.Sprint.
+// Uses strings.NewReplacer to replace all patterns simultaneously, preventing cross-substitution
+// when a value itself contains a ${otherKey} placeholder.
 func applyInputsSubstitution(content string, inputs map[string]any) string {
 	if len(inputs) == 0 {
 		return content
 	}
-	out := content
+	pairs := make([]string, 0, len(inputs)*2)
 	for k, v := range inputs {
-		needle := "${" + k + "}"
-		out = strings.ReplaceAll(out, needle, fmt.Sprint(v))
+		pairs = append(pairs, "${"+k+"}", fmt.Sprint(v))
 	}
-	return out
+	return strings.NewReplacer(pairs...).Replace(content)
 }

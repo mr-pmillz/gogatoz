@@ -3,6 +3,8 @@ package attack
 import (
 	"fmt"
 	"strings"
+
+	"github.com/mr-pmillz/gogatoz/pkg/stringutil"
 )
 
 // PushCI provides helpers to generate a push-triggered GitLab CI configuration
@@ -27,7 +29,7 @@ func (p *PushCI) GeneratePushCI(branchName, jobName, payload string, runnerTags 
 
 	var tagLine string
 	if len(runnerTags) > 0 {
-		tagLine = fmt.Sprintf("\n  tags: [%s]", quoteJoin(runnerTags))
+		tagLine = fmt.Sprintf("\n  tags: [%s]", stringutil.QuoteJoin(runnerTags))
 	}
 
 	// Use a block scalar to preserve multi-line payloads safely.

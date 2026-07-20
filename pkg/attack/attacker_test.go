@@ -3,6 +3,7 @@ package attack
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -40,6 +41,50 @@ func newMockAttacker(t *testing.T, mux *http.ServeMux) (*Attacker, *httptest.Ser
 	}
 	att := NewAttacker(cl, ts.URL, "Test User", "test@example.com", 0)
 	return att, ts
+}
+
+func TestImpersonateMaintainer_UsesAllMembers(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/v4/projects/1/members/all", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode([]map[string]any{
+			{"id": 10, "username": "developer", "name": "Project Developer", "access_level": 30},
+			{"id": 11, "username": "owner", "name": "Inherited Owner", "access_level": 50},
+		})
+	})
+	att, ts := newMockAttacker(t, mux)
+	defer ts.Close()
+	att.AuthorEmail = ""
+
+	if err := att.ImpersonateMaintainer(context.Background(), "1"); err != nil {
+		t.Fatalf("ImpersonateMaintainer() error = %v", err)
+	}
+	if att.AuthorName != "Inherited Owner" {
+		t.Fatalf("AuthorName = %q, want inherited owner", att.AuthorName)
+	}
+	if att.AuthorEmail != "owner@users.noreply.gitlab.com" {
+		t.Fatalf("AuthorEmail = %q, want inherited owner's no-reply address", att.AuthorEmail)
+	}
+}
+
+func TestImpersonateMaintainer_RejectsLowerRoleFallback(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/v4/projects/1/members/all", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode([]map[string]any{
+			{"id": 10, "username": "developer", "name": "Project Developer", "access_level": 30},
+		})
+	})
+	att, ts := newMockAttacker(t, mux)
+	defer ts.Close()
+
+	err := att.ImpersonateMaintainer(context.Background(), "1")
+	if err == nil || !strings.Contains(err.Error(), "no visible maintainer or owner") {
+		t.Fatalf("ImpersonateMaintainer() error = %v, want missing-maintainer error", err)
+	}
+	if att.AuthorName != "Test User" {
+		t.Fatalf("AuthorName changed to lower-role member: %q", att.AuthorName)
+	}
 }
 
 // --- EraseJob ---------------------------------------------------------------
@@ -462,6 +507,39 @@ func TestUpsertFile_FallbackToCreate(t *testing.T) {
 	}
 }
 
+func TestUpsertFile_DualFailure_JoinsErrors(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/v4/projects/1/repository/files/fail.yml", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.Copy(io.Discard, r.Body)
+		_ = r.Body.Close()
+		if r.Method == http.MethodPut {
+			w.WriteHeader(http.StatusNotFound)
+			json.NewEncoder(w).Encode(map[string]string{"message": "404 File Not Found"})
+			return
+		}
+		if r.Method == http.MethodPost {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{"message": "400 Bad Request"})
+			return
+		}
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	})
+	att, ts := newMockAttacker(t, mux)
+	defer ts.Close()
+
+	err := att.UpsertFile(context.Background(), "1", "main", "fail.yml", "content", "msg")
+	if err == nil {
+		t.Fatal("expected error when both update and create fail")
+	}
+	errStr := err.Error()
+	if !strings.Contains(errStr, "upsert fail.yml") {
+		t.Errorf("expected 'upsert fail.yml' in error, got: %s", errStr)
+	}
+	if !strings.Contains(errStr, "404") || !strings.Contains(errStr, "400") {
+		t.Errorf("expected both status codes in joined error, got: %s", errStr)
+	}
+}
+
 // --- SetupUser --------------------------------------------------------------
 
 func TestSetupUser_FillsAuthor(t *testing.T) {
@@ -808,5 +886,54 @@ func TestRemoveProjectMember_Success(t *testing.T) {
 	err := att.RemoveProjectMember(context.Background(), "1", 99)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestEnsureBranch_DoesNotCreateAfterLookupFailure(t *testing.T) {
+	var projectLookup bool
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/v4/projects/1/repository/branches/feat", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(`{"message":"temporary failure"}`))
+	})
+	mux.HandleFunc("/api/v4/projects/1", func(w http.ResponseWriter, _ *http.Request) {
+		projectLookup = true
+		w.WriteHeader(http.StatusOK)
+	})
+	att, ts := newMockAttacker(t, mux)
+	defer ts.Close()
+
+	err := att.EnsureBranch(context.Background(), "1", "feat")
+	if err == nil || !strings.Contains(err.Error(), "check branch") {
+		t.Fatalf("expected branch lookup error, got %v", err)
+	}
+	if projectLookup {
+		t.Fatal("project lookup ran after non-404 branch failure")
+	}
+}
+
+func TestEraseRecentPipelines_ReportsPartialCleanupFailures(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/v4/projects/1/pipelines", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode([]map[string]any{{"id": 100}})
+	})
+	mux.HandleFunc("/api/v4/projects/1/pipelines/100/jobs", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(`{"message":"jobs failed"}`))
+	})
+	mux.HandleFunc("/api/v4/projects/1/pipelines/100", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(`{"message":"delete failed"}`))
+	})
+	att, ts := newMockAttacker(t, mux)
+	defer ts.Close()
+
+	count, err := att.EraseRecentPipelines(context.Background(), "1", "", 1, true)
+	if count != 1 || err == nil {
+		t.Fatalf("expected one partial cleanup with error, count=%d err=%v", count, err)
+	}
+	if !strings.Contains(err.Error(), "list jobs") || !strings.Contains(err.Error(), "delete pipeline") {
+		t.Fatalf("cleanup errors were not preserved: %v", err)
 	}
 }

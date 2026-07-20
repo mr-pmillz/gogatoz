@@ -40,7 +40,11 @@ func New(opts Options) (*Notifier, error) {
 	if opts.Client != nil {
 		hc = opts.Client
 	} else {
-		hc = &http.Client{Timeout: opts.Timeout}
+		t := opts.Timeout
+		if t == 0 {
+			t = 30 * time.Second
+		}
+		hc = &http.Client{Timeout: t}
 	}
 	// Copy headers map to avoid external mutation
 	h := map[string]string{}
@@ -99,4 +103,23 @@ func (n *Notifier) SendFinding(ctx context.Context, project string, f analyze.Fi
 		Meta:     meta,
 	}
 	return n.SendJSON(ctx, env)
+}
+
+// SendFindings posts all findings for a project in a single batched request.
+func (n *Notifier) SendFindings(ctx context.Context, project string, findings []analyze.Finding, meta map[string]string) error {
+	if len(findings) == 0 {
+		return nil
+	}
+	now := time.Now().UTC()
+	batch := make([]FindingEnvelope, 0, len(findings))
+	for _, f := range findings {
+		batch = append(batch, FindingEnvelope{
+			Project:  project,
+			Finding:  f,
+			Tool:     "GoGatoZ",
+			Occurred: now,
+			Meta:     meta,
+		})
+	}
+	return n.SendJSON(ctx, batch)
 }

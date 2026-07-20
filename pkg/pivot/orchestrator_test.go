@@ -242,6 +242,9 @@ func TestOrchestratorDefaults(t *testing.T) {
 	if opts.ListenAddr != ":9443" {
 		t.Errorf("ListenAddr = %q, want :9443", opts.ListenAddr)
 	}
+	if opts.ReceiveTimeout != DefaultReceiveTimeout {
+		t.Errorf("ReceiveTimeout = %v, want %v", opts.ReceiveTimeout, DefaultReceiveTimeout)
+	}
 }
 
 func TestFilterExploitable(t *testing.T) {

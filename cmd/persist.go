@@ -3,7 +3,7 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
-	"os"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -44,7 +44,7 @@ func persistSearchResults(results []map[string]any, base string) {
 	if err := cliStore.SaveSearchResults(session.ID, srs); err != nil {
 		return
 	}
-	fmt.Fprintf(os.Stderr, "[db] session %d saved (%d search results)\n", session.ID, len(srs))
+	slog.Info("session saved", "session_id", session.ID, "search_results", len(srs))
 }
 
 // persistEnumerateResults saves enumerate output to the CLI store.
@@ -107,7 +107,7 @@ func persistEnumerateResults(results []enumerate.Result, base string) {
 	if err := cliStore.SaveEnumerateResults(session.ID, ers); err != nil {
 		return
 	}
-	fmt.Fprintf(os.Stderr, "[db] session %d saved (%d enumerate results, %d with findings)\n", session.ID, len(ers), withFindings)
+	slog.Info("session saved", "session_id", session.ID, "enumerate_results", len(ers), "with_findings", withFindings)
 }
 
 // persistSecretScanResults saves secret scan output to the CLI store.
@@ -170,7 +170,7 @@ func persistSecretScanResults(results []secretscan.ScanResult, base string) {
 	if err := cliStore.SaveSecretScanResults(session.ID, srs); err != nil {
 		return
 	}
-	fmt.Fprintf(os.Stderr, "[db] session %d saved (%d secret scan results, %d with findings)\n", session.ID, len(srs), withFindings)
+	slog.Info("session saved", "session_id", session.ID, "secret_scan_results", len(srs), "with_findings", withFindings)
 }
 
 // persistAttackExfil saves a secrets-mode attack result and its decrypted exfil secrets to the
@@ -205,7 +205,7 @@ func persistAttackExfil(gitlabURL, projectPath string, gitlabProjectID int64, we
 		return
 	}
 	if len(secrets) == 0 {
-		fmt.Fprintf(os.Stderr, "[db] session %d saved (attack result %d, no secrets)\n", session.ID, ar.ID)
+		slog.Info("session saved", "session_id", session.ID, "attack_result_id", ar.ID, "secrets", 0)
 		return
 	}
 	secs := make([]store.AttackExfilSecret, 0, len(secrets))
@@ -213,10 +213,10 @@ func persistAttackExfil(gitlabURL, projectPath string, gitlabProjectID int64, we
 		secs = append(secs, store.AttackExfilSecret{Key: k, Value: v})
 	}
 	if err := cliStore.SaveAttackExfilSecrets(ar.ID, secs); err != nil {
-		fmt.Fprintf(os.Stderr, "[db] session %d: attack result saved but secrets write failed: %v\n", session.ID, err)
+		slog.Warn("attack result saved but secrets write failed", "session_id", session.ID, "error", err)
 		return
 	}
-	fmt.Fprintf(os.Stderr, "[db] session %d saved (attack result %d, %d exfil secrets)\n", session.ID, ar.ID, len(secs))
+	slog.Info("session saved", "session_id", session.ID, "attack_result_id", ar.ID, "exfil_secrets", len(secs))
 }
 
 // toInt64 extracts an int64 from a map value that may be int, int64, float64, or string.

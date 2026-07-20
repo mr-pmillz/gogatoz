@@ -149,14 +149,30 @@ func TestBuildGLSAST_VulnFields(t *testing.T) {
 	if v.Location.File != ".gitlab-ci.yml" {
 		t.Errorf("location file = %q, want %q", v.Location.File, ".gitlab-ci.yml")
 	}
-	if len(v.Identifiers) != 1 {
-		t.Fatalf("expected 1 identifier, got %d", len(v.Identifiers))
+	if len(v.Identifiers) < 1 {
+		t.Fatalf("expected at least 1 identifier, got %d", len(v.Identifiers))
 	}
 	if v.Identifiers[0].Type != "gogatoz_finding_id" {
-		t.Errorf("identifier type = %q, want %q", v.Identifiers[0].Type, "gogatoz_finding_id")
+		t.Errorf("first identifier type = %q, want %q", v.Identifiers[0].Type, "gogatoz_finding_id")
 	}
 	if v.Identifiers[0].Value != f.ID {
-		t.Errorf("identifier value = %q, want %q", v.Identifiers[0].Value, f.ID)
+		t.Errorf("first identifier value = %q, want %q", v.Identifiers[0].Value, f.ID)
+	}
+	hasCWE := false
+	hasOWASP := false
+	for _, ident := range v.Identifiers {
+		if ident.Type == "cwe" {
+			hasCWE = true
+		}
+		if ident.Type == "owasp_cicd" {
+			hasOWASP = true
+		}
+	}
+	if !hasCWE {
+		t.Error("expected at least one CWE identifier")
+	}
+	if !hasOWASP {
+		t.Error("expected at least one OWASP CI/CD identifier")
 	}
 	if v.Scanner.ID != "gogatoz" {
 		t.Errorf("vuln scanner id = %q, want %q", v.Scanner.ID, "gogatoz")
@@ -218,6 +234,73 @@ func TestWriteGLSAST_ValidJSON(t *testing.T) {
 	}
 	if len(report.Vulnerabilities) != 1 {
 		t.Errorf("expected 1 vulnerability, got %d", len(report.Vulnerabilities))
+	}
+}
+
+func TestBuildGLSAST_CWEIdentifiers(t *testing.T) {
+	f := analyze.Finding{
+		ID:       "PLAINTEXT_SECRET",
+		Severity: analyze.SeverityMedium,
+		Title:    "Plaintext secret",
+		JobName:  "build",
+	}
+	report := buildGLSAST([]analyze.Finding{f}, "1.0.0", time.Now(), time.Now())
+	v := report.Vulnerabilities[0]
+
+	hasCWE := false
+	for _, ident := range v.Identifiers {
+		if ident.Type == "cwe" && ident.Value == "312" {
+			hasCWE = true
+			if ident.Name != "CWE-312" {
+				t.Errorf("CWE identifier name = %q, want %q", ident.Name, "CWE-312")
+			}
+		}
+	}
+	if !hasCWE {
+		t.Errorf("expected CWE-312 identifier, got identifiers: %+v", v.Identifiers)
+	}
+}
+
+func TestBuildGLSAST_OWASPCICDIdentifiers(t *testing.T) {
+	f := analyze.Finding{
+		ID:       "VARIABLE_INJECTION",
+		Severity: analyze.SeverityMedium,
+		Title:    "Variable injection",
+		JobName:  "build",
+	}
+	report := buildGLSAST([]analyze.Finding{f}, "1.0.0", time.Now(), time.Now())
+	v := report.Vulnerabilities[0]
+
+	hasOWASP := false
+	for _, ident := range v.Identifiers {
+		if ident.Type == "owasp_cicd" && ident.Value == "CICD-SEC-4" {
+			hasOWASP = true
+		}
+	}
+	if !hasOWASP {
+		t.Errorf("expected OWASP CICD-SEC-4 identifier, got identifiers: %+v", v.Identifiers)
+	}
+}
+
+func TestBuildGLSAST_IdentifierCount(t *testing.T) {
+	f := analyze.Finding{
+		ID:       "PLAINTEXT_SECRET",
+		Severity: analyze.SeverityMedium,
+		Title:    "Plaintext secret",
+		JobName:  "build",
+	}
+	report := buildGLSAST([]analyze.Finding{f}, "1.0.0", time.Now(), time.Now())
+	v := report.Vulnerabilities[0]
+
+	// Should have: 1 gogatoz_finding_id + CWEs + OWASP refs
+	if len(v.Identifiers) < 3 {
+		t.Errorf("expected at least 3 identifiers (finding_id + CWE + OWASP), got %d: %+v",
+			len(v.Identifiers), v.Identifiers)
+	}
+
+	// First identifier should always be the finding ID.
+	if v.Identifiers[0].Type != "gogatoz_finding_id" {
+		t.Errorf("first identifier type = %q, want gogatoz_finding_id", v.Identifiers[0].Type)
 	}
 }
 

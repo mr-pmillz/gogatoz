@@ -11,6 +11,7 @@ venv/
 docs/node_modules/
 docs/dist/
 docs/.astro/
+docs/superpowers/
 
 .idea/
 
@@ -25,6 +26,7 @@ docs/.astro/
 *.html
 # Embedded report template must be tracked (consumed by //go:embed in pkg/enumerate/report/html.go)
 !pkg/enumerate/report/html_template.html
+!pkg/dashboard/html_template.html
 ./test/
 *.xml
 public/
@@ -57,3 +59,5 @@ NEW_FEATURES.md
 .gortex/
 .playwright-mcp/
 .claude/reviews/
+.claude/worktrees/
+scrape_gitlab_ci.mjs

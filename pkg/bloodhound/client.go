@@ -220,10 +220,12 @@ func (c *Client) ImportQueries(ctx context.Context, queries []SavedQuery) error 
 		if err != nil {
 			return fmt.Errorf("import query %q: %w", q.Name, err)
 		}
-		resp.Body.Close()
 		if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
-			return c.readError(resp, fmt.Sprintf("import query %q", q.Name))
+			readErr := c.readError(resp, fmt.Sprintf("import query %q", q.Name))
+			resp.Body.Close()
+			return readErr
 		}
+		resp.Body.Close()
 	}
 	return nil
 }
@@ -310,7 +312,7 @@ func (c *Client) doRequest(ctx context.Context, method, path string, body []byte
 		}
 
 		if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500 {
-			respBody, _ := io.ReadAll(resp.Body)
+			respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
 			resp.Body.Close()
 			lastErr = fmt.Errorf("HTTP %d: %s", resp.StatusCode, truncateStr(string(respBody), 200))
 			continue
@@ -323,7 +325,7 @@ func (c *Client) doRequest(ctx context.Context, method, path string, body []byte
 }
 
 func (c *Client) readError(resp *http.Response, operation string) error {
-	body, _ := io.ReadAll(resp.Body)
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
 	msg := truncateStr(string(body), 300)
 	if msg == "" {
 		msg = resp.Status

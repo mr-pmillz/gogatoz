@@ -3,6 +3,7 @@ package mcpserver
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"strings"
 	"time"
@@ -211,5 +212,7 @@ func (s *Server) persistSecretScan(out secretScanOutput) {
 		}
 		srs[i] = sr
 	}
-	_ = s.store.SaveSecretScanResults(session.ID, srs)
+	if err := s.store.SaveSecretScanResults(session.ID, srs); err != nil {
+		slog.Error("persist secret scan results failed", "error", err)
+	}
 }

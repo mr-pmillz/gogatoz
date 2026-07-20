@@ -524,6 +524,90 @@ func TestCachePoisoningRisk_NoForkProtection_HighSeverity(t *testing.T) {
 	}
 }
 
+func TestCachePoisoningRisk_GlobalDefaultCache(t *testing.T) {
+	doc := &pipeline.Document{
+		Cache: []map[string]any{{
+			"key":    "global-cache",
+			"paths":  []any{"vendor/"},
+			"policy": "pull-push",
+		}},
+		Jobs: []pipeline.Job{{
+			Name:   "build",
+			Script: []string{"go build ./..."},
+			Rules: []any{
+				map[string]any{"if": "$CI_PIPELINE_SOURCE == 'merge_request_event'"},
+			},
+		}},
+	}
+	findings, err := Run(doc)
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	if !hasFindingID(findings, CachePoisoningRiskID) {
+		t.Fatalf("expected CACHE_POISONING_RISK from global cache, got IDs: %v", findingIDs(findings))
+	}
+}
+
+func TestCachePoisoningRisk_GlobalCacheOverriddenByJob(t *testing.T) {
+	doc := &pipeline.Document{
+		Cache: []map[string]any{{
+			"key":    "global-cache",
+			"paths":  []any{"vendor/"},
+			"policy": "push",
+		}},
+		Jobs: []pipeline.Job{{
+			Name:   "build",
+			Script: []string{"go build ./..."},
+			Caches: []map[string]any{{
+				"key":    "job-cache",
+				"paths":  []any{".cache/"},
+				"policy": "pull",
+			}},
+			Rules: []any{
+				map[string]any{"if": "$CI_PIPELINE_SOURCE == 'merge_request_event'"},
+			},
+		}},
+	}
+	findings, err := Run(doc)
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	if hasFindingID(findings, CachePoisoningRiskID) {
+		t.Fatalf("did not expect CACHE_POISONING_RISK when job overrides with pull-only, got: %+v", findings)
+	}
+}
+
+func TestCachePoisoningRisk_ArrayCacheMultipleConfigs(t *testing.T) {
+	doc := &pipeline.Document{
+		Jobs: []pipeline.Job{{
+			Name:   "build",
+			Script: []string{"npm install && pip install -r requirements.txt"},
+			Caches: []map[string]any{
+				{
+					"key":    "npm-cache",
+					"paths":  []any{"node_modules/"},
+					"policy": "pull",
+				},
+				{
+					"key":    "pip-cache",
+					"paths":  []any{".cache/pip"},
+					"policy": "push",
+				},
+			},
+			Rules: []any{
+				map[string]any{"if": "$CI_PIPELINE_SOURCE == 'merge_request_event'"},
+			},
+		}},
+	}
+	findings, err := Run(doc)
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	if !hasFindingID(findings, CachePoisoningRiskID) {
+		t.Fatalf("expected CACHE_POISONING_RISK for push-policy cache in array, got IDs: %v", findingIDs(findings))
+	}
+}
+
 // --- Helper function tests ---
 
 func TestIsExternalScriptExecution(t *testing.T) {

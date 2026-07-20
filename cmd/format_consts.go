@@ -7,6 +7,7 @@ const (
 	fmtJSON   = "json"
 	fmtJSONL  = "jsonl"
 	fmtHTML   = "html"
+	fmtCSV    = "csv"
 	fmtSARIF  = "sarif"
 	fmtGLSAST = "glsast"
 )

@@ -2,6 +2,8 @@ package api
 
 import (
 	"context"
+	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -21,7 +23,15 @@ import (
 type Config struct {
 	BaseURL    string
 	ListenAddr string
+	APIKey     string // if non-empty, all non-healthz requests require X-API-Key header
 }
+
+const (
+	maxRequestBodyBytes = 2 << 20
+	readHeaderTimeout   = 5 * time.Second
+	readTimeout         = 30 * time.Second
+	idleTimeout         = 60 * time.Second
+)
 
 // Server provides HTTP endpoints that expose GoGatoZ functionality to tools/agents.
 // It is intentionally thin and stateless; most options are provided per-request.
@@ -41,37 +51,73 @@ func NewServer(cfg Config) *Server {
 	g := gin.New()
 	g.Use(gin.Recovery())
 	g.Use(gin.Logger())
+	g.Use(func(c *gin.Context) {
+		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxRequestBodyBytes)
+		c.Next()
+	})
 
 	s := &Server{cfg: cfg, engine: g, enumFn: enumerate.EnumerateProjects, searchFn: searchProjects}
 	s.routes()
 	return s
 }
 
+// apiKeyAuth returns Gin middleware that rejects requests without a valid X-API-Key header.
+func apiKeyAuth(key string) gin.HandlerFunc {
+	keyHash := sha256.Sum256([]byte(key))
+	return func(c *gin.Context) {
+		gotHash := sha256.Sum256([]byte(c.GetHeader("X-API-Key")))
+		if subtle.ConstantTimeCompare(gotHash[:], keyHash[:]) != 1 {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid or missing API key"})
+			return
+		}
+		c.Next()
+	}
+}
+
 func (s *Server) routes() {
 	r := s.engine
 	r.GET("/healthz", func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"ok": true}) })
 
-	r.POST("/auth/validate", s.handleValidate)
+	// Apply API key auth to all non-healthz routes when configured
+	var authed gin.IRoutes = r
+	if key := strings.TrimSpace(s.cfg.APIKey); key != "" {
+		authed = r.Group("", apiKeyAuth(key))
+	}
+
+	authed.POST("/auth/validate", s.handleValidate)
 
 	enum := r.Group("/enumerate")
+	if key := strings.TrimSpace(s.cfg.APIKey); key != "" {
+		enum.Use(apiKeyAuth(key))
+	}
 	{
 		enum.POST("/repo", s.handleEnumerateRepo)
 		enum.POST("/repos", s.handleEnumerateRepos)
 		enum.POST("/org", s.handleEnumerateGroup)
 		enum.POST("/group", s.handleEnumerateGroup)
-		// Streaming NDJSON endpoint: streams results as they are produced
 		enum.POST("/stream", s.handleEnumerateStream)
 	}
 
-	// Search endpoints
 	search := r.Group("/search")
+	if key := strings.TrimSpace(s.cfg.APIKey); key != "" {
+		search.Use(apiKeyAuth(key))
+	}
 	{
 		search.POST("/projects", s.handleSearchProjects)
 	}
 }
 
 // Run starts serving on the configured address (blocking).
-func (s *Server) Run() error { return s.engine.Run(s.cfg.ListenAddr) }
+func (s *Server) Run() error {
+	srv := &http.Server{
+		Addr:              s.cfg.ListenAddr,
+		Handler:           s.engine,
+		ReadHeaderTimeout: readHeaderTimeout,
+		ReadTimeout:       readTimeout,
+		IdleTimeout:       idleTimeout,
+	}
+	return srv.ListenAndServe()
+}
 
 // --- Requests / Options -----------------------------------------------
 
@@ -103,19 +149,22 @@ type enumerateOptions struct {
 }
 
 func (eo enumerateOptions) toEnumerateOpts() enumerate.Options {
-	var timeout time.Duration
-	if strings.TrimSpace(eo.Timeout) != "" {
-		if d, err := time.ParseDuration(eo.Timeout); err == nil {
-			timeout = d
+	parseDuration := func(raw string) time.Duration {
+		if d, err := time.ParseDuration(strings.TrimSpace(raw)); err == nil {
+			return d
 		}
+		return 0
 	}
 	return enumerate.Options{
 		Concurrency:         eo.Concurrency,
-		Timeout:             timeout,
+		Timeout:             parseDuration(eo.Timeout),
 		FollowIncludes:      eo.FollowIncludes,
 		IncludeDepth:        eo.IncludeDepth,
 		AllowRemoteIncludes: eo.AllowRemote,
 		RemoteAllowlist:     eo.RemoteAllowlist,
+		RemoteMaxBytes:      eo.RemoteMaxBytes,
+		RemoteTimeout:       parseDuration(eo.RemoteTimeout),
+		RemoteCacheTTL:      parseDuration(eo.RemoteCacheTTL),
 		FetchProtected:      eo.FetchProtected,
 		FetchRunners:        eo.FetchRunners,
 		RunnerScope:         eo.RunnerScope,
@@ -155,10 +204,9 @@ func (s *Server) handleValidate(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	base := strings.TrimSpace(firstNonEmpty(in.BaseURL, s.cfg.BaseURL))
-	tok := strings.TrimSpace(firstNonEmpty(in.Token, getenv("GITLAB_TOKEN")))
-	if tok == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "missing token"})
+	base, tok, authErr := s.resolveAuth(in)
+	if authErr != nil {
+		statusFromErr(c, authErr)
 		return
 	}
 	cl, err := gitlabx.New(base, tok)
@@ -222,10 +270,9 @@ func (s *Server) handleEnumerateGroup(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	base := strings.TrimSpace(firstNonEmpty(in.Auth.BaseURL, s.cfg.BaseURL))
-	tok := strings.TrimSpace(firstNonEmpty(in.Auth.Token, getenv("GITLAB_TOKEN")))
-	if tok == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "missing token"})
+	base, tok, authErr := s.resolveAuth(in.Auth)
+	if authErr != nil {
+		statusFromErr(c, authErr)
 		return
 	}
 	client, err := gitlabx.New(base, tok)
@@ -233,17 +280,24 @@ func (s *Server) handleEnumerateGroup(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	if strings.TrimSpace(in.Group) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "group is required"})
+		return
+	}
 
 	groupID := any(in.Group)
-	if id, err := strconv.Atoi(in.Group); err == nil {
+	if id, parseErr := strconv.ParseInt(in.Group, 10, 64); parseErr == nil {
 		groupID = id
 	}
 
-	// list projects in group
-	opt := &gitlab.ListGroupProjectsOptions{ListOptions: gitlab.ListOptions{PerPage: 100}}
+	// List projects in the group, optionally including nested groups.
+	opt := &gitlab.ListGroupProjectsOptions{
+		ListOptions:      gitlab.ListOptions{PerPage: 100},
+		IncludeSubGroups: new(in.IncludeSubgroups),
+	}
 	var idents []string
 	for {
-		projs, resp, err := client.GL.Groups.ListGroupProjects(groupID, opt)
+		projs, resp, err := client.GL.Groups.ListGroupProjects(groupID, opt, gitlab.WithContext(c.Request.Context()))
 		if err != nil {
 			c.JSON(statusOf(resp), gin.H{"error": err.Error()})
 			return
@@ -251,7 +305,7 @@ func (s *Server) handleEnumerateGroup(c *gin.Context) {
 		for _, p := range projs {
 			idents = append(idents, p.PathWithNamespace)
 		}
-		if resp.CurrentPage >= resp.TotalPages || len(projs) == 0 {
+		if resp == nil || resp.NextPage == 0 || resp.CurrentPage >= resp.TotalPages || len(projs) == 0 {
 			break
 		}
 		opt.Page = resp.NextPage
@@ -279,10 +333,9 @@ func (s *Server) handleEnumerateStream(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "idents must be non-empty"})
 		return
 	}
-	base := strings.TrimSpace(firstNonEmpty(in.Auth.BaseURL, s.cfg.BaseURL))
-	tok := strings.TrimSpace(firstNonEmpty(in.Auth.Token, getenv("GITLAB_TOKEN")))
-	if tok == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "missing token"})
+	base, tok, authErr := s.resolveAuth(in.Auth)
+	if authErr != nil {
+		statusFromErr(c, authErr)
 		return
 	}
 	client, err := gitlabx.New(base, tok)
@@ -324,10 +377,9 @@ func (s *Server) handleEnumerateStream(c *gin.Context) {
 // --- helpers -----------------------------------------------------------
 
 func (s *Server) enumerate(ctx context.Context, a authInput, idents []string, opts enumerateOptions) ([]enumerate.Result, error) {
-	base := strings.TrimSpace(firstNonEmpty(a.BaseURL, s.cfg.BaseURL))
-	tok := strings.TrimSpace(firstNonEmpty(a.Token, getenv("GITLAB_TOKEN")))
-	if tok == "" {
-		return nil, httpError{code: http.StatusBadRequest, msg: "missing token"}
+	base, tok, authErr := s.resolveAuth(a)
+	if authErr != nil {
+		return nil, authErr
 	}
 	client, err := gitlabx.New(base, tok)
 	if err != nil {
@@ -337,14 +389,30 @@ func (s *Server) enumerate(ctx context.Context, a authInput, idents []string, op
 }
 
 func (s *Server) enumerateWithClient(ctx context.Context, client *gitlabx.Client, idents []string, in enumerateOptions) ([]enumerate.Result, error) {
-	opts := in.toEnumerateOpts()
-	ctx2 := ctx
-	if opts.Timeout > 0 {
-		var cancel context.CancelFunc
-		ctx2, cancel = context.WithTimeout(ctx, opts.Timeout)
-		defer cancel()
+	return s.enumFn(ctx, client, idents, in.toEnumerateOpts())
+}
+
+// resolveAuth never combines the process environment token with an
+// attacker-controlled GitLab URL. A caller that overrides the target must
+// provide the token to use for that target in the same request.
+func (s *Server) resolveAuth(a authInput) (string, string, error) {
+	requestBase := strings.TrimSpace(a.BaseURL)
+	requestToken := strings.TrimSpace(a.Token)
+	base := strings.TrimSpace(firstNonEmpty(requestBase, s.cfg.BaseURL))
+	if requestToken != "" {
+		return base, requestToken, nil
 	}
-	return enumerate.EnumerateProjects(ctx2, client, idents, opts)
+	envToken := getenv("GITLAB_TOKEN")
+	if envToken == "" {
+		return "", "", httpError{code: http.StatusBadRequest, msg: "missing token"}
+	}
+	if requestBase != "" {
+		return "", "", httpError{
+			code: http.StatusBadRequest,
+			msg:  "gitlab_url override requires a per-request token",
+		}
+	}
+	return base, envToken, nil
 }
 
 func firstNonEmpty(values ...string) string {
@@ -458,10 +526,9 @@ func (s *Server) handleSearchProjects(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	base := strings.TrimSpace(firstNonEmpty(in.Auth.BaseURL, s.cfg.BaseURL))
-	tok := strings.TrimSpace(firstNonEmpty(in.Auth.Token, getenv("GITLAB_TOKEN")))
-	if tok == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "missing token"})
+	base, tok, authErr := s.resolveAuth(in.Auth)
+	if authErr != nil {
+		statusFromErr(c, authErr)
 		return
 	}
 	if !validVisibility(in.Opts.Visibility) {

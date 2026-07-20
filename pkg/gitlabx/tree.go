@@ -72,7 +72,7 @@ func (c *Client) ListRepoTreePaths(ctx context.Context, projectID int64, ref str
 		if err != nil {
 			return nil, err
 		}
-		body, err := io.ReadAll(resp.Body)
+		body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes))
 		_ = resp.Body.Close()
 		if err != nil {
 			return nil, err

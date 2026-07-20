@@ -247,9 +247,9 @@ func TestExtractTagsFromEvidence(t *testing.T) {
 		{"no tags here", 0},
 	}
 	for _, tt := range tests {
-		tags := extractTagsFromEvidence(tt.evidence)
+		tags := report.ExtractTagsFromEvidence(tt.evidence)
 		if len(tags) != tt.want {
-			t.Errorf("extractTagsFromEvidence(%q) = %d tags, want %d", tt.evidence, len(tags), tt.want)
+			t.Errorf("report.ExtractTagsFromEvidence(%q) = %d tags, want %d", tt.evidence, len(tags), tt.want)
 		}
 	}
 }

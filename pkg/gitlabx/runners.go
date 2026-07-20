@@ -8,8 +8,6 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
-
-	gitlab "gitlab.com/gitlab-org/api/client-go"
 )
 
 // RunnerInfo is a minimal view of a GitLab Runner we care about for exposure analysis.
@@ -60,108 +58,50 @@ func parseRunnerPage(resp *http.Response, label string) ([]RunnerInfo, int, erro
 	return items, 0, nil
 }
 
-// ListProjectRunners lists runners available to the given project.
-func (c *Client) ListProjectRunners(ctx context.Context, projectID any, perPage, page int64) ([]RunnerInfo, *gitlab.Response, error) {
-	opt := &gitlab.ListProjectRunnersOptions{ListOptions: gitlab.ListOptions{PerPage: perPage, Page: page}}
-	runs, resp, err := c.GL.Runners.ListProjectRunners(projectID, opt, gitlab.WithContext(ctx))
-	if err != nil {
-		return nil, resp, err
+// accumulateRunners paginates through a runners API endpoint using raw HTTP.
+func (c *Client) accumulateRunners(ctx context.Context, pathFmt string, label string) ([]RunnerInfo, error) {
+	var all []RunnerInfo
+	page := 1
+	for {
+		u := c.APIURL(fmt.Sprintf(pathFmt+"?per_page=100&page=%d", page))
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil) //nolint:gosec // URL constructed from trusted API base
+		if err != nil {
+			return all, err
+		}
+		if tok := c.Token(); tok != "" {
+			req.Header.Set("PRIVATE-TOKEN", tok)
+		}
+		req.Header.Set("Accept", "application/json")
+		resp, err := c.httpClient.Do(req) //nolint:gosec
+		if err != nil {
+			return all, err
+		}
+		items, next, perr := parseRunnerPage(resp, label)
+		if perr != nil {
+			return all, perr
+		}
+		all = append(all, items...)
+		page = next
+		if page == 0 {
+			break
+		}
 	}
-	out := make([]RunnerInfo, 0, len(runs))
-	for _, r := range runs {
-		// Some fields (TagList, Executor) may not be exposed in this listing; we only copy what is available.
-		out = append(out, RunnerInfo{
-			ID:          r.ID,
-			Description: r.Description,
-			Active:      !r.Paused,
-			IsShared:    r.IsShared,
-			Online:      r.Online,
-			Status:      r.Status,
-		})
-	}
-	return out, resp, nil
+	return all, nil
 }
 
 // AccumulateProjectRunners pages through all project runners and returns a slice.
 func (c *Client) AccumulateProjectRunners(ctx context.Context, projectID any) ([]RunnerInfo, error) {
-	var all []RunnerInfo
-	var page int64 = 1
-	for {
-		items, resp, err := c.ListProjectRunners(ctx, projectID, 100, page)
-		if err != nil {
-			// Best-effort; surface contextual error
-			return all, fmt.Errorf("list project runners page %d: %w", page, err)
-		}
-		all = append(all, items...)
-		if resp == nil || resp.NextPage == 0 {
-			break
-		}
-		page = resp.NextPage
-	}
-	return all, nil
+	pid := url.PathEscape(fmt.Sprintf("%v", projectID))
+	return c.accumulateRunners(ctx, "/api/v4/projects/"+pid+"/runners", "list project runners")
 }
 
 // AccumulateGroupRunners lists runners for a group (admin/maintainer can see group runners).
-// Uses raw HTTP to avoid SDK gaps.
 func (c *Client) AccumulateGroupRunners(ctx context.Context, groupID any) ([]RunnerInfo, error) {
-	var all []RunnerInfo
-	gid := fmt.Sprintf("%v", groupID)
-	gidEsc := url.PathEscape(gid)
-	page := 1
-	for {
-		u := c.APIURL(fmt.Sprintf("/api/v4/groups/%s/runners?per_page=100&page=%d", gidEsc, page))
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil) //nolint:gosec // G704: URL constructed from trusted API base + path-escaped group ID
-		if err != nil {
-			return all, err
-		}
-		if tok := c.Token(); tok != "" {
-			req.Header.Set("PRIVATE-TOKEN", tok)
-		}
-		req.Header.Set("Accept", "application/json")
-		resp, err := c.httpClient.Do(req) //nolint:gosec
-		if err != nil {
-			return all, err
-		}
-		items, next, perr := parseRunnerPage(resp, "list group runners")
-		if perr != nil {
-			return all, perr
-		}
-		all = append(all, items...)
-		page = next
-		if page == 0 {
-			break
-		}
-	}
-	return all, nil
+	gid := url.PathEscape(fmt.Sprintf("%v", groupID))
+	return c.accumulateRunners(ctx, "/api/v4/groups/"+gid+"/runners", "list group runners")
 }
 
-// AccumulateAllRunners lists all instance runners (admin only). Uses /runners/all.
+// AccumulateAllRunners lists all instance runners (admin only).
 func (c *Client) AccumulateAllRunners(ctx context.Context) ([]RunnerInfo, error) {
-	var all []RunnerInfo
-	page := 1
-	for {
-		u := c.APIURL(fmt.Sprintf("/api/v4/runners/all?per_page=100&page=%d", page))
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
-		if err != nil {
-			return all, err
-		}
-		if tok := c.Token(); tok != "" {
-			req.Header.Set("PRIVATE-TOKEN", tok)
-		}
-		req.Header.Set("Accept", "application/json")
-		resp, err := c.httpClient.Do(req) //nolint:gosec
-		if err != nil {
-			return all, err
-		}
-		items, next, perr := parseRunnerPage(resp, "list all runners")
-		if perr != nil {
-			return all, perr
-		}
-		all = append(all, items...)
-		page = next
-		if page == 0 {
-			break
-		}
-	}
-	return all, nil
+	return c.accumulateRunners(ctx, "/api/v4/runners/all", "list all runners")
 }

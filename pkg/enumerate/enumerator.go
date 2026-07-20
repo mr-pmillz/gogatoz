@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"sync"
 	"time"
@@ -17,7 +18,15 @@ import (
 	gitlab "gitlab.com/gitlab-org/api/client-go"
 )
 
-const defaultRunnerScope = "project"
+const (
+	defaultRunnerScope = "project"
+
+	// DefaultConcurrency is the default number of concurrent workers for enumeration.
+	DefaultConcurrency = 8
+
+	// DefaultIncludeDepth is the default recursion depth for transitive includes.
+	DefaultIncludeDepth = 2
+)
 
 // Result captures the outcome for a single project.
 type Result struct {
@@ -40,10 +49,15 @@ type Result struct {
 	RunnerTagHits        map[string]int            `json:"runner_tag_hits,omitempty"`
 	RunnerRiskyExecutors map[string]int            `json:"runner_risky_executors,omitempty"`
 	RunnerTagExecutors   map[string]map[string]int `json:"runner_tag_executors,omitempty"`
+	// Variable metadata (optional)
+	ProjectVariables []analyze.VariableInfo    `json:"project_variables,omitempty"`
+	GroupVariables   []analyze.VariableInfo    `json:"group_variables,omitempty"`
+	Environments     []analyze.EnvironmentInfo `json:"environments,omitempty"`
 	// Log scraping (optional)
-	LogFindingsCount int    `json:"log_findings_count,omitempty"`
-	DurationMS       int64  `json:"duration_ms,omitempty"`
-	Error            string `json:"error,omitempty"`
+	LogFindingsCount int            `json:"log_findings_count,omitempty"`
+	RunnerLog        *RunnerLogInfo `json:"runner_log,omitempty"`
+	DurationMS       int64          `json:"duration_ms,omitempty"`
+	Error            string         `json:"error,omitempty"`
 }
 
 // Options controls enumeration behavior.
@@ -70,12 +84,37 @@ type Options struct {
 	LogScrape       bool // scrape recent job logs for key=value findings
 	LogMaxPipelines int  // cap pipelines per ref
 	LogMaxJobs      int  // cap jobs per pipeline
+	// Variable metadata
+	FetchVariables bool // fetch project and group CI/CD variable metadata (requires api scope)
+	// Environment metadata
+	FetchEnvironments bool // fetch environment protection rules for deployment analysis
 	// Analysis
-	SkipAnalyze bool                   // when true, parse and summarize but skip analyzer passes
-	Redact      bool                   // when true, mask plaintext secret values in findings (default: unredacted)
-	Controls    *config.ControlsConfig // per-detection configuration (nil = use defaults)
+	SkipAnalyze bool                    // when true, parse and summarize but skip analyzer passes
+	Redact      bool                    // when true, mask plaintext secret values in findings (default: unredacted)
+	Controls    *config.ControlsConfig  // per-detection configuration (nil = use defaults)
+	ThreatIntel *config.ThreatIntelFeed // external threat intel feed (nil = use hardcoded blocklist only)
 	// Progress, if set, is called once per completed project result.
 	Progress func(Result)
+}
+
+func appendError(r *Result, msg string) {
+	if r.Error != "" {
+		r.Error += "; "
+	}
+	r.Error += msg
+}
+
+func applyRunnerInfo(r *Result, runs []gitlabx.RunnerInfo) {
+	r.RunnerExecutors = map[string]int{}
+	r.RunnersTotal = len(runs)
+	for _, rn := range runs {
+		if rn.Online {
+			r.RunnersOnline++
+		}
+		if exec := strings.TrimSpace(strings.ToLower(rn.Executor)); exec != "" {
+			r.RunnerExecutors[exec]++
+		}
+	}
 }
 
 // dedup removes duplicate, empty, and comment-prefixed identifiers, preserving order.
@@ -100,12 +139,13 @@ func dedup(idents []string) []string {
 // The emit function is called from worker goroutines and is serialized internally.
 func EnumerateProjectsStream(ctx context.Context, cl *gitlabx.Client, idents []string, opts Options, emit func(Result)) error {
 	if opts.Concurrency <= 0 {
-		opts.Concurrency = 8
+		opts.Concurrency = DefaultConcurrency
 	}
 	if opts.IncludeDepth <= 0 {
-		opts.IncludeDepth = 2
+		opts.IncludeDepth = DefaultIncludeDepth
 	}
 	uniq := dedup(idents)
+	slog.Info("enumerate starting", "projects", len(uniq), "concurrency", opts.Concurrency, "follow_includes", opts.FollowIncludes)
 
 	type job struct{ ident string }
 	jobs := make(chan job)
@@ -126,6 +166,9 @@ func EnumerateProjectsStream(ctx context.Context, cl *gitlabx.Client, idents []s
 					if opts.Progress != nil {
 						opts.Progress(res)
 					}
+					// Serializes emit across workers. EnumerateProjects wraps
+					// emit with its own lock — redundant there but needed for
+					// direct callers of Stream with non-thread-safe callbacks.
 					mu.Lock()
 					emit(res)
 					mu.Unlock()
@@ -155,8 +198,7 @@ func EnumerateProjects(ctx context.Context, cl *gitlabx.Client, idents []string,
 }
 
 //nolint:gocognit // scanOne orchestrates network calls + parsing + analysis; kept as a single flow for performance and simplicity
-func scanOne(ctx context.Context, cl *gitlabx.Client, ident string, opts Options, ref string) Result {
-	var r Result
+func scanOne(ctx context.Context, cl *gitlabx.Client, ident string, opts Options, ref string) (r Result) {
 	start := time.Now()
 	defer func() { r.DurationMS = time.Since(start).Milliseconds() }()
 	if opts.Timeout > 0 {
@@ -174,17 +216,15 @@ func scanOne(ctx context.Context, cl *gitlabx.Client, ident string, opts Options
 	r.WebURL = proj.WebURL
 	r.DefaultBranch = proj.DefaultBranch
 	r.StarCount = proj.StarCount
+	r.Findings = append(r.Findings, projectSettingFindings(proj)...)
 	// Optional: fetch protected branches inventory
 	if opts.FetchProtected {
 		if list, err := cl.GetProtectedBranches(ctx, proj.ID, 100, 0); err == nil {
 			r.ProtectedBranches = list
 		} else {
-			// Non-fatal; append to error string
-			if r.Error != "" {
-				r.Error += "; "
-			}
-			r.Error += fmt.Sprintf("protected branches: %v", err)
+			appendError(&r, fmt.Sprintf("protected branches: %v", err))
 		}
+		r.Findings = append(r.Findings, checkBranchProtection(ctx, cl, proj.ID, proj.DefaultBranch)...)
 	}
 	// Optional: fetch runner summary based on scope
 	var fetchedRunners []gitlabx.RunnerInfo
@@ -198,91 +238,72 @@ func scanOne(ctx context.Context, cl *gitlabx.Client, ident string, opts Options
 		case defaultRunnerScope:
 			if runs, err := cl.AccumulateProjectRunners(ctx, proj.ID); err == nil {
 				fetchedRunners = runs
-				r.RunnerExecutors = map[string]int{}
-				r.RunnersTotal = len(runs)
-				for _, rn := range runs {
-					if rn.Online {
-						r.RunnersOnline++
-					}
-					if exec := strings.TrimSpace(strings.ToLower(rn.Executor)); exec != "" {
-						r.RunnerExecutors[exec]++
-					}
-				}
+				applyRunnerInfo(&r, runs)
 			} else {
-				if r.Error != "" {
-					r.Error += "; "
-				}
-				r.Error += fmt.Sprintf("runners(project): %v", err)
+				appendError(&r, fmt.Sprintf("runners(project): %v", err))
 			}
 		case "group":
 			var gid any
 			if proj.Namespace != nil {
-				// Try ID first
 				if proj.Namespace.ID != 0 {
 					gid = proj.Namespace.ID
 				} else if strings.TrimSpace(proj.Namespace.FullPath) != "" {
 					if g, _, gerr := cl.GL.Groups.GetGroup(proj.Namespace.FullPath, nil, gitlab.WithContext(ctx)); gerr == nil {
 						gid = g.ID
 					} else {
-						if r.Error != "" {
-							r.Error += "; "
-						}
-						r.Error += fmt.Sprintf("group lookup: %v", gerr)
+						appendError(&r, fmt.Sprintf("group lookup: %v", gerr))
 					}
 				}
 			}
-			if gid == nil || fmt.Sprintf("%v", gid) == "0" {
-				if r.Error != "" {
-					r.Error += "; "
-				}
-				r.Error += "no group namespace for project"
+			if gid == nil || gid == int64(0) {
+				appendError(&r, "no group namespace for project")
 			} else if runs, err := cl.AccumulateGroupRunners(ctx, gid); err == nil {
 				fetchedRunners = runs
-				r.RunnerExecutors = map[string]int{}
-				r.RunnersTotal = len(runs)
-				for _, rn := range runs {
-					if rn.Online {
-						r.RunnersOnline++
-					}
-					if exec := strings.TrimSpace(strings.ToLower(rn.Executor)); exec != "" {
-						r.RunnerExecutors[exec]++
-					}
-				}
+				applyRunnerInfo(&r, runs)
 			} else {
-				if r.Error != "" {
-					r.Error += "; "
-				}
-				r.Error += fmt.Sprintf("runners(group): %v", err)
+				appendError(&r, fmt.Sprintf("runners(group): %v", err))
 			}
 		case "instance":
 			if !opts.AllowAdmin {
-				if r.Error != "" {
-					r.Error += "; "
-				}
-				r.Error += "instance runner listing requires admin and --allow-admin-scope"
+				appendError(&r, "instance runner listing requires admin and --allow-admin-scope")
 			} else if runs, err := cl.AccumulateAllRunners(ctx); err == nil {
 				fetchedRunners = runs
-				r.RunnerExecutors = map[string]int{}
-				r.RunnersTotal = len(runs)
-				for _, rn := range runs {
-					if rn.Online {
-						r.RunnersOnline++
-					}
-					if exec := strings.TrimSpace(strings.ToLower(rn.Executor)); exec != "" {
-						r.RunnerExecutors[exec]++
-					}
-				}
+				applyRunnerInfo(&r, runs)
 			} else {
-				if r.Error != "" {
-					r.Error += "; "
-				}
-				r.Error += fmt.Sprintf("runners(instance): %v", err)
+				appendError(&r, fmt.Sprintf("runners(instance): %v", err))
 			}
 		default:
-			if r.Error != "" {
-				r.Error += "; "
+			appendError(&r, fmt.Sprintf("unknown runner scope: %s", scope))
+		}
+	}
+
+	// Optional: fetch environment metadata for deployment analysis
+	var envInfos []analyze.EnvironmentInfo
+	if opts.FetchEnvironments {
+		if ei, err := FetchEnvironments(ctx, cl, proj.ID); err == nil {
+			envInfos = ei
+			r.Environments = ei
+		} else {
+			appendError(&r, fmt.Sprintf("environments: %v", err))
+		}
+	}
+
+	// Optional: fetch CI/CD variable metadata for inheritance analysis
+	var projectVars, groupVars []analyze.VariableInfo
+	if opts.FetchVariables {
+		if pv, err := FetchProjectVariables(ctx, cl, proj.ID); err == nil {
+			projectVars = pv
+			r.ProjectVariables = pv
+		} else {
+			appendError(&r, fmt.Sprintf("project variables: %v", err))
+		}
+		if proj.Namespace != nil && proj.Namespace.ID != 0 {
+			if gv, err := FetchGroupVariables(ctx, cl, proj.Namespace.ID); err == nil {
+				groupVars = gv
+				r.GroupVariables = gv
+			} else {
+				appendError(&r, fmt.Sprintf("group variables: %v", err))
 			}
-			r.Error += fmt.Sprintf("unknown runner scope: %s", scope)
 		}
 	}
 
@@ -329,11 +350,7 @@ func scanOne(ctx context.Context, cl *gitlabx.Client, ident string, opts Options
 			RemoteCacheTTL:   opts.RemoteCacheTTL,
 		})
 		if ierr != nil {
-			if r.Error != "" {
-				r.Error = r.Error + "; " + ierr.Error()
-			} else {
-				r.Error = ierr.Error()
-			}
+			appendError(&r, ierr.Error())
 		}
 		if merged != nil {
 			ciDocResolved = merged
@@ -404,12 +421,16 @@ func scanOne(ctx context.Context, cl *gitlabx.Client, ident string, opts Options
 		}
 		finds, lerr := secretsdump.ScrapeJobLogs(ctx, cl, proj.ID, refToUse, mp, mj)
 		if lerr != nil {
-			if r.Error != "" {
-				r.Error += "; "
-			}
-			r.Error += fmt.Sprintf("log scrape: %v", lerr)
+			appendError(&r, fmt.Sprintf("log scrape: %v", lerr))
 		} else {
 			r.LogFindingsCount = len(finds)
+		}
+	}
+
+	// Run-log runner detection (fallback when --runners not available)
+	if r.RunnerLog == nil && !opts.FetchRunners {
+		if trace := fetchFirstJobTrace(ctx, cl, proj.ID, refToUse); trace != "" {
+			r.RunnerLog = ExtractRunnerFromLog(trace)
 		}
 	}
 
@@ -424,18 +445,31 @@ func scanOne(ctx context.Context, cl *gitlabx.Client, ident string, opts Options
 	if opts.Controls != nil {
 		aopts = append(aopts, analyze.WithControls(opts.Controls))
 	}
+	if opts.ThreatIntel != nil {
+		aopts = append(aopts, analyze.WithThreatIntel(opts.ThreatIntel))
+	}
+	if opts.FetchVariables && (len(projectVars) > 0 || len(groupVars) > 0) {
+		aopts = append(aopts, analyze.WithVariableData(&analyze.VariableData{
+			ProjectVars: projectVars,
+			GroupVars:   groupVars,
+		}))
+	}
+	if opts.FetchEnvironments && len(envInfos) > 0 {
+		aopts = append(aopts, analyze.WithEnvironmentData(envInfos))
+	}
 	findings, ferr := analyze.Run(ciDocResolved, aopts...)
 	if ferr != nil && !errors.Is(ferr, analyze.ErrPartial) {
 		// Non-fatal; still return parsed info
-		r.Error = fmt.Sprintf("analysis error: %v", ferr)
+		appendError(&r, fmt.Sprintf("analysis error: %v", ferr))
 	}
-	r.Findings = findings
+	r.Findings = append(r.Findings, findings...)
 	// Post-analysis: emit executor-specific findings before severity adjustment
 	addExecutorFindings(&r, ciDocResolved)
 	// Post-analysis: adjust severities based on runner risk correlation, if available
 	adjustFindingsForRunnerRisk(&r, ciDocResolved)
 	// Post-analysis: downgrade severities when job rules appear to restrict to protected branches
 	adjustFindingsForProtectedBranches(&r, ciDocResolved)
+	slog.Debug("project scanned", "project", r.ProjectPathWithNS, "findings", len(r.Findings), "ref", ref, "duration_ms", r.DurationMS)
 	return r
 }
 

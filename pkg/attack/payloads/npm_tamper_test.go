@@ -19,6 +19,7 @@ func TestGenerateNpmTamperYAML(t *testing.T) {
 			contains: []string{
 				"NPM_TOKEN", "npm pack", "npm publish", "preinstall",
 				"registry.npmjs.org", "script:", "npm-tamper:",
+				"No npm publishing token found", "tampered-package.json",
 			},
 		},
 		{

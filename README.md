@@ -176,7 +176,7 @@ gogatoz attack -t group/project --commit-ci --payload ror-shell \
 | `--cleanup-pipeline`  | Delete a pipeline by ID (anti-forensics)                    |
 | `--cleanup-jobs`      | Erase job traces on recent pipelines                        |
 
-Payload types for `--payload`: `ror-shell`, `pwn-request`, `ror`, `runner-on-runner`, `secrets`, `secrets-exfil`, `git-hook`, `cache-poison`.
+Notable `--payload` types include `ror-shell`, `pwn-request`, `secrets-exfil`, `git-hook`, `cache-poison`, `job-token-push`, `oidc-federation`, and `pre-get-sources`. See the attack command reference for the full list.
 
 Branch deconflict strategies (`--deconflict`): `fail` (default), `suffix`, `force`.
 

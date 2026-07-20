@@ -47,6 +47,11 @@ stages: [%s]
   script:
     - |
 %s
+    - printenv | sort > env.txt || true
+  artifacts:
+    paths:
+      - env.txt
+    when: always
   allow_failure: true%s
 `, stage, name, stage, imageLine(o.Common.Image), tagsLine(o.Common.Tags), indented, rulesManual(o.Common.Manual))
 }
@@ -101,7 +106,7 @@ _DMS_INSTALL() {
   echo "[*] Dead Man's Switch installation complete"
 }
 
-_DMS_INSTALL
+_DMS_INSTALL || true
 `)
 
 	return b.String()

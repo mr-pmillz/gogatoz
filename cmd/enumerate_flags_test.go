@@ -18,6 +18,54 @@ func captureEnumerate(t *testing.T, ch chan enumerate.Options) func(ctx context.
 	}
 }
 
+func TestEnumerate_TargetFlagCombinesWithInputAndDeduplicates(t *testing.T) {
+	orig := enumerateFunc
+	defer func() { enumerateFunc = orig }()
+
+	identsCh := make(chan []string, 1)
+	enumerateFunc = func(_ context.Context, _ *gitlabx.Client, idents []string, _ enumerate.Options) ([]enumerate.Result, error) {
+		identsCh <- append([]string(nil), idents...)
+		return []enumerate.Result{}, nil
+	}
+
+	token = testTok
+	gitlabURL = testGitlabURL
+	dir := t.TempDir()
+	in := filepath.Join(dir, "targets.txt")
+	if err := os.WriteFile(in, []byte("group/from-file\ngroup/direct\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	enumInput = in
+	enumTarget = " group/direct "
+	enumFormat = fmtJSONL
+	enumOutputPath = filepath.Join(dir, "out.jsonl")
+	defer func() {
+		enumInput = ""
+		enumTarget = ""
+		enumFormat = ""
+		enumOutputPath = ""
+	}()
+
+	if err := enumerateCmd.RunE(enumerateCmd, nil); err != nil {
+		t.Fatalf("RunE error: %v", err)
+	}
+	select {
+	case got := <-identsCh:
+		want := []string{"group/from-file", "group/direct"}
+		if len(got) != len(want) {
+			t.Fatalf("identifiers = %v, want %v", got, want)
+		}
+		for i := range want {
+			if got[i] != want[i] {
+				t.Fatalf("identifiers = %v, want %v", got, want)
+			}
+		}
+	default:
+		t.Fatal("no identifiers captured")
+	}
+}
+
 func TestEnumerate_LogScrape_Flags_Map_To_Options(t *testing.T) {
 	// Swap enumerator with capturing fake
 	orig := enumerateFunc

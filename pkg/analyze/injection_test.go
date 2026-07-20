@@ -735,3 +735,74 @@ func TestWithRecommendations_SpecificIDs(t *testing.T) {
 		})
 	}
 }
+
+func TestArtifactChainPoisoning_TransitiveChain(t *testing.T) {
+	// A (MR-triggered, produces artifacts) -> B (consumes A, produces artifacts) -> C (consumes B)
+	// C should get ARTIFACT_CHAIN_POISONING since B is transitively tainted.
+	doc := &pipeline.Document{
+		Jobs: []pipeline.Job{
+			{
+				Name:      "job-a",
+				Script:    []string{"build"},
+				Artifacts: map[string]any{"paths": []any{"out/"}},
+				Rules: []any{
+					map[string]any{"if": "$CI_PIPELINE_SOURCE == 'merge_request_event'"},
+				},
+			},
+			{
+				Name:      "job-b",
+				Script:    []string{"test"},
+				Needs:     []string{"job-a"},
+				Artifacts: map[string]any{"paths": []any{"results/"}},
+			},
+			{
+				Name:   "job-c",
+				Script: []string{"deploy"},
+				Needs:  []string{"job-b"},
+			},
+		},
+	}
+	findings, err := Run(doc)
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	if !hasFindingID(findings, ArtifactChainPoisoningID) {
+		t.Fatalf("expected ARTIFACT_CHAIN_POISONING, got IDs: %v", findingIDs(findings))
+	}
+	for _, f := range findings {
+		if f.ID == ArtifactChainPoisoningID && f.JobName != "job-c" {
+			t.Fatalf("chain finding should be on job-c, got: %s", f.JobName)
+		}
+	}
+}
+
+func TestArtifactChainPoisoning_DirectOnly_NoChainFinding(t *testing.T) {
+	// Direct dependency: A (MR) -> B. B gets ARTIFACT_POISONING_RISK, not CHAIN.
+	doc := &pipeline.Document{
+		Jobs: []pipeline.Job{
+			{
+				Name:      "job-a",
+				Script:    []string{"build"},
+				Artifacts: map[string]any{"paths": []any{"out/"}},
+				Rules: []any{
+					map[string]any{"if": "$CI_PIPELINE_SOURCE == 'merge_request_event'"},
+				},
+			},
+			{
+				Name:   "job-b",
+				Script: []string{"test"},
+				Needs:  []string{"job-a"},
+			},
+		},
+	}
+	findings, err := Run(doc)
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	if hasFindingID(findings, ArtifactChainPoisoningID) {
+		t.Fatalf("did not expect ARTIFACT_CHAIN_POISONING for direct-only dependency")
+	}
+	if !hasFindingID(findings, ArtifactPoisoningID) {
+		t.Fatalf("expected ARTIFACT_POISONING_RISK for direct dependency")
+	}
+}
