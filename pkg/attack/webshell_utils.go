@@ -2,14 +2,11 @@ package attack
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"net/http"
-	"net/url"
-	"strings"
 	"time"
 
 	"github.com/mr-pmillz/gogatoz/pkg/gitlabx"
+	gitlab "gitlab.com/gitlab-org/api/client-go"
 )
 
 // terminalJobStatuses is the set of GitLab CI job statuses that indicate completion.
@@ -26,11 +23,9 @@ func ISOTimeNow() string {
 }
 
 // PollWithTimeout polls fn every interval until it returns true or timeout elapses.
-// If fn returns an error, it is surfaced and polling stops.
 func PollWithTimeout(ctx context.Context, interval, timeout time.Duration, fn func(context.Context) (bool, error)) error {
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	// immediate attempt
 	ok, err := fn(ctx)
 	if err != nil {
 		return err
@@ -61,50 +56,28 @@ func PollWithTimeout(ctx context.Context, interval, timeout time.Duration, fn fu
 
 // WaitForPipelineForRef polls GitLab for the latest pipeline on a project (optionally by ref)
 // and returns its ID when a pipeline with ID > minID is found, or an error on timeout.
-// Pass minID=0 to accept any pipeline; pass the ID of the latest pre-existing pipeline to
-// wait for a NEW pipeline (avoiding returning one created before the current commit).
 func WaitForPipelineForRef(ctx context.Context, client *gitlabx.Client, projectID any, ref string, minID int64, interval, timeout time.Duration) (int64, error) {
 	if client == nil {
 		return 0, fmt.Errorf("nil client")
 	}
 	var foundID int64
-	pid := fmt.Sprintf("%v", projectID)
-	pidEsc := url.PathEscape(pid)
-	buildReq := func() (*http.Request, error) {
-		qs := "per_page=1&order_by=id&sort=desc"
-		if strings.TrimSpace(ref) != "" {
-			qs += "&ref=" + url.QueryEscape(ref)
+	check := func(ctx context.Context) (bool, error) {
+		opts := &gitlab.ListProjectPipelinesOptions{
+			ListOptions: gitlab.ListOptions{PerPage: 1, Page: 1},
+			OrderBy:     new("id"),
+			Sort:        new("desc"),
 		}
-		u := client.APIURL(fmt.Sprintf("/api/v4/projects/%s/pipelines?%s", pidEsc, qs))
-		return http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
-	}
-	check := func(_ context.Context) (bool, error) {
-		req, err := buildReq()
+		if ref != "" {
+			opts.Ref = new(ref)
+		}
+		pipes, _, err := client.GL.Pipelines.ListProjectPipelines(projectID, opts, gitlab.WithContext(ctx))
 		if err != nil {
 			return false, err
 		}
-		if tok := client.Token(); tok != "" {
-			req.Header.Set("PRIVATE-TOKEN", tok)
-		}
-		req.Header.Set("Accept", "application/json")
-		resp, err := client.HTTPClient().Do(req) //nolint:gosec
-		if err != nil {
-			return false, err
-		}
-		defer resp.Body.Close()
-		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-			return false, fmt.Errorf("list pipelines: http %d", resp.StatusCode)
-		}
-		var arr []struct {
-			ID int64 `json:"id"`
-		}
-		if err := json.NewDecoder(resp.Body).Decode(&arr); err != nil {
-			return false, err
-		}
-		if len(arr) == 0 {
+		if len(pipes) == 0 {
 			return false, nil
 		}
-		foundID = arr[0].ID
+		foundID = pipes[0].ID
 		return foundID > minID, nil
 	}
 	if err := PollWithTimeout(ctx, interval, timeout, check); err != nil {
@@ -114,23 +87,20 @@ func WaitForPipelineForRef(ctx context.Context, client *gitlabx.Client, projectI
 }
 
 // WaitForExfilPipeline polls recent pipelines on a branch for a job with the given name
-// and waits until that job reaches a terminal state. It searches across the 5 most recent
-// pipelines each tick so it tolerates branch-creation pipelines appearing before the exfil
-// CI commit pipeline. Returns pipelineID, jobID, and terminal status string.
+// and waits until that job reaches a terminal state.
 //
 //nolint:gocognit // network IO orchestration; intentional complexity
 func WaitForExfilPipeline(ctx context.Context, client *gitlabx.Client, projectID any, ref, jobName string, interval, timeout time.Duration) (pipelineID, jobID int64, status string, err error) {
 	if client == nil {
 		return 0, 0, "", fmt.Errorf("nil client")
 	}
-	pidEsc := url.PathEscape(fmt.Sprintf("%v", projectID))
-	check := func(_ context.Context) (bool, error) {
-		pipes, perr := listRecentPipelines(ctx, client, pidEsc, ref, 5)
+	check := func(ctx context.Context) (bool, error) {
+		pipes, perr := listRecentPipelines(ctx, client, projectID, ref, 5)
 		if perr != nil {
 			return false, perr
 		}
 		for _, pipe := range pipes {
-			found, jID, jStatus, ferr := findJobInPipeline(ctx, client, pidEsc, pipe, jobName)
+			found, jID, jStatus, ferr := findJobInPipeline(ctx, client, projectID, pipe, jobName)
 			if ferr != nil {
 				continue
 			}
@@ -152,32 +122,17 @@ func WaitForExfilPipeline(ctx context.Context, client *gitlabx.Client, projectID
 	return pipelineID, jobID, status, nil
 }
 
-func listRecentPipelines(ctx context.Context, client *gitlabx.Client, pidEsc, ref string, n int) ([]int64, error) {
-	qs := fmt.Sprintf("per_page=%d&order_by=id&sort=desc", n)
-	if strings.TrimSpace(ref) != "" {
-		qs += "&ref=" + url.QueryEscape(ref)
+func listRecentPipelines(ctx context.Context, client *gitlabx.Client, projectID any, ref string, n int) ([]int64, error) {
+	opts := &gitlab.ListProjectPipelinesOptions{
+		ListOptions: gitlab.ListOptions{PerPage: int64(n), Page: 1},
+		OrderBy:     new("id"),
+		Sort:        new("desc"),
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
-		client.APIURL(fmt.Sprintf("/api/v4/projects/%s/pipelines?%s", pidEsc, qs)), nil)
+	if ref != "" {
+		opts.Ref = new(ref)
+	}
+	pipes, _, err := client.GL.Pipelines.ListProjectPipelines(projectID, opts, gitlab.WithContext(ctx))
 	if err != nil {
-		return nil, err
-	}
-	if tok := client.Token(); tok != "" {
-		req.Header.Set("PRIVATE-TOKEN", tok)
-	}
-	req.Header.Set("Accept", "application/json")
-	resp, err := client.HTTPClient().Do(req) //nolint:gosec
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("list pipelines: http %d", resp.StatusCode)
-	}
-	var pipes []struct {
-		ID int64 `json:"id"`
-	}
-	if err = json.NewDecoder(resp.Body).Decode(&pipes); err != nil {
 		return nil, err
 	}
 	ids := make([]int64, len(pipes))
@@ -187,27 +142,12 @@ func listRecentPipelines(ctx context.Context, client *gitlabx.Client, pidEsc, re
 	return ids, nil
 }
 
-func findJobInPipeline(ctx context.Context, client *gitlabx.Client, pidEsc string, pipelineID int64, jobName string) (found bool, jobID int64, status string, err error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
-		client.APIURL(fmt.Sprintf("/api/v4/projects/%s/pipelines/%d/jobs?per_page=100", pidEsc, pipelineID)), nil)
+func findJobInPipeline(ctx context.Context, client *gitlabx.Client, projectID any, pipelineID int64, jobName string) (found bool, jobID int64, status string, err error) {
+	opts := &gitlab.ListJobsOptions{
+		ListOptions: gitlab.ListOptions{PerPage: 100, Page: 1},
+	}
+	jobs, _, err := client.GL.Jobs.ListPipelineJobs(projectID, pipelineID, opts, gitlab.WithContext(ctx))
 	if err != nil {
-		return false, 0, "", err
-	}
-	if tok := client.Token(); tok != "" {
-		req.Header.Set("PRIVATE-TOKEN", tok)
-	}
-	req.Header.Set("Accept", "application/json")
-	resp, err := client.HTTPClient().Do(req) //nolint:gosec
-	if err != nil {
-		return false, 0, "", err
-	}
-	defer resp.Body.Close()
-	var jobs []struct {
-		ID     int64  `json:"id"`
-		Name   string `json:"name"`
-		Status string `json:"status"`
-	}
-	if err = json.NewDecoder(resp.Body).Decode(&jobs); err != nil {
 		return false, 0, "", err
 	}
 	for _, j := range jobs {
@@ -218,42 +158,18 @@ func findJobInPipeline(ctx context.Context, client *gitlabx.Client, pidEsc strin
 	return false, 0, "", nil
 }
 
-// WaitForJobCompletion polls until the named job in a pipeline reaches a terminal state
-// (success, failed, canceled, or skipped). Returns the job ID and terminal status string,
-// or an error if the timeout elapses before the job finishes.
+// WaitForJobCompletion polls until the named job in a pipeline reaches a terminal state.
 func WaitForJobCompletion(ctx context.Context, client *gitlabx.Client, projectID any, pipelineID int64, jobName string, interval, timeout time.Duration) (jobID int64, status string, err error) {
 	if client == nil {
 		return 0, "", fmt.Errorf("nil client")
 	}
-	pidEsc := url.PathEscape(fmt.Sprintf("%v", projectID))
-	buildReq := func() (*http.Request, error) {
-		u := client.APIURL(fmt.Sprintf("/api/v4/projects/%s/pipelines/%d/jobs?per_page=100", pidEsc, pipelineID))
-		return http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
-	}
-	check := func(_ context.Context) (bool, error) {
-		req, rerr := buildReq()
-		if rerr != nil {
-			return false, rerr
+	check := func(ctx context.Context) (bool, error) {
+		opts := &gitlab.ListJobsOptions{
+			ListOptions: gitlab.ListOptions{PerPage: 100, Page: 1},
 		}
-		if tok := client.Token(); tok != "" {
-			req.Header.Set("PRIVATE-TOKEN", tok)
-		}
-		req.Header.Set("Accept", "application/json")
-		resp, rerr := client.HTTPClient().Do(req) //nolint:gosec
-		if rerr != nil {
-			return false, rerr
-		}
-		defer resp.Body.Close()
-		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-			return false, fmt.Errorf("list pipeline jobs: http %d", resp.StatusCode)
-		}
-		var jobs []struct {
-			ID     int64  `json:"id"`
-			Name   string `json:"name"`
-			Status string `json:"status"`
-		}
-		if rerr = json.NewDecoder(resp.Body).Decode(&jobs); rerr != nil {
-			return false, rerr
+		jobs, _, jerr := client.GL.Jobs.ListPipelineJobs(projectID, pipelineID, opts, gitlab.WithContext(ctx))
+		if jerr != nil {
+			return false, jerr
 		}
 		for _, j := range jobs {
 			if j.Name == jobName {

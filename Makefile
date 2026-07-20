@@ -9,7 +9,7 @@ COVER_DIR := coverage
 
 TEST_FLAGS ?= -covermode=atomic -coverprofile=coverage/coverage.out
 RACE_FLAGS ?= -race -count=1
-LINT_FLAGS ?= -c .golangci-lint.yml --timeout=10m -v
+LINT_FLAGS ?= --config ./.golangci-lint.yml --timeout=10m -v
 
 .DEFAULT_GOAL := help
 

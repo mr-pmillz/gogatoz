@@ -17,6 +17,38 @@ func mustParseDoc(t *testing.T, yaml string) *pipeline.Document {
 	return doc
 }
 
+// severityTestCase is a shared table-driven test case for detection functions
+// that produce findings with severity escalation (HIGH for MR-triggered).
+type severityTestCase struct {
+	name      string
+	yaml      string
+	wantFound bool
+	wantHigh  bool
+}
+
+// runSeverityDetectionTests runs a table of severityTestCase against a
+// detection function, checking both presence and severity.
+func runSeverityDetectionTests(t *testing.T, tests []severityTestCase, findingID string, detect func(*pipeline.Document) []Finding) {
+	t.Helper()
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			doc := mustParseDoc(t, tc.yaml)
+			findings := detect(doc)
+			found := hasFindingID(findings, findingID)
+			if found != tc.wantFound {
+				t.Errorf("found=%v want=%v; findings=%+v", found, tc.wantFound, findings)
+			}
+			if tc.wantHigh && found {
+				for _, f := range findings {
+					if f.ID == findingID && f.Severity != SeverityHigh {
+						t.Errorf("severity=%s want=HIGH", f.Severity)
+					}
+				}
+			}
+		})
+	}
+}
+
 // --- LOTP_TOOL_EXEC ---
 
 func TestDetectLOTPToolExec(t *testing.T) {

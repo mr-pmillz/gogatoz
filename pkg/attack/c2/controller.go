@@ -148,7 +148,7 @@ func ensureBranchName(ctx context.Context, r repo, projectID any, desired, strat
 		if !exists {
 			return desired, nil
 		}
-		for i := 1; i <= 99; i++ {
+		for i := 1; i <= attack.MaxDeconflictSuffix; i++ {
 			cand := fmt.Sprintf("%s-%d", desired, i)
 			e, err := r.BranchExists(ctx, projectID, cand)
 			if err != nil {

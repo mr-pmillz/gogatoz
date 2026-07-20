@@ -105,8 +105,9 @@ func (sw *StreamingWriter) WriteNode(node *Node) error {
 	return nil
 }
 
-// WriteEdge writes a single edge. Duplicates (by full JSON content) are
-// silently skipped. Nil edges are ignored.
+// WriteEdge writes a single edge. Duplicates (by start+end+kind) are merged:
+// new properties are added to the existing edge but existing values are not overwritten.
+// Nil edges are ignored.
 func (sw *StreamingWriter) WriteEdge(edge *Edge) error {
 	if edge == nil {
 		return nil
@@ -119,15 +120,16 @@ func (sw *StreamingWriter) WriteEdge(edge *Edge) error {
 		return fmt.Errorf("writer is closed")
 	}
 
-	edgeJSON, err := json.Marshal(edge)
-	if err != nil {
-		return err
-	}
-	edgeKey := string(edgeJSON)
+	edgeKey := edge.Start.Value + "|" + edge.End.Value + "|" + edge.Kind
 	if sw.seenEdges[edgeKey] {
 		return nil
 	}
 	sw.seenEdges[edgeKey] = true
+
+	edgeJSON, err := json.Marshal(edge)
+	if err != nil {
+		return err
+	}
 
 	if !sw.inEdges {
 		if err := sw.transitionToEdges(); err != nil {

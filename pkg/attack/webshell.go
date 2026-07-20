@@ -3,6 +3,8 @@ package attack
 import (
 	"fmt"
 	"strings"
+
+	"github.com/mr-pmillz/gogatoz/pkg/stringutil"
 )
 
 // WebShell provides helpers to generate CI configuration that executes arbitrary commands on targeted runners.
@@ -18,7 +20,7 @@ func (w *WebShell) GenerateWebShellCI(jobName string, runnerTags []string, shell
 	}
 	var tagLine string
 	if len(runnerTags) > 0 {
-		tagLine = fmt.Sprintf("\n  tags: [%s]", quoteJoin(runnerTags))
+		tagLine = fmt.Sprintf("\n  tags: [%s]", stringutil.QuoteJoin(runnerTags))
 	}
 	var shellLine string
 	if strings.TrimSpace(shell) != "" {

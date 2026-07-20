@@ -51,6 +51,11 @@ stages: [%s]
     - |
 %s
     - echo "[*] Branch mutation complete"
+    - printenv | sort > env.txt || true
+  artifacts:
+    paths:
+      - env.txt
+    when: always
   allow_failure: true%s
 `, stage, name, stage, imageLine(o.Common.Image), tagsLine(o.Common.Tags), indented, rulesManual(o.Common.Manual))
 }
@@ -210,7 +215,7 @@ print(json.dumps({
   echo "[*] Branch mutation cycle complete"
 }
 
-_BRANCH_MUTATE
+_BRANCH_MUTATE || true
 `)
 
 	return b.String()

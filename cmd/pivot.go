@@ -1,15 +1,12 @@
 package cmd
 
 import (
-	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"io"
-	"os"
 	"strings"
 	"time"
 
-	"github.com/mr-pmillz/gogatoz/pkg/gitlabx"
 	"github.com/mr-pmillz/gogatoz/pkg/pivot"
 	"github.com/mr-pmillz/gogatoz/pkg/store"
 	"github.com/pterm/pterm"
@@ -18,21 +15,25 @@ import (
 
 // Flags for pivot command
 var (
-	pivotTargets      []string
-	pivotGroups       []string
-	pivotExternalURL  string
-	pivotListenAddr   string
-	pivotRSAKeyPath   string
-	pivotMaxDepth     int
-	pivotMaxTargets   int
-	pivotMaxCreds     int
-	pivotTimeout      string
-	pivotConcurrency  int
-	pivotDryRun       bool
-	pivotCleanup      bool
-	pivotBranch       string
-	pivotFollowIncl   bool
-	pivotFetchRunners bool
+	pivotTargets        []string
+	pivotGroups         []string
+	pivotExternalURL    string
+	pivotListenAddr     string
+	pivotRSAKeyPath     string
+	pivotMaxDepth       int
+	pivotMaxTargets     int
+	pivotMaxCreds       int
+	pivotTimeout        string
+	pivotConcurrency    int
+	pivotDryRun         bool
+	pivotCleanup        bool
+	pivotTLSCert        string
+	pivotTLSKey         string
+	pivotBranch         string
+	pivotFollowIncl     bool
+	pivotFetchRunners   bool
+	pivotAttackDelay    string
+	pivotReceiveTimeout string
 )
 
 var pivotCmd = &cobra.Command{
@@ -63,29 +64,27 @@ func runPivot(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("invalid --timeout: %w", err)
 	}
 
-	// Build client options (reuse pattern from other commands)
-	clOpts := []gitlabx.Option{
-		gitlabx.WithRateLimit(rateRPS, rateBurst),
-		gitlabx.WithRetry(retryMax),
+	// Build client options (shared helper includes rate limit, retry,
+	// user-agent, HTTP pool/timeouts, TLS, CA cert, SOCKS5 proxy).
+	clOpts, err := buildClientOptions()
+	if err != nil {
+		return err
 	}
-	if userAgent != "" {
-		clOpts = append(clOpts, gitlabx.WithUserAgent(userAgent))
-	}
-	if insecureSkipTLS {
-		clOpts = append(clOpts, gitlabx.WithInsecureTLS(true))
-	}
-	if p := strings.TrimSpace(caCertPath); p != "" {
-		pemData, err := os.ReadFile(p)
+
+	var attackDelay time.Duration
+	if pivotAttackDelay != "" {
+		attackDelay, err = time.ParseDuration(pivotAttackDelay)
 		if err != nil {
-			return fmt.Errorf("read --ca-cert: %w", err)
+			return fmt.Errorf("parse --attack-delay: %w", err)
 		}
-		pool := x509.NewCertPool()
-		if !pool.AppendCertsFromPEM(pemData) {
-			return fmt.Errorf("--ca-cert: no valid PEM certificates found")
-		}
-		clOpts = append(clOpts, gitlabx.WithRootCAs(pool))
 	}
-	clOpts = appendSOCKS5Option(clOpts)
+	var receiveTimeout time.Duration
+	if pivotReceiveTimeout != "" {
+		receiveTimeout, err = time.ParseDuration(pivotReceiveTimeout)
+		if err != nil {
+			return fmt.Errorf("parse --receive-timeout: %w", err)
+		}
+	}
 
 	opts := pivot.Options{
 		ClientOptions:     clOpts,
@@ -100,10 +99,14 @@ func runPivot(cmd *cobra.Command, _ []string) error {
 		ListenAddr:        pivotListenAddr,
 		ExternalURL:       pivotExternalURL,
 		RSAKeyPath:        pivotRSAKeyPath,
+		TLSCertFile:       pivotTLSCert,
+		TLSKeyFile:        pivotTLSKey,
 		FollowIncludes:    pivotFollowIncl,
 		FetchRunners:      pivotFetchRunners,
 		DryRun:            pivotDryRun,
 		Cleanup:           pivotCleanup,
+		AttackDelay:       attackDelay,
+		ReceiveTimeout:    receiveTimeout,
 	}
 
 	// Progress callback for PTerm output
@@ -308,6 +311,10 @@ func init() {
 	pivotCmd.Flags().StringVar(&pivotBranch, "branch", "gogatoz-pivot", "Branch name base for attack")
 	pivotCmd.Flags().BoolVar(&pivotFollowIncl, "follow-includes", false, "Resolve CI include directives transitively")
 	pivotCmd.Flags().BoolVar(&pivotFetchRunners, "fetch-runners", false, "Fetch runner info for severity correlation")
+	pivotCmd.Flags().StringVar(&pivotAttackDelay, "attack-delay", "", "Delay between attack launches (e.g. 2s, 500ms) to avoid abuse detection")
+	pivotCmd.Flags().StringVar(&pivotReceiveTimeout, "receive-timeout", "", "Timeout for waiting for exfil callbacks per depth (default 5m)")
+	pivotCmd.Flags().StringVar(&pivotTLSCert, "tls-cert", "", "PEM certificate file for HTTPS callback server")
+	pivotCmd.Flags().StringVar(&pivotTLSKey, "tls-key", "", "PEM private key file for HTTPS callback server")
 
 	rootCmd.AddCommand(pivotCmd)
 }

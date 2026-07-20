@@ -7,7 +7,10 @@ import (
 	"runtime/debug"
 	"strings"
 
+	"log/slog"
+
 	"github.com/mr-pmillz/gogatoz/pkg/config"
+	"github.com/mr-pmillz/gogatoz/pkg/logging"
 	"github.com/mr-pmillz/gogatoz/pkg/store"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -61,6 +64,10 @@ var (
 
 	// Analysis controls (populated from config file controls: section)
 	controlsCfg *config.ControlsConfig
+
+	// Logging
+	logLevel string
+	logJSON  bool
 )
 
 // rootCmd represents the base command when called without any subcommands
@@ -102,6 +109,11 @@ var rootCmd = &cobra.Command{
 		socks5User = viper.GetString("socks5-user")
 		socks5Pass = viper.GetString("socks5-pass")
 
+		// Structured logging
+		logLevel = viper.GetString("log-level")
+		logJSON = viper.GetBool("log-json")
+		slog.SetDefault(logging.NewLogger(logJSON, logging.ParseLevel(logLevel)))
+
 		// Open result store (non-fatal)
 		if !noDB {
 			dbPath = strings.TrimSpace(viper.GetString("db"))
@@ -110,11 +122,11 @@ var rootCmd = &cobra.Command{
 			}
 			if dbPath != "" {
 				if err := os.MkdirAll(filepath.Dir(dbPath), 0o750); err != nil {
-					fmt.Fprintf(os.Stderr, "[db] warning: cannot create directory: %v\n", err)
+					slog.Warn("cannot create db directory", "error", err)
 				} else {
 					st, stErr := store.Open(dbPath)
 					if stErr != nil {
-						fmt.Fprintf(os.Stderr, "[db] warning: %v\n", stErr)
+						slog.Warn("db open failed", "error", stErr)
 					} else {
 						cliStore = st
 					}
@@ -177,6 +189,9 @@ func init() {
 	// Result persistence
 	rootCmd.PersistentFlags().StringVar(&dbPath, "db", "", "SQLite database path for result persistence (env: GOGATOZ_DB)")
 	rootCmd.PersistentFlags().BoolVar(&noDB, "no-db", false, "Disable automatic result persistence")
+	// Logging
+	rootCmd.PersistentFlags().StringVar(&logLevel, "log-level", "warn", "Log level (debug, info, warn, error)")
+	rootCmd.PersistentFlags().BoolVar(&logJSON, "log-json", false, "Emit structured JSON logs to stderr")
 
 	// Bind flags and environment to viper keys for precedence: flags > env > config
 	_ = viper.BindPFlag("gitlab-url", rootCmd.PersistentFlags().Lookup("gitlab-url"))
@@ -201,6 +216,8 @@ func init() {
 	_ = viper.BindPFlag("socks5-proxy", rootCmd.PersistentFlags().Lookup("socks5-proxy"))
 	_ = viper.BindPFlag("socks5-user", rootCmd.PersistentFlags().Lookup("socks5-user"))
 	_ = viper.BindPFlag("socks5-pass", rootCmd.PersistentFlags().Lookup("socks5-pass"))
+	_ = viper.BindPFlag("log-level", rootCmd.PersistentFlags().Lookup("log-level"))
+	_ = viper.BindPFlag("log-json", rootCmd.PersistentFlags().Lookup("log-json"))
 	// Environment bindings for global keys
 	_ = viper.BindEnv("gitlab-url", "GITLAB_URL")
 	_ = viper.BindEnv("token", "GITLAB_TOKEN")

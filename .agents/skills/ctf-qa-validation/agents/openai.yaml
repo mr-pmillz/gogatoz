@@ -1,0 +1,4 @@
+interface:
+  display_name: "CTF QA Validation"
+  short_description: "Validate GoGatoZ against its CTF lab"
+  default_prompt: "Use $ctf-qa-validation to build, test, and smoke-test GoGatoZ against the authorized CTF lab."

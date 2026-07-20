@@ -217,6 +217,11 @@ func jobFromMap(name string, m map[string]any) Job {
 	if af, ok := m["allow_failure"].(bool); ok {
 		j.AllowFailure = af
 	}
+	jobFromMapExtras(&j, m)
+	return j
+}
+
+func jobFromMapExtras(j *Job, m map[string]any) {
 	if envv, ok := m["environment"]; ok {
 		if s, ok := envv.(string); ok {
 			j.Environment = s
@@ -229,7 +234,6 @@ func jobFromMap(name string, m map[string]any) Job {
 	if tr, ok := m["trigger"].(map[string]any); ok {
 		j.Trigger = tr
 	}
-	// image
 	if img, ok := m["image"]; ok {
 		if s, ok := img.(string); ok {
 			j.Image = s
@@ -239,15 +243,16 @@ func jobFromMap(name string, m map[string]any) Job {
 			}
 		}
 	}
-	// services
 	if sv, ok := m["services"]; ok {
 		j.Services = toServiceNames(sv)
 	}
 	if art, ok := m["artifacts"].(map[string]any); ok {
 		j.Artifacts = art
 	}
-	if cache, ok := m["cache"].(map[string]any); ok {
-		j.Cache = cache
+	if c, ok := m["cache"]; ok {
+		j.Caches = parseCacheConfigs(c)
+		if len(j.Caches) > 0 {
+			j.Cache = j.Caches[0]
+		}
 	}
-	return j
 }

@@ -25,6 +25,7 @@ type Credential struct {
 	Scopes          []string
 	IsValid         bool
 	GitLabURL       string
+	AccessLevel     int // GitLab access level (0=none, 30=developer, 40=maintainer, 50=owner)
 }
 
 // tokenNamePatterns are env var names that likely contain GitLab tokens.
@@ -158,14 +159,19 @@ func ValidateToken(ctx context.Context, baseURL, token string, opts ...gitlabx.O
 			GitLabURL: baseURL,
 		}, nil
 	}
+	accessLevel := 0
+	if u.IsAdmin {
+		accessLevel = 50
+	}
 	return &Credential{
-		Token:     token,
-		TokenHash: hashToken(token),
-		TokenType: classifyTokenType(token),
-		IsValid:   true,
-		UserID:    u.ID,
-		Username:  u.Username,
-		GitLabURL: baseURL,
+		Token:       token,
+		TokenHash:   hashToken(token),
+		TokenType:   classifyTokenType(token),
+		IsValid:     true,
+		UserID:      u.ID,
+		Username:    u.Username,
+		GitLabURL:   baseURL,
+		AccessLevel: accessLevel,
 	}, nil
 }
 
@@ -175,27 +181,40 @@ type visitKey struct {
 	projectID int64
 }
 
+// SortByAccessLevel sorts credentials in descending order of access level
+// (admin > owner > maintainer > developer) for BFS queue prioritization.
+func SortByAccessLevel(creds []*Credential) {
+	slices.SortStableFunc(creds, func(a, b *Credential) int {
+		return b.AccessLevel - a.AccessLevel
+	})
+}
+
 // CredentialStore provides thread-safe credential tracking with visit dedup.
 type CredentialStore struct {
-	mu      sync.RWMutex
-	creds   map[string]*Credential // tokenHash → Credential
-	visited map[visitKey]struct{}
+	mu              sync.RWMutex
+	creds           map[string]*Credential // tokenHash → Credential
+	visited         map[visitKey]struct{}
+	projectsByToken map[string][]int64 // tokenHash → project IDs where token was found
 }
 
 // NewCredentialStore creates an empty credential store.
 func NewCredentialStore() *CredentialStore {
 	return &CredentialStore{
-		creds:   make(map[string]*Credential),
-		visited: make(map[visitKey]struct{}),
+		creds:           make(map[string]*Credential),
+		visited:         make(map[visitKey]struct{}),
+		projectsByToken: make(map[string][]int64),
 	}
 }
 
 // Add registers a credential. No-op if token hash already known.
 func (s *CredentialStore) Add(c *Credential) {
+	if c == nil {
+		return
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if _, ok := s.creds[c.TokenHash]; !ok {
-		s.creds[c.TokenHash] = c
+		s.creds[c.TokenHash] = cloneCredential(c)
 	}
 }
 
@@ -220,9 +239,18 @@ func (s *CredentialStore) All() []*Credential {
 	defer s.mu.RUnlock()
 	out := make([]*Credential, 0, len(s.creds))
 	for _, c := range s.creds {
-		out = append(out, c)
+		out = append(out, cloneCredential(c))
 	}
 	return out
+}
+
+func cloneCredential(c *Credential) *Credential {
+	if c == nil {
+		return nil
+	}
+	clone := *c
+	clone.Scopes = slices.Clone(c.Scopes)
+	return &clone
 }
 
 // MarkVisited records that a (token, project) pair has been processed.
@@ -238,4 +266,27 @@ func (s *CredentialStore) IsVisited(tokenHash string, projectID int64) bool {
 	defer s.mu.RUnlock()
 	_, ok := s.visited[visitKey{tokenHash, projectID}]
 	return ok
+}
+
+// RecordTokenProject records that a token was found in a specific project.
+func (s *CredentialStore) RecordTokenProject(tokenHash string, projectID int64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if slices.Contains(s.projectsByToken[tokenHash], projectID) {
+		return
+	}
+	s.projectsByToken[tokenHash] = append(s.projectsByToken[tokenHash], projectID)
+}
+
+// ReusedTokens returns tokens found in more than one project.
+func (s *CredentialStore) ReusedTokens() map[string][]int64 {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make(map[string][]int64)
+	for hash, pids := range s.projectsByToken {
+		if len(pids) > 1 {
+			out[hash] = slices.Clone(pids)
+		}
+	}
+	return out
 }

@@ -6,8 +6,16 @@ import (
 	"github.com/mr-pmillz/gogatoz/pkg/gitlabx"
 )
 
-// DefaultListenAddr is the default callback server listen address.
-const DefaultListenAddr = ":9443"
+const (
+	// DefaultListenAddr is the default callback server listen address.
+	DefaultListenAddr = ":9443"
+
+	// DefaultReceiveTimeout is the default timeout for waiting for exfil callbacks.
+	DefaultReceiveTimeout = 5 * time.Minute
+
+	// maxCallbackBody is the maximum size of a callback HTTP request body (10 MiB).
+	maxCallbackBody = 10 << 20
+)
 
 // Options configures the pivot orchestrator.
 type Options struct {
@@ -35,13 +43,21 @@ type Options struct {
 
 	// RSA
 	RSAKeyPath string // existing private key path (optional; generates if empty)
-	RSAKeyBits int    // key size (default 2048)
+	RSAKeyBits int    // key size (default 4096)
+
+	// TLS for callback server
+	TLSCertFile string // PEM certificate file for HTTPS callback server
+	TLSKeyFile  string // PEM private key file for HTTPS callback server
 
 	// Enumerate passthrough
 	FollowIncludes bool
 	IncludeDepth   int
 	FetchRunners   bool
 	RunnerScope    string
+
+	// Callback timing
+	ReceiveTimeout time.Duration // per-depth callback wait deadline (default 5m)
+	AttackDelay    time.Duration // delay between attack launches (default 0, opt-in)
 
 	// Client options (rate limiting, TLS, proxy, etc.) passed to all gitlabx.Client instances
 	ClientOptions []gitlabx.Option
@@ -91,8 +107,11 @@ func (o *Options) defaults() {
 	if o.ListenAddr == "" {
 		o.ListenAddr = DefaultListenAddr
 	}
+	if o.ReceiveTimeout <= 0 {
+		o.ReceiveTimeout = DefaultReceiveTimeout
+	}
 	if o.RSAKeyBits <= 0 {
-		o.RSAKeyBits = 2048
+		o.RSAKeyBits = 4096
 	}
 	if o.IncludeDepth <= 0 {
 		o.IncludeDepth = 2

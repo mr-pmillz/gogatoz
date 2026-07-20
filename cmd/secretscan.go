@@ -2,13 +2,12 @@ package cmd
 
 import (
 	"context"
-	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/mr-pmillz/gogatoz/pkg/gitlabx"
 	"github.com/mr-pmillz/gogatoz/pkg/secretscan"
@@ -74,7 +73,7 @@ Results are persisted to the local SQLite database for later querying.`,
 
 			if verbose {
 				if u, _, err := client.Ping(ctx); err == nil {
-					fmt.Fprintf(os.Stderr, "Authenticated as %s\n", u.Username)
+					slog.Info("authenticated", "username", u.Username)
 				}
 			}
 		}
@@ -95,9 +94,9 @@ Results are persisted to the local SQLite database for later querying.`,
 			ScanDir:      scanDir,
 			Progress: func(r secretscan.ScanResult) {
 				if r.Error != "" {
-					fmt.Fprintf(os.Stderr, "[secretscan] %s: error: %s\n", r.PathWithNamespace, r.Error)
+					slog.Error("secret scan error", "project", r.PathWithNamespace, "error", r.Error)
 				} else {
-					fmt.Fprintf(os.Stderr, "[secretscan] %s: %d findings (%dms)\n", r.PathWithNamespace, r.FindingsCount, r.DurationMS)
+					slog.Info("secret scan complete", "project", r.PathWithNamespace, "findings", r.FindingsCount, "duration_ms", r.DurationMS)
 				}
 			},
 		}
@@ -152,60 +151,15 @@ func init() {
 
 // buildSecretScanClient creates a GitLab client with the global HTTP/TLS options.
 func buildSecretScanClient() (*gitlabx.Client, error) {
-	clOpts := []gitlabx.Option{
-		gitlabx.WithRateLimit(rateRPS, rateBurst),
-		gitlabx.WithRetry(retryMax),
+	opts, err := buildClientOptions()
+	if err != nil {
+		return nil, err
 	}
-	if ua := strings.TrimSpace(userAgent); ua != "" {
-		clOpts = append(clOpts, gitlabx.WithUserAgent(ua))
-	}
-
-	var idleTO, tlsTO, expectTO, reqTO time.Duration
-	for _, pair := range []struct {
-		raw  string
-		dest *time.Duration
-		name string
-	}{
-		{httpIdleTimeout, &idleTO, "http-idle-timeout"},
-		{httpTLSTimeout, &tlsTO, "http-tls-timeout"},
-		{httpExpectTimeout, &expectTO, "http-expect-timeout"},
-		{httpRequestTimeout, &reqTO, "http-req-timeout"},
-	} {
-		if s := strings.TrimSpace(pair.raw); s != "" {
-			d, err := time.ParseDuration(s)
-			if err != nil {
-				return nil, fmt.Errorf("invalid --%s: %w", pair.name, err)
-			}
-			*pair.dest = d
-		}
-	}
-	if httpMaxIdle > 0 || httpMaxIdlePerHost > 0 {
-		clOpts = append(clOpts, gitlabx.WithHTTPPool(httpMaxIdle, httpMaxIdlePerHost))
-	}
-	if idleTO > 0 || tlsTO > 0 || expectTO > 0 || reqTO > 0 {
-		clOpts = append(clOpts, gitlabx.WithHTTPTimeouts(idleTO, tlsTO, expectTO, reqTO))
-	}
-	if insecureSkipTLS {
-		clOpts = append(clOpts, gitlabx.WithInsecureTLS(true))
-	}
-	if p := strings.TrimSpace(caCertPath); p != "" {
-		pem, err := os.ReadFile(p)
-		if err != nil {
-			return nil, fmt.Errorf("read --ca-cert: %w", err)
-		}
-		pool := x509.NewCertPool()
-		if !pool.AppendCertsFromPEM(pem) {
-			return nil, fmt.Errorf("--ca-cert: no valid PEM certificates found")
-		}
-		clOpts = append(clOpts, gitlabx.WithRootCAs(pool))
-	}
-	clOpts = appendSOCKS5Option(clOpts)
-
 	tok := token
 	if noToken {
 		tok = ""
 	}
-	return gitlabx.New(gitlabURL, tok, clOpts...)
+	return gitlabx.New(gitlabURL, tok, opts...)
 }
 
 // openOutputWriter returns a writer for command output and an optional closer.

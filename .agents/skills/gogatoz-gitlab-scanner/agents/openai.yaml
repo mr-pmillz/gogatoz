@@ -1,0 +1,4 @@
+interface:
+  display_name: "GoGatoZ GitLab Scanner"
+  short_description: "Scan authorized GitLab CI/CD projects"
+  default_prompt: "Use $gogatoz-gitlab-scanner to search and enumerate authorized GitLab projects for CI/CD risks."

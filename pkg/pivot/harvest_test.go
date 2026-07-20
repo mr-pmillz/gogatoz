@@ -163,3 +163,15 @@ func TestHarvester_MethodNotAllowed(t *testing.T) {
 		t.Errorf("expected 405, got %d", resp.StatusCode)
 	}
 }
+
+func TestParseEnvDump_LongEnvironmentValue(t *testing.T) {
+	value := strings.Repeat("x", 70*1024)
+	encoded := base64.StdEncoding.EncodeToString([]byte("LONG_VALUE=" + value + "\n"))
+	env, err := parseEnvDump(encoded)
+	if err != nil {
+		t.Fatalf("parse long environment line: %v", err)
+	}
+	if env["LONG_VALUE"] != value {
+		t.Fatalf("long environment value was truncated: got=%d want=%d", len(env["LONG_VALUE"]), len(value))
+	}
+}

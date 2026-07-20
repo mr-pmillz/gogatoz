@@ -1,0 +1,4 @@
+interface:
+  display_name: "Bump Dependencies"
+  short_description: "Safely apply grouped dependency updates"
+  default_prompt: "Use $bump-deps to apply dependency updates without merging stale Dependabot branches."

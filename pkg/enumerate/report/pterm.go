@@ -107,8 +107,20 @@ func RenderPTerm(w io.Writer, r Report) error {
 		}
 	}
 
+	// Supply chain risk summary
+	if r.SupplyChain.TotalRisk > 0 {
+		renderSupplyChainSection(w, r.SupplyChain)
+	}
+
 	// Runner, pipeline, and log stats
-	return renderStatsSection(w, r)
+	if err := renderStatsSection(w, r); err != nil {
+		return err
+	}
+
+	// Attack surface recommendations
+	renderRecommendations(w, r.Recommendations)
+
+	return nil
 }
 
 // renderProjectsTable renders the projects overview table.
@@ -165,7 +177,7 @@ func renderProjectFindings(w io.Writer, projects []ProjectView) error {
 				items = append(items, pterm.BulletListItem{Level: 1, Text: fmt.Sprintf("evidence: %s", truncate(f.Evidence, 160))})
 			}
 			if f.Recommendation != "" {
-				items = append(items, pterm.BulletListItem{Level: 1, Text: fmt.Sprintf("recommendation: %s", truncate(f.Recommendation, 160))})
+				items = append(items, pterm.BulletListItem{Level: 1, Text: fmt.Sprintf("recommendation: %s", f.Recommendation)})
 			}
 		}
 
@@ -260,4 +272,62 @@ func appendPipelineStats(items []pterm.BulletListItem, pv PipelinesView) []pterm
 		items = append(items, pterm.BulletListItem{Level: 1, Text: fmt.Sprintf("Components: %d", pv.Components)})
 	}
 	return items
+}
+
+func renderSupplyChainSection(w io.Writer, sc SupplyChainView) {
+	var items []pterm.BulletListItem
+	items = append(items, pterm.BulletListItem{Level: 0, Text: pterm.Bold.Sprint("Supply Chain Risk Summary")})
+	add := func(label string, count int) {
+		if count > 0 {
+			items = append(items, pterm.BulletListItem{Level: 1, Text: fmt.Sprintf("%s: %d", label, count)})
+		}
+	}
+	add("Exfiltration findings", sc.ExfilFindings)
+	add("Encoded payloads", sc.EncodedPayloads)
+	add("Campaign matches", sc.CampaignMatches)
+	add("Suspicious network targets", sc.SuspiciousNetwork)
+	add("Obfuscation issues", sc.ObfuscationIssues)
+	add("Weak branch protection", sc.WeakProtection)
+	add("Dependency confusion", sc.DepConfusion)
+	add("AI config risk", sc.AIConfigRisk)
+	add("OIDC provenance anomaly", sc.OIDCAnomaly)
+	items = append(items, pterm.BulletListItem{Level: 1, Text: pterm.Bold.Sprintf("Total risk indicators: %d", sc.TotalRisk)})
+
+	if bl, err := pterm.DefaultBulletList.WithItems(items).Srender(); err == nil {
+		fmt.Fprintln(w, bl)
+	}
+}
+
+func renderRecommendations(w io.Writer, recs []Recommendation) {
+	if len(recs) == 0 {
+		return
+	}
+	hdr := pterm.DefaultSection.WithLevel(2)
+	fmt.Fprintln(w, hdr.Sprint("Attack Surface Recommendations"))
+
+	tableData := pterm.TableData{{"Category", "Risk", "Summary", "Projects"}}
+	for _, r := range recs {
+		risk := r.Risk
+		switch r.Risk {
+		case "CRITICAL":
+			risk = pterm.FgRed.Sprint(r.Risk)
+		case "HIGH":
+			risk = pterm.FgYellow.Sprint(r.Risk)
+		case "MEDIUM":
+			risk = pterm.FgCyan.Sprint(r.Risk)
+		}
+		projCount := fmt.Sprintf("%d", len(r.Projects))
+		tableData = append(tableData, []string{r.Category, risk, r.Summary, projCount})
+	}
+	tbl, _ := pterm.DefaultTable.WithHasHeader().WithData(tableData).Srender()
+	fmt.Fprintln(w, tbl)
+
+	// Print commands
+	for _, r := range recs {
+		if r.Command != "" {
+			prefix := pterm.FgLightCyan.Sprintf("  %s:", r.Category)
+			fmt.Fprintf(w, "%s %s\n", prefix, r.Command)
+		}
+	}
+	fmt.Fprintln(w)
 }

@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/mr-pmillz/gogatoz/pkg/pipeline"
+	"github.com/mr-pmillz/gogatoz/pkg/stringutil"
 )
 
 // Finding ID constants for supply chain attack techniques.
@@ -112,7 +113,7 @@ func detectScriptInjectionRisk(doc *pipeline.Document) []Finding {
 					Severity:    severity,
 					Title:       "MR job executes external repo script",
 					Description: desc,
-					Evidence:    truncateEvidence("script="+line, 200),
+					Evidence:    stringutil.TruncateEvidence("script="+line, 200),
 					JobName:     job.Name,
 				})
 				break // one finding per job is sufficient
@@ -208,49 +209,53 @@ func detectCachePoisoningRisk(doc *pipeline.Document) []Finding {
 			continue
 		}
 
-		if job.Cache == nil {
+		caches := job.Caches
+		if len(caches) == 0 && job.Cache != nil {
+			caches = []map[string]any{job.Cache}
+		}
+		if len(caches) == 0 && len(doc.Cache) > 0 {
+			caches = doc.Cache
+		}
+		if len(caches) == 0 {
 			continue
 		}
 
-		policy := extractCachePolicy(job.Cache)
-		if policy == "" {
-			// Default policy is pull-push, which is risky
-			policy = "pull-push (default)"
+		for _, cache := range caches {
+			policy := extractCachePolicy(cache)
+			if policy == "" {
+				policy = "pull-push (default)"
+			}
+
+			if !strings.Contains(strings.ToLower(policy), "push") {
+				continue
+			}
+
+			severity := SeverityMedium
+			desc := fmt.Sprintf(
+				"MR-triggered job uses cache with policy %q. An attacker can poison the cache from a fork MR pipeline, injecting malicious content that affects subsequent builds on the default branch.",
+				policy,
+			)
+
+			if !checkForkProtection(job.Rules) {
+				severity = SeverityHigh
+				desc += " No fork protection detected."
+			}
+
+			findings = append(findings, Finding{
+				ID:          CachePoisoningRiskID,
+				Severity:    severity,
+				Title:       "MR job can poison shared cache",
+				Description: desc,
+				Evidence:    stringutil.TruncateEvidence(fmt.Sprintf("cache=%s policy=%s", toJSONString(cache), policy), 200),
+				JobName:     job.Name,
+			})
 		}
-
-		isPushPolicy := strings.Contains(strings.ToLower(policy), "push")
-		if !isPushPolicy {
-			continue
-		}
-
-		severity := SeverityMedium
-		desc := fmt.Sprintf(
-			"MR-triggered job uses cache with policy %q. An attacker can poison the cache from a fork MR pipeline, injecting malicious content that affects subsequent builds on the default branch.",
-			policy,
-		)
-
-		// Escalate if no fork protection
-		if !checkForkProtection(job.Rules) {
-			severity = SeverityHigh
-			desc += " No fork protection detected."
-		}
-
-		findings = append(findings, Finding{
-			ID:          CachePoisoningRiskID,
-			Severity:    severity,
-			Title:       "MR job can poison shared cache",
-			Description: desc,
-			Evidence:    truncateEvidence(fmt.Sprintf("cache=%s policy=%s", toJSONString(job.Cache), policy), 200),
-			JobName:     job.Name,
-		})
 	}
 	return findings
 }
 
 // extractCachePolicy extracts the cache policy from a cache configuration map.
-// GitLab cache can be a map with "policy" key, or an array of cache configs.
 func extractCachePolicy(cache map[string]any) string {
-	// Direct policy key
 	if p, ok := cache["policy"]; ok {
 		if s, ok := p.(string); ok {
 			return s

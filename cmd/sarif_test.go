@@ -335,3 +335,126 @@ func TestBuildSARIF_RegistryMetadata(t *testing.T) {
 		t.Errorf("fullDescription = %v, want registry description", rule.FullDescription)
 	}
 }
+
+func TestBuildSARIF_CWETags(t *testing.T) {
+	findings := []analyze.Finding{
+		{ID: "PLAINTEXT_SECRET", Severity: analyze.SeverityMedium, Title: "t", Evidence: "e"},
+	}
+	s := buildSARIF(findings, "1.0.0")
+	rule := s.Runs[0].Tool.Driver.Rules[0]
+
+	tags, ok := rule.Properties["tags"]
+	if !ok {
+		t.Fatal("rule missing tags property")
+	}
+	tagSlice, ok := tags.([]string)
+	if !ok {
+		t.Fatalf("tags is %T, want []string", tags)
+	}
+
+	hasCWE := false
+	for _, tag := range tagSlice {
+		if tag == "external/cwe/cwe-312" {
+			hasCWE = true
+		}
+	}
+	if !hasCWE {
+		t.Errorf("tags %v missing expected CWE-312 tag", tagSlice)
+	}
+}
+
+func TestBuildSARIF_CWERelationships(t *testing.T) {
+	findings := []analyze.Finding{
+		{ID: "VARIABLE_INJECTION", Severity: analyze.SeverityMedium, Title: "t", Evidence: "e"},
+	}
+	s := buildSARIF(findings, "1.0.0")
+	rule := s.Runs[0].Tool.Driver.Rules[0]
+
+	if len(rule.Relationships) == 0 {
+		t.Fatal("expected CWE relationships on rule, got none")
+	}
+
+	found := false
+	for _, rel := range rule.Relationships {
+		if rel.Target.ID == "CWE-78" && rel.Target.ToolComponent.Name == "CWE" {
+			found = true
+			if len(rel.Kinds) != 1 || rel.Kinds[0] != "superset" {
+				t.Errorf("relationship kinds = %v, want [superset]", rel.Kinds)
+			}
+		}
+	}
+	if !found {
+		t.Error("expected CWE-78 relationship for VARIABLE_INJECTION")
+	}
+}
+
+func TestBuildSARIF_Taxonomies(t *testing.T) {
+	findings := []analyze.Finding{
+		{ID: "PLAINTEXT_SECRET", Severity: analyze.SeverityMedium, Title: "t", Evidence: "e"},
+	}
+	s := buildSARIF(findings, "1.0.0")
+	run := s.Runs[0]
+
+	if len(run.Taxonomies) == 0 {
+		t.Fatal("expected at least one taxonomy, got none")
+	}
+
+	cweTax := run.Taxonomies[0]
+	if cweTax.Name != "CWE" {
+		t.Errorf("taxonomy name = %q, want %q", cweTax.Name, "CWE")
+	}
+	if cweTax.Organization != "MITRE" {
+		t.Errorf("taxonomy organization = %q, want %q", cweTax.Organization, "MITRE")
+	}
+	if len(cweTax.Taxa) == 0 {
+		t.Error("expected taxa entries, got none")
+	}
+}
+
+func TestBuildSARIF_OWASPAndATTACKTags(t *testing.T) {
+	findings := []analyze.Finding{
+		{ID: "VARIABLE_INJECTION", Severity: analyze.SeverityMedium, Title: "t", Evidence: "e"},
+	}
+	s := buildSARIF(findings, "1.0.0")
+	rule := s.Runs[0].Tool.Driver.Rules[0]
+
+	tags, ok := rule.Properties["tags"].([]string)
+	if !ok {
+		t.Fatal("tags not present or wrong type")
+	}
+
+	hasOWASP := false
+	hasATTACK := false
+	for _, tag := range tags {
+		if tag == "external/owasp-cicd/CICD-SEC-4" {
+			hasOWASP = true
+		}
+		if tag == "external/mitre-attack/T1059" {
+			hasATTACK = true
+		}
+	}
+	if !hasOWASP {
+		t.Errorf("tags %v missing OWASP CICD-SEC-4 tag", tags)
+	}
+	if !hasATTACK {
+		t.Errorf("tags %v missing ATT&CK T1059 tag", tags)
+	}
+}
+
+func TestBuildSARIF_NoTaxonomyForUnknownFinding(t *testing.T) {
+	findings := []analyze.Finding{
+		{ID: "TOTALLY_UNKNOWN_FINDING", Severity: analyze.SeverityLow, Title: "t", Evidence: "e"},
+	}
+	s := buildSARIF(findings, "1.0.0")
+	rule := s.Runs[0].Tool.Driver.Rules[0]
+
+	if _, ok := rule.Properties["tags"]; ok {
+		t.Error("unknown finding should not have taxonomy tags")
+	}
+	if len(rule.Relationships) > 0 {
+		t.Error("unknown finding should not have relationships")
+	}
+	if len(s.Runs[0].Taxonomies) > 0 {
+		t.Error("run should have no taxonomies when no findings have CWE refs")
+	}
+}

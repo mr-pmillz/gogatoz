@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/mr-pmillz/gogatoz/pkg/pipeline"
+	"github.com/mr-pmillz/gogatoz/pkg/stringutil"
 )
 
 // GitLab CI variables that are attacker-controllable and unsafe for direct use in scripts
@@ -117,7 +118,7 @@ func detectVariableInjection(doc *pipeline.Document) []Finding {
 						Severity:    severity,
 						Title:       "Unsafe CI variable usage in script",
 						Description: desc,
-						Evidence:    truncateEvidence("variable="+v+" in: "+scriptLine, 200),
+						Evidence:    stringutil.TruncateEvidence("variable="+v+" in: "+scriptLine, 200),
 						JobName:     job.Name,
 					})
 				}
@@ -218,7 +219,7 @@ func detectForkMRRisks(doc *pipeline.Document) []Finding {
 				Severity:    severity,
 				Title:       "MR job lacks fork protection",
 				Description: desc,
-				Evidence:    truncateEvidence("rules="+toJSONString(job.Rules), 200),
+				Evidence:    stringutil.TruncateEvidence("rules="+toJSONString(job.Rules), 200),
 				JobName:     job.Name,
 			})
 		}
@@ -266,7 +267,7 @@ func isLocalScriptExecution(line string) bool {
 	}
 
 	// ./ prefix (but not ./... which is a Go wildcard)
-	if strings.HasPrefix(trimmed, "./") && !strings.HasPrefix(trimmed, "./.") {
+	if strings.HasPrefix(trimmed, "./") && trimmed != "./..." && !strings.HasPrefix(trimmed, "./... ") {
 		return true
 	}
 	// .\ prefix (Windows)
@@ -340,7 +341,7 @@ func detectForkScriptExecution(doc *pipeline.Document) []Finding {
 					Severity:    severity,
 					Title:       "Fork MR can modify executed repo script",
 					Description: desc,
-					Evidence:    truncateEvidence("script="+line, 200),
+					Evidence:    stringutil.TruncateEvidence("script="+line, 200),
 					JobName:     job.Name,
 				})
 				break // one finding per job is sufficient
@@ -448,7 +449,7 @@ func detectAIPromptInjection(doc *pipeline.Document) []Finding {
 			Severity:    severity,
 			Title:       "AI tool in MR-triggered job vulnerable to prompt injection",
 			Description: desc.String(),
-			Evidence:    truncateEvidence("ai_invocation="+aiLine, 200),
+			Evidence:    stringutil.TruncateEvidence("ai_invocation="+aiLine, 200),
 			JobName:     job.Name,
 		})
 	}
@@ -500,11 +501,104 @@ func detectArtifactPoisoning(doc *pipeline.Document) []Finding {
 				Severity:    severity,
 				Title:       "Job consumes artifacts from MR-triggered sources",
 				Description: desc,
-				Evidence:    truncateEvidence("needs="+strings.Join(riskyNeeds, ","), 150),
+				Evidence:    stringutil.TruncateEvidence("needs="+strings.Join(riskyNeeds, ","), 150),
 				JobName:     job.Name,
 			})
 		}
 	}
 
+	// Chain detection: if B consumes from MR-triggered A, and C consumes from B,
+	// C is transitively at risk even if B itself isn't MR-triggered.
+	findings = append(findings, detectArtifactChainPoisoning(doc, artifactProducers)...)
+
 	return findings
+}
+
+const ArtifactChainPoisoningID = "ARTIFACT_CHAIN_POISONING"
+
+func computeTaintedProducers(needsMap map[string][]string, producers map[string]bool) map[string]bool {
+	tainted := map[string]bool{}
+	for name, isMR := range producers {
+		if isMR {
+			tainted[name] = true
+		}
+	}
+	changed := true
+	for changed {
+		changed = false
+		for name, needs := range needsMap {
+			if tainted[name] {
+				continue
+			}
+			if _, isProducer := producers[name]; !isProducer {
+				continue
+			}
+			for _, n := range needs {
+				if tainted[n] {
+					tainted[name] = true
+					changed = true
+					break
+				}
+			}
+		}
+	}
+	return tainted
+}
+
+func detectArtifactChainPoisoning(doc *pipeline.Document, producers map[string]bool) []Finding {
+	var findings []Finding
+
+	needsMap := map[string][]string{}
+	for _, job := range doc.Jobs {
+		if len(job.Needs) > 0 {
+			needsMap[job.Name] = job.Needs
+		}
+	}
+
+	tainted := computeTaintedProducers(needsMap, producers)
+
+	for _, job := range doc.Jobs {
+		if len(job.Needs) == 0 {
+			continue
+		}
+		for _, need := range job.Needs {
+			if !tainted[need] {
+				continue
+			}
+			if isMR, direct := producers[need]; direct && isMR {
+				continue
+			}
+
+			chain := buildChain(need, needsMap, tainted, 10)
+
+			sev := SeverityMedium
+			if len(job.Tags) > 0 {
+				sev = SeverityHigh
+			}
+			findings = append(findings, Finding{
+				ID:       ArtifactChainPoisoningID,
+				Severity: sev,
+				Title:    "Artifact chain poisoning via transitive dependency",
+				Description: "Job consumes artifacts from a job that is transitively tainted by " +
+					"an MR-triggered producer. A fork MR can poison the root, " +
+					"propagating through intermediate jobs.",
+				Evidence: stringutil.TruncateEvidence(
+					"chain="+strings.Join(chain, " -> ")+" -> "+job.Name, 200),
+				JobName: job.Name,
+			})
+		}
+	}
+	return findings
+}
+
+func buildChain(name string, needsMap map[string][]string, tainted map[string]bool, maxDepth int) []string {
+	if maxDepth <= 0 {
+		return []string{name}
+	}
+	for _, need := range needsMap[name] {
+		if tainted[need] {
+			return append(buildChain(need, needsMap, tainted, maxDepth-1), name)
+		}
+	}
+	return []string{name}
 }

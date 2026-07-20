@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/mr-pmillz/gogatoz/pkg/pipeline"
+	"github.com/mr-pmillz/gogatoz/pkg/stringutil"
 )
 
 // detectDispatchTOCTOU flags risks around manual jobs or downstream triggers that can be invoked out-of-order
@@ -75,7 +76,7 @@ func detectDispatchTOCTOU(doc *pipeline.Document) []Finding {
 			Severity:    severity,
 			Title:       "Manual/triggered job may be vulnerable to TOCTOU",
 			Description: desc,
-			Evidence:    truncateEvidence(strings.Join(evParts, " "), 200),
+			Evidence:    stringutil.TruncateEvidence(strings.Join(evParts, " "), 200),
 			JobName:     job.Name,
 		})
 	}
@@ -118,7 +119,7 @@ func detectPwnRequestNuances(doc *pipeline.Document) []Finding {
 			Severity:    sev,
 			Title:       "MR-triggered deployment may allow privilege escalation",
 			Description: desc,
-			Evidence:    truncateEvidence("env="+job.Environment+" rules="+toJSONString(job.Rules), 200),
+			Evidence:    stringutil.TruncateEvidence("env="+job.Environment+" rules="+toJSONString(job.Rules), 200),
 			JobName:     job.Name,
 		})
 	}
@@ -150,7 +151,7 @@ func detectPrivilegedRunnerUse(doc *pipeline.Document) []Finding {
 			Severity:    sev,
 			Title:       "Privileged container context on MR-triggered job",
 			Description: desc,
-			Evidence:    truncateEvidence("image="+job.Image+" services="+strings.Join(job.Services, ","), 200),
+			Evidence:    stringutil.TruncateEvidence("image="+job.Image+" services="+strings.Join(job.Services, ","), 200),
 			JobName:     job.Name,
 		})
 	}

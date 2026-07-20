@@ -227,23 +227,37 @@ func filterConcurrent(ctx context.Context, cl *gitlabx.Client, projects []*gitla
 		go func() {
 			defer wg.Done()
 			for j := range in {
-				out <- result{p: j.p, ok: fn(ctx, cl, j.p)}
+				ok := func() (res bool) {
+					defer func() {
+						if r := recover(); r != nil {
+							res = false
+						}
+					}()
+					return fn(ctx, cl, j.p)
+				}()
+				out <- result{p: j.p, ok: ok}
 			}
 		}()
 	}
 	go func() {
+		defer close(in)
 		for _, p := range projects {
-			in <- job{p: p}
+			select {
+			case in <- job{p: p}:
+			case <-ctx.Done():
+				return
+			}
 		}
-		close(in)
+	}()
+	go func() {
+		wg.Wait()
+		close(out)
 	}()
 	var filtered []*gitlab.Project
-	for range projects {
-		r := <-out
+	for r := range out {
 		if r.ok {
 			filtered = append(filtered, r.p)
 		}
 	}
-	wg.Wait()
 	return filtered
 }

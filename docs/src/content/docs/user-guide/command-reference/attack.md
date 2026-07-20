@@ -55,6 +55,7 @@ gogatoz attack [options]
   - `git-hook`: Install git hooks on runner build dirs to capture tokens from subsequent jobs.
   - `cache-poison`: Poison CI cache with malicious content (targets shared cache keys).
   - `infostealer`: Expanded credential sweep (40+ paths) covering AI tools, chat/IM, VPN, K8s, Docker, `gh auth token`, and recursive `.env` file discovery.
+  - `job-token-push`: Attempt an isolated marker-branch push with `CI_JOB_TOKEN` and retain a sanitized success/denial report as an artifact.
 
 ### Common payload options
 - `--job-name` string: Job name.
