@@ -1,5 +1,12 @@
 # GoGatoZ
 
+![GoGatoZ Meets BloodHound](docs/public/images/GoGatoZ_Logo.jpg)
+
+[![CI](https://github.com/mr-pmillz/gogatoz/actions/workflows/ci.yml/badge.svg)](https://github.com/mr-pmillz/gogatoz/actions/workflows/ci.yml)
+[![Release](https://github.com/mr-pmillz/gogatoz/actions/workflows/release.yml/badge.svg)](https://github.com/mr-pmillz/gogatoz/releases)
+[![Go Version](https://img.shields.io/github/go-mod/go-version/mr-pmillz/gogatoz)](https://go.dev/)
+[![Plumber Score](https://score.getplumber.io/github.com/mr-pmillz/gogatoz.svg)](https://score.getplumber.io/github.com/mr-pmillz/gogatoz)
+
 **GitLab CI/CD security scanner and attack toolkit** -- the Go port of [Gato-X](https://github.com/AdnaneKhan/Gato-X), adapted for GitLab.
 
 GoGatoZ discovers GitLab projects, scans their CI/CD configurations for security vulnerabilities, exploits misconfigurations, and maps attack paths with BloodHound-CE integration.

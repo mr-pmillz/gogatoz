@@ -36,7 +36,7 @@ jobs:
       github.event.head_commit.message != 'chore: update changelog'
     steps:
       - name: Checkout release branch
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v7
         with:
           fetch-depth: 0
           ref: ${{ github.ref_name }}
@@ -85,15 +85,72 @@ jobs:
           GITHUB_REPO: ${{ github.repository }}
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
 
-      - name: Commit CHANGELOG.md if changed
+      - name: Commit verified CHANGELOG.md if changed
         env:
           BRANCH: ${{ github.ref_name }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           set -euo pipefail
           if git diff --quiet -- CHANGELOG.md; then
             echo "::notice::CHANGELOG.md unchanged; nothing to commit."
             exit 0
           fi
-          git add CHANGELOG.md
-          git commit -m "chore: update changelog"
-          git push origin "HEAD:${BRANCH}"
+
+          # Build the new Git objects through the API. Creating the commit with
+          # a GitHub App installation token makes GitHub sign it for the App.
+          PARENT_SHA="$(git rev-parse HEAD)"
+          BASE_TREE_SHA="$(git rev-parse "${PARENT_SHA}^{tree}")"
+          BLOB_SHA="$(
+            gh api --method POST "repos/${GITHUB_REPOSITORY}/git/blobs" \
+              -F 'content=@CHANGELOG.md' \
+              -f 'encoding=utf-8' \
+              --jq '.sha'
+          )"
+          TREE_SHA="$(
+            jq -n \
+              --arg base_tree "$BASE_TREE_SHA" \
+              --arg blob_sha "$BLOB_SHA" \
+              '{
+                base_tree: $base_tree,
+                tree: [{
+                  path: "CHANGELOG.md",
+                  mode: "100644",
+                  type: "blob",
+                  sha: $blob_sha
+                }]
+              }' |
+              gh api --method POST "repos/${GITHUB_REPOSITORY}/git/trees" \
+                --input - \
+                --jq '.sha'
+          )"
+          COMMIT_RESPONSE="$(
+            gh api --method POST "repos/${GITHUB_REPOSITORY}/git/commits" \
+              -f 'message=chore: update changelog' \
+              -f "tree=${TREE_SHA}" \
+              -f "parents[]=${PARENT_SHA}"
+          )"
+          COMMIT_SHA="$(jq -er '.sha' <<<"$COMMIT_RESPONSE")"
+
+          if ! jq -e \
+            '.verification.verified == true and .verification.reason == "valid"' \
+            <<<"$COMMIT_RESPONSE" >/dev/null; then
+            REASON="$(jq -r '.verification.reason // "missing"' <<<"$COMMIT_RESPONSE")"
+            echo "::error::GitHub did not return a valid signature for commit ${COMMIT_SHA} (reason: ${REASON}); branch not updated."
+            exit 1
+          fi
+
+          # Never overwrite a commit that landed while the changelog was being
+          # generated. force=false permits only a fast-forward ref update.
+          UPDATED_SHA="$(
+            gh api --method PATCH \
+              "repos/${GITHUB_REPOSITORY}/git/refs/heads/${BRANCH}" \
+              -f "sha=${COMMIT_SHA}" \
+              -F 'force=false' \
+              --jq '.object.sha'
+          )"
+          if [[ "$UPDATED_SHA" != "$COMMIT_SHA" ]]; then
+            echo "::error::Branch update returned ${UPDATED_SHA}; expected ${COMMIT_SHA}."
+            exit 1
+          fi
+
+          echo "::notice::Created verified changelog commit ${COMMIT_SHA} on ${BRANCH}."
