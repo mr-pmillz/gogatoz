@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented [here](https://github.com/mr-pmillz/gogatoz/blob/main/CHANGELOG.md)
 
+## [0.6.1](https://github.com/mr-pmillz/gogatoz/compare/v0.6.0...v0.6.1) - 2026-07-31
+
+### ✨ New features
+
+- Added logo, badges to readme, and plumber workflow - ([58c3281](https://github.com/mr-pmillz/gogatoz/commit/58c3281d61442d1ac6a4008e21df568d81562707))
+
+### ⚙️  Miscellaneous
+
+- Merge pull request #43 from mr-pmillz/qa/updates - ([dc34e6c](https://github.com/mr-pmillz/gogatoz/commit/dc34e6c3ffa86f6dd3d326ab518d7a1cf15edc35))
+- Qa/updates - ([dc34e6c](https://github.com/mr-pmillz/gogatoz/commit/dc34e6c3ffa86f6dd3d326ab518d7a1cf15edc35))
+- Do not cache setup-go action on release job - ([452d68a](https://github.com/mr-pmillz/gogatoz/commit/452d68afe509be412a4deef675955a8650921a68))
+- Ci(deps): bump github actions - ([02a7292](https://github.com/mr-pmillz/gogatoz/commit/02a7292351b165597199a85c5c79e7c945f99602))
+- Astro version bump - ([f639c7e](https://github.com/mr-pmillz/gogatoz/commit/f639c7ef3c4443c1fd109595763873d59dd8513a))
+- Use signed commits for gogatoz gh app changelog commit - ([31f263f](https://github.com/mr-pmillz/gogatoz/commit/31f263fe455b4ee7a561fb85afb2562182771f30))
+- Remove markdown file - ([21e8e86](https://github.com/mr-pmillz/gogatoz/commit/21e8e867847bbb8ee33c6b44a00e43b74a360dbc))
+- Merge pull request #36 from mr-pmillz/main - ([efda828](https://github.com/mr-pmillz/gogatoz/commit/efda828fabe403b598cdcf51195cfeb1316cbb44))
+- Sync main back 2 develop - ([efda828](https://github.com/mr-pmillz/gogatoz/commit/efda828fabe403b598cdcf51195cfeb1316cbb44))
+
 ## [0.6.0](https://github.com/mr-pmillz/gogatoz/compare/v0.5.9...v0.6.0) - 2026-07-20
 
 ### ✨ New features
@@ -101,6 +119,9 @@ All notable changes to this project will be documented [here](https://github.com
 
 ### ⚙️  Miscellaneous
 
+- Merge pull request #35 from mr-pmillz/release/v0.6.0 - ([4c8a156](https://github.com/mr-pmillz/gogatoz/commit/4c8a156b5bd7fb20b5e1ac3580b2333acf2b085b))
+- Release/v0.6.0 - ([4c8a156](https://github.com/mr-pmillz/gogatoz/commit/4c8a156b5bd7fb20b5e1ac3580b2333acf2b085b))
+- Chore: update changelog - ([33692f6](https://github.com/mr-pmillz/gogatoz/commit/33692f6d3731cbbf03faca5f125f53767c273276))
 - Merge pull request #34 from mr-pmillz/feat/research - ([3757b6f](https://github.com/mr-pmillz/gogatoz/commit/3757b6f062a6f7362b3f365f288c0629e0cf9e9b))
 - New testing features and techniques - ([3757b6f](https://github.com/mr-pmillz/gogatoz/commit/3757b6f062a6f7362b3f365f288c0629e0cf9e9b))
 - Recommendation text contains actionable guidance with full URLs that - ([676f1e8](https://github.com/mr-pmillz/gogatoz/commit/676f1e85e0ccac5efe11370b47b24e0f334fc2bf))
