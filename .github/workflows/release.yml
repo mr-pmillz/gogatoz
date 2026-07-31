@@ -30,7 +30,8 @@ jobs:
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # ratchet:actions/setup-go@v7.0.0
         with:
           go-version-file: go.mod
-          cache: true
+          # Release artifacts must not consume caches populated by lower-trust runs.
+          cache: false
 
       - name: Set GOPATH
         run: |
