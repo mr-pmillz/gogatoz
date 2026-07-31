@@ -1,0 +1,7 @@
+# CODEOWNERS — require maintainer review on security-sensitive paths.
+# Enforced only when branch protection has "Require review from Code Owners"
+# enabled for the target branch. Listing a path here means a PR touching it
+# needs approval from the listed owner(s).
+
+# default owner
+*   @mr-pmillz
