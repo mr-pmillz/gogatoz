@@ -3,9 +3,56 @@ package depscan
 import (
 	"context"
 	"errors"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 )
+
+func TestRegistryReleaseProviderParsesSupportedEcosystems(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.EscapedPath() {
+		case "/@scope%2Fsafe-package":
+			_, _ = io.WriteString(w, `{"time":{"created":"2026-01-01T00:00:00Z","1.2.3":"2026-07-31T10:00:00Z"}}`)
+		case "/pypi/safe-python/json":
+			_, _ = io.WriteString(w, `{"releases":{"2.0.0":[{"upload_time_iso_8601":"2026-07-31T10:30:00Z"}]}}`)
+		case "/api/v1/versions/safe-gem.json":
+			_, _ = io.WriteString(w, `[{"number":"3.0.0","created_at":"2026-07-31T11:00:00Z"}]`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	t.Setenv("GOGATOZ_NPM_REGISTRY_URL", server.URL)
+	t.Setenv("GOGATOZ_PYPI_REGISTRY_URL", server.URL)
+	t.Setenv("GOGATOZ_RUBYGEMS_REGISTRY_URL", server.URL)
+	provider, err := newRegistryReleaseProvider(time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, test := range []struct {
+		ecosystem string
+		name      string
+		version   string
+	}{
+		{ecosystem: "npm", name: "@scope/safe-package", version: "1.2.3"},
+		{ecosystem: "pypi", name: "safe-python", version: "2.0.0"},
+		{ecosystem: "gem", name: "safe-gem", version: "3.0.0"},
+	} {
+		t.Run(test.ecosystem, func(t *testing.T) {
+			history, historyErr := provider.ReleaseHistory(context.Background(), test.ecosystem, test.name)
+			if historyErr != nil {
+				t.Fatalf("ReleaseHistory: %v", historyErr)
+			}
+			if len(history.Versions) != 1 || history.Versions[0].Version != test.version || history.Versions[0].PublishedAt.IsZero() {
+				t.Fatalf("history = %+v", history)
+			}
+		})
+	}
+}
 
 type fakeReleaseProvider struct {
 	histories map[string]ReleaseHistory
