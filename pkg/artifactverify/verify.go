@@ -109,9 +109,42 @@ func Verify(ctx context.Context, opts Options) (Report, error) {
 		ExpandedBytes:  archive.expandedBytes,
 		Findings:       analyzeFiles(archive.files),
 	}
+	if source := strings.TrimSpace(opts.Source); source != "" {
+		sourceReport, sourceErr := inspectSource(ctx, source, limits, opts.HTTPClient)
+		if sourceErr != nil {
+			return Report{}, sourceErr
+		}
+		report.Source = source
+		report.SourceFiles = len(sourceReport.files)
+		report.SourceBytes = sourceReport.expandedBytes
+		report.Findings = append(report.Findings, compareSource(
+			archive.files, sourceReport.files, archive.expandedBytes, sourceReport.expandedBytes,
+		)...)
+	}
+	expected := provenanceExpectations{
+		repository: strings.TrimSpace(opts.ExpectedRepository),
+		commit:     strings.TrimSpace(opts.ExpectedCommit),
+		ref:        strings.TrimSpace(opts.ExpectedRef),
+		pipeline:   strings.TrimSpace(opts.ExpectedPipeline),
+	}
+	if strings.TrimSpace(opts.Provenance) != "" || hasProvenanceExpectation(expected) {
+		summary, provenanceFindings, provenanceErr := inspectProvenance(
+			ctx, opts.Provenance, expected, limits.MaxFileBytes, opts.HTTPClient,
+		)
+		if provenanceErr != nil {
+			return Report{}, provenanceErr
+		}
+		report.Provenance = summary
+		report.Findings = append(report.Findings, provenanceFindings...)
+	}
+	report.Findings = append(report.Findings, releaseTagFindings(archive.files, expected.ref)...)
 	slog.Info("completed static package artifact verification",
 		"files", report.Files, "expanded_bytes", report.ExpandedBytes, "findings", len(report.Findings))
 	return report, nil
+}
+
+func hasProvenanceExpectation(expected provenanceExpectations) bool {
+	return expected.repository != "" || expected.commit != "" || expected.ref != "" || expected.pipeline != ""
 }
 
 func normalizedLimits(limits Limits) (Limits, error) {
