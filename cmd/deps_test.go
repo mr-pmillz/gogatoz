@@ -16,10 +16,23 @@ import (
 )
 
 type fakeDependencyScanRunner struct {
-	report depscan.Report
-	err    error
-	paths  []string
-	closed bool
+	report         depscan.Report
+	err            error
+	paths          []string
+	closed         bool
+	releaseCalled  bool
+	releaseOptions depscan.ReleaseIntelOptions
+}
+
+func (s *fakeDependencyScanRunner) ScanReleaseIntel(
+	_ context.Context,
+	paths []string,
+	options depscan.ReleaseIntelOptions,
+) (depscan.Report, error) {
+	s.paths = append([]string(nil), paths...)
+	s.releaseCalled = true
+	s.releaseOptions = options
+	return s.report, s.err
 }
 
 func (s *fakeDependencyScanRunner) ScanSBOM(
@@ -191,6 +204,42 @@ func TestRunDependencyAuditFailOnFindings(t *testing.T) {
 
 	if err := runDependencyAudit(command, nil); !errors.Is(err, ErrDependencyFindings) {
 		t.Fatalf("error = %v, want ErrDependencyFindings", err)
+	}
+}
+
+func TestRunDependencyAuditEnablesReleaseIntelWithCooldown(t *testing.T) {
+	originalFactory := newDependencyScanner
+	originalFormat := depsFormat
+	originalCooldown := depsCooldown
+	originalDormancy := depsDormancyThreshold
+	originalBurstWindow := depsReleaseBurstWindow
+	originalBurstThreshold := depsReleaseBurstThreshold
+	defer func() {
+		newDependencyScanner = originalFactory
+		depsFormat = originalFormat
+		depsCooldown = originalCooldown
+		depsDormancyThreshold = originalDormancy
+		depsReleaseBurstWindow = originalBurstWindow
+		depsReleaseBurstThreshold = originalBurstThreshold
+	}()
+
+	runner := &fakeDependencyScanRunner{report: dependencyReportFixture()}
+	newDependencyScanner = func(depscan.Options) (dependencyScanRunner, error) { return runner, nil }
+	depsFormat = fmtJSON
+	depsCooldown = "72h"
+	depsDormancyThreshold = "8760h"
+	depsReleaseBurstWindow = "2h"
+	depsReleaseBurstThreshold = 4
+	command := &cobra.Command{}
+	command.SetOut(&bytes.Buffer{})
+
+	if err := runDependencyAudit(command, []string{"/repo"}); err != nil {
+		t.Fatalf("runDependencyAudit: %v", err)
+	}
+	if !runner.releaseCalled || runner.releaseOptions.Cooldown != 72*time.Hour ||
+		runner.releaseOptions.DormancyThreshold != 8760*time.Hour ||
+		runner.releaseOptions.BurstWindow != 2*time.Hour || runner.releaseOptions.BurstThreshold != 4 {
+		t.Fatalf("release options = %+v called=%t", runner.releaseOptions, runner.releaseCalled)
 	}
 }
 
