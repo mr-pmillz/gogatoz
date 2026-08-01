@@ -334,6 +334,20 @@ func TestBuildSARIF_RefWatchTaxonomy(t *testing.T) {
 	}
 }
 
+func TestBuildSARIF_DependencyReleaseIntelTaxonomy(t *testing.T) {
+	for _, findingID := range []string{"DEPENDENCY_COOLDOWN", "DORMANT_PACKAGE_RESURRECTION", "DEPENDENCY_RELEASE_BURST"} {
+		t.Run(findingID, func(t *testing.T) {
+			rule := buildSARIF([]analyze.Finding{{
+				ID: findingID, Severity: analyze.SeverityHigh, Title: "release intelligence",
+			}}, "1.0.0").Runs[0].Tool.Driver.Rules[0]
+			tags, ok := rule.Properties["tags"].([]string)
+			if !ok || len(tags) < 3 {
+				t.Fatalf("dependency release taxonomy tags missing: %+v", rule.Properties)
+			}
+		})
+	}
+}
+
 func TestWriteSARIF_ProducesValidJSON(t *testing.T) {
 	findings := []analyze.Finding{
 		{ID: "PLAINTEXT_SECRET", Severity: analyze.SeverityMedium, Title: "t", Evidence: "e"},

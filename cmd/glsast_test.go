@@ -374,6 +374,25 @@ func TestBuildGLSAST_RefWatchTaxonomy(t *testing.T) {
 	}
 }
 
+func TestBuildGLSAST_DependencyReleaseIntelTaxonomy(t *testing.T) {
+	for _, findingID := range []string{"DEPENDENCY_COOLDOWN", "DORMANT_PACKAGE_RESURRECTION", "DEPENDENCY_RELEASE_BURST"} {
+		t.Run(findingID, func(t *testing.T) {
+			vulnerability := buildGLSAST([]analyze.Finding{{
+				ID: findingID, Severity: analyze.SeverityHigh, Title: "release intelligence",
+			}}, "1.0.0", time.Now(), time.Now()).Vulnerabilities[0]
+			identifierTypes := map[string]bool{}
+			for _, identifier := range vulnerability.Identifiers {
+				identifierTypes[identifier.Type] = true
+			}
+			for _, want := range []string{"cwe", "owasp_cicd", "mitre_attack"} {
+				if !identifierTypes[want] {
+					t.Errorf("identifiers %+v missing %s", vulnerability.Identifiers, want)
+				}
+			}
+		})
+	}
+}
+
 func TestBuildGLSAST_IdentifierCount(t *testing.T) {
 	f := analyze.Finding{
 		ID:       "PLAINTEXT_SECRET",
