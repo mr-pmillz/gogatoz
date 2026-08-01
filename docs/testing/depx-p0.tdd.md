@@ -35,9 +35,12 @@ report.
 | Mutable include release refs | `2a2804b` | `c66a6ca` | Governance tests failed for tags, branches, selectors, short SHAs, and dynamic refs, then passed while full 40/64-character SHAs remained accepted. |
 | GitLab POSIX PAX archive metadata | `b2e18f0` | `dd53721` | RED: `unsupported archive entry: "GlobalHead.0.0" has tar type 103`; GREEN permits only `TypeXGlobalHeader` metadata and retains all link/type rejections. |
 | SBOM discovery inside GitLab archives | `f81cf3f` | `df42676` | RED: `audit paths = [.../repository], want extraction root plus explicit SBOM path`; GREEN passes depx the root plus bounded, regular SBOM files and removes temporary paths from output. |
+| Threat-feed IP and hash indicators | `bc0d7ca` | `820c484` | Exact IP and token-bounded hash tests failed while the parsed feed fields were unused, then passed through `CAMPAIGN_MATCH`. |
+| Dependency report formats | `59926dc` | `8f6025d` | CycloneDX, SPDX 2.3, and GitLab Dependency Scanning 15.2.4 command tests failed before native depx/report integration, then passed. |
 | Release branch and tag governance | `2a9c1c1` | `9d04eb2` | Publishing-job tests failed before protected branch/tag evaluation existed, then passed for broad, weak, and reviewed release paths. |
 | Release ref lifecycle monitoring | `c422216` | `bd7f967` | Ref-state tests failed before the monitor existed, then passed for rewrites, tag retarget/recreation, short-lived CI branches, and bursts. GitLab snapshot and command integration continued in `5ee8dc2`/`8151774` and `5f1a6db`/`717f32e`. |
 | Package release intelligence | `e7f5820` | `d7d7132` | Native component/cooldown tests failed before release metadata enrichment, then passed for npm, PyPI, RubyGems, dormancy, bursts, and fail-open warnings. |
+| GitLab dependency report release findings | `7ceed1d` | `b1f8549` | Report tests failed before release-intelligence findings were assigned an exact package/version location, then passed against the official schema. |
 
 Coverage was raised in `51ac468` with native-adapter, close, and bounded-writer
 tests. Documentation was recorded in `968a238`.
@@ -52,7 +55,7 @@ tests. Documentation was recorded in `968a238`.
 | 4 | Archive traversal, links, compressed/expanded size overflow, and entry-count overflow are rejected | `pkg/depscan/archive_test.go` | Security unit | PASS |
 | 5 | GitLab PAX global metadata is accepted without allowing another non-file tar type | `pkg/depscan/archive_test.go` | Regression | PASS |
 | 6 | GitLab repository scanning uses bounded archives, discovers SBOMs, and reports repository-relative paths | `pkg/depscan/gitlab_test.go` | Integration | PASS |
-| 7 | `deps audit` validates options and emits text, JSON, SARIF, and GitLab SAST | `cmd/deps_test.go` | Command integration | PASS |
+| 7 | `deps audit` validates options and emits text, JSON, SARIF, GitLab SAST, GitLab Dependency Scanning, CycloneDX, and SPDX | `cmd/deps_test.go` | Command integration | PASS |
 | 8 | `enumerate --dependencies` works even when no `.gitlab-ci.yml` exists | `pkg/enumerate/enumerator_test.go` | Integration | PASS |
 | 9 | Dependency taxonomy is emitted in both SARIF and GitLab SAST | `cmd/sarif_test.go`, `cmd/glsast_test.go` | Reporter unit | PASS |
 | 10 | Mutable tags/branches/selectors/short SHAs are findings; full commit SHAs are not | `pkg/analyze/governance_test.go` | Unit | PASS |
@@ -61,6 +64,7 @@ tests. Documentation was recorded in `968a238`.
 | 13 | Cooldown analysis uses depx's native exact-version component export and bounded metadata-only registry requests | `pkg/depscan/release_intel_test.go` | Unit/integration | PASS |
 | 14 | Publishing branch/tag governance reaches SARIF and GitLab SAST taxonomy | `pkg/enumerate/release_governance_test.go`, reporter tests | Unit | PASS |
 | 15 | Ref monitoring distinguishes fast-forward movement, rewrite, tag lifecycle, short-lived CI branches, and release-workflow changes | `pkg/refwatch/monitor_test.go`, `cmd/watch_test.go` | Unit/command integration | PASS |
+| 16 | Baseline-only live ref monitoring keeps JSON stdout empty and parseable while status stays on stderr | `release-metadata-service` Tier 2 QA command | E2E | PASS |
 
 ## Validation results
 
@@ -74,18 +78,20 @@ go mod verify                                      PASS (all modules verified)
 cd internal/depxbridge && go build ./...            PASS
 cd internal/depxbridge && go test -race -count=1 ./...  PASS
 cd internal/depxbridge && golangci-lint ...         PASS (0 issues)
-npm run build  # gogatoz/docs                       PASS (35 pages)
+npm run build  # gogatoz/docs                       PASS (36 pages)
 npm run build  # hackers-guide-to-cicd              PASS (41 pages)
 ```
 
-The non-destructive CTF Tier 2 matrix passed GitLab/flagserver health, search,
-enumeration, JSONL parsing, SARIF, GitLab SAST, all four `deps audit` formats,
-`--fail-on-findings`, and the live GitLab dependency scan.
+The non-destructive CTF Tier 2 matrix passed GitLab/flagserver health, the
+four-file/zero-pipeline fixture safety assertions, all seven `deps audit`
+formats, the live GitLab dependency scan, and a baseline-only ref-watch poll.
+Cooldown enrichment remained disabled, so the matrix made zero public-registry
+queries and downloaded no package artifact.
 
 ## Coverage and known gaps
 
-- `pkg/depscan`: **81.6% statements** (`go test -coverprofile ... ./pkg/depscan`)
-- `internal/depxbridge`: **80.4% statements**
+- `pkg/depscan`: **82.9% statements** (`go test -coverprofile ... ./pkg/depscan`)
+- `internal/depxbridge`: **87.0% statements**
 - `govulncheck` was not installed, so it was reported as skipped rather than
   installed over the network. Module checksum verification passed.
 - depx v0.1.1 discovers lockfiles recursively but accepts SBOMs as explicit
