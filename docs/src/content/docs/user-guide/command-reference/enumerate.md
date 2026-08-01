@@ -64,6 +64,16 @@ Inventory:
 - --runners                Fetch runner summary (counts and executors); combine with --runners-scope (default: false)
 - --runners-scope          Runner scope to query when --runners is set: project|group|instance (default: project)
 - --allow-admin-scope      Allow admin-only operations, required for --runners-scope=instance (default: false)
+- --runner-log-max-pipelines  Max recent pipelines inspected by automatic runner fallback (default: 3; hard cap: 10)
+- --runner-log-max-jobs       Max jobs inspected per pipeline by automatic runner fallback (default: 10; hard cap: 100)
+
+Runner-log fallback is automatic when runner inventory is disabled, empty, or
+denied. GoGatoZ reads recent job API metadata and bounded trace headers to recover
+runner ID, description, type, manager system ID, executor, version, revision,
+platform, architecture, and observed job tags. It does not execute a job or
+download artifacts. JSON preserves the original `runner_log` field and also
+emits the deduplicated `runner_logs` collection with `sources`, `confidence`,
+and sampled job/pipeline IDs.
 
 Compliance and reporting:
 - --score                  Compute and display compliance score (A-E letter grade; default: false)

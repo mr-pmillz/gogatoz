@@ -101,6 +101,24 @@ gogatoz search -q "infra" --membership --visibility private
 
 Key flags: `--query`, `--language`, `--topic`, `--code-content`, `--path-pattern`, `--path-exists`, `--visibility`, `--membership`, `--owned`, `--archived-only`, `--format`, `--output`. Set `--max-pages 0` to fetch all pages.
 
+### validate
+
+Validate a GitLab token with read-only API requests and distinguish confirmed,
+inferred, denied, and unknown capabilities. No branches, runners, pipelines,
+variables, or other resources are created or modified.
+
+```bash
+# Instance-wide scope and access summary
+gogatoz validate --json
+
+# Add project role and default-branch protection evidence
+gogatoz validate --target group/project --json
+```
+
+Project-aware validation confirms repository and job visibility, then combines
+declared token scopes, the effective project role, and protected-branch rules to
+infer write capabilities. An inferred result is not a mutation test.
+
 ### enumerate
 
 Scan projects for CI/CD configuration vulnerabilities. Detects include risks, mutable release refs, runner exposure, MR-triggered jobs, variable injection, artifact poisoning, plaintext secrets, fork risks, script injection, LOTP tool execution, OIDC token exposure, cache poisoning, and more.
@@ -118,6 +136,10 @@ gogatoz enumerate --group myorg/platform --group-recursive --format jsonl
 # With runners and protected branch info
 gogatoz enumerate --input targets.txt --runners --protected-branches --score
 
+# Bound automatic runner discovery from recent job metadata and traces
+gogatoz enumerate --input targets.txt --runners \
+  --runner-log-max-pipelines 3 --runner-log-max-jobs 10 --json
+
 # Also audit repository lockfiles and SBOMs with native depx
 gogatoz enumerate --input targets.txt --dependencies --json
 
@@ -128,7 +150,7 @@ gogatoz enumerate --input targets.txt --format html --output report.html --sarif
 gogatoz search -q "runner" --format jsonl | gogatoz enumerate --input - --only-findings --json
 ```
 
-Key flags: `--input`, `--group`, `--groups`, `--concurrency`, `--timeout`, `--follow-includes`, `--include-depth`, `--deep`, `--dependencies`, `--depx-cache-dir`, `--depx-timeout`, `--runners`, `--runners-scope`, `--protected-branches`, `--score`, `--filter-false-positives`, `--only-findings`, `--redacted`, `--log-scrape`, `--format`, `--sarif-output`, `--glsast-output`, `--bloodhound-export`, `--webhook-url`.
+Key flags: `--input`, `--group`, `--groups`, `--concurrency`, `--timeout`, `--follow-includes`, `--include-depth`, `--deep`, `--dependencies`, `--depx-cache-dir`, `--depx-timeout`, `--runners`, `--runners-scope`, `--runner-log-max-pipelines`, `--runner-log-max-jobs`, `--protected-branches`, `--score`, `--filter-false-positives`, `--only-findings`, `--redacted`, `--log-scrape`, `--format`, `--sarif-output`, `--glsast-output`, `--bloodhound-export`, `--webhook-url`.
 
 ### deps
 

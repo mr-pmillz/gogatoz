@@ -19,14 +19,26 @@ If you obtain a GitLab PAT during a security assessment or penetration test, GoG
 
 ## Validating a Token
 
-To validate a token and see accessible projects:
+To validate a token and map its effective capabilities:
 
 ```bash
 export GITLAB_TOKEN=<the_token>
-gogatoz search --json
+gogatoz validate --json
+
+# Add effective role and protected-default-branch evidence for one project
+gogatoz validate --target group/project --json
 ```
 
-This will show all projects accessible to the token.
+`validate` is intentionally non-mutating. It uses GET requests and labels each
+result as `confirmed`, `inferred`, `denied`, or `unknown`. Inferred write access
+combines the declared PAT scope with observed membership and branch-protection
+metadata; it does not test a push or create a disposable resource.
+
+List the token's accessible projects separately:
+
+```bash
+gogatoz search --membership --max-pages 0 --json
+```
 
 ## Enumerating CI/CD Configurations
 

@@ -75,13 +75,20 @@ This command outputs a GitLab CI YAML that you can use to deploy an interactive 
 If you have obtained a GitLab PAT, you can use GoGatoZ to validate it and identify what it has access to:
 
 ```bash
-gogatoz search --query "your-search" --json
+gogatoz validate --json
+
+# Optional: assess one project without modifying it
+gogatoz validate --target group/project --json
 ```
 
 This command:
-- Uses the search command to discover accessible projects
-- Identifies projects the PAT can access
-- Can be combined with enumerate to assess CI/CD configurations
+- Reads the token's identity and declared scopes when GitLab exposes them
+- Confirms safe read endpoints and infers write capabilities from roles and scopes
+- Reports every capability as confirmed, inferred, denied, or unknown
+- Sends only GET requests; it does not create branches, runners, or pipelines
+
+Use `gogatoz search --membership --json` afterward to list accessible projects,
+then pass those projects to `enumerate` for CI/CD analysis.
 
 ## Additional Options
 
