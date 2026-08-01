@@ -60,9 +60,11 @@ var (
 	runnerScope           string
 	allowAdminScope       bool
 	// logs scraping
-	logScrape       bool
-	logMaxPipelines int
-	logMaxJobs      int
+	logScrape             bool
+	logMaxPipelines       int
+	logMaxJobs            int
+	runnerLogMaxPipelines int
+	runnerLogMaxJobs      int
 	// notifications
 	webhookURL     string
 	webhookHeaders []string
@@ -453,6 +455,8 @@ func init() {
 	enumerateCmd.Flags().BoolVar(&logScrape, "log-scrape", false, "Scrape recent job logs for key=value findings (best-effort, bounded)")
 	enumerateCmd.Flags().IntVar(&logMaxPipelines, "log-max-pipelines", 3, "Max pipelines per ref to inspect for logs when --log-scrape is set")
 	enumerateCmd.Flags().IntVar(&logMaxJobs, "log-max-jobs", 20, "Max jobs per pipeline to scan logs when --log-scrape is set")
+	enumerateCmd.Flags().IntVar(&runnerLogMaxPipelines, "runner-log-max-pipelines", 3, "Max recent pipelines inspected for automatic runner log fallback (hard cap: 10)")
+	enumerateCmd.Flags().IntVar(&runnerLogMaxJobs, "runner-log-max-jobs", 10, "Max jobs per pipeline inspected for automatic runner log fallback (hard cap: 100)")
 	// Non-default refs scanning
 	enumerateCmd.Flags().StringVar(&refOne, "ref", "", "Git reference (branch or tag) to scan in addition to the default branch")
 	enumerateCmd.Flags().StringVar(&refsMany, "refs", "", "Comma-separated list of refs to scan per project (in addition to --ref)")
@@ -725,6 +729,8 @@ func buildEnumerateOptions(controlsCfg *config.ControlsConfig) (enumerate.Option
 	opts.LogScrape = logScrape
 	opts.LogMaxPipelines = logMaxPipelines
 	opts.LogMaxJobs = logMaxJobs
+	opts.RunnerLogMaxPipelines = runnerLogMaxPipelines
+	opts.RunnerLogMaxJobs = runnerLogMaxJobs
 	opts.Redact = enumRedact
 	opts.Controls = controlsCfg
 	opts.ScanDependencies = enumDependencies
