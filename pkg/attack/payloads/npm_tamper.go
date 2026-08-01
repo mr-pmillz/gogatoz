@@ -340,12 +340,14 @@ func buildPackageInjectionScript(config packageTamperConfig) string {
 		return fmt.Sprintf(`export GOGATOZ_TAMPER_HOOK=%q
 export GOGATOZ_TAMPER_MANIFEST="$_work/source/package.json"
 test -f "$GOGATOZ_TAMPER_MANIFEST"
+test ! -L "$GOGATOZ_TAMPER_MANIFEST"
 node -e 'const fs=require("fs"); const p=JSON.parse(fs.readFileSync(process.env.GOGATOZ_TAMPER_MANIFEST,"utf8")); p.scripts=p.scripts||{}; p.scripts[process.env.GOGATOZ_TAMPER_HOOK]=Buffer.from(process.env.GOGATOZ_TAMPER_SCRIPT_B64,"base64").toString("utf8"); fs.writeFileSync(process.env.GOGATOZ_TAMPER_MANIFEST,JSON.stringify(p,null,2)+"\n")'
 cp "$GOGATOZ_TAMPER_MANIFEST" "$_root/tampered-package.json"
 `, config.trigger)
 	}
 	return fmt.Sprintf(`_entry="$_work/source/%s"
 test -f "$_entry"
+test ! -L "$_entry"
 printf '\n' >> "$_entry"
 printf '%%s' "$GOGATOZ_TAMPER_SCRIPT_B64" | base64 -d >> "$_entry"
 printf '\n' >> "$_entry"
@@ -360,6 +362,8 @@ func buildLivePublishScript(config packageTamperConfig) string {
 	builder.WriteString("  exit 1\n")
 	builder.WriteString("fi\n")
 	builder.WriteString("printf '%s\\n' '[!] Runtime approval accepted; starting explicitly authorized live publish.'\n")
+	fmt.Fprintf(&builder, "export GOGATOZ_EXPECTED_PACKAGE=%q\n", config.packageName)
+	builder.WriteString(buildPackageIdentityCheck(config.ecosystem))
 
 	switch config.ecosystem {
 	case "npm":
@@ -384,4 +388,47 @@ func buildLivePublishScript(config packageTamperConfig) string {
 	}
 	builder.WriteString("printf '%s\\n' '[+] Authorized package publish command completed.'\n")
 	return builder.String()
+}
+
+func buildPackageIdentityCheck(ecosystem string) string {
+	switch ecosystem {
+	case "npm":
+		return `export GOGATOZ_TAMPER_MANIFEST="$_work/source/package.json"
+test -f "$GOGATOZ_TAMPER_MANIFEST"
+test ! -L "$GOGATOZ_TAMPER_MANIFEST"
+node -e 'const fs=require("fs"); const p=JSON.parse(fs.readFileSync(process.env.GOGATOZ_TAMPER_MANIFEST,"utf8")); if(p.name!==process.env.GOGATOZ_EXPECTED_PACKAGE){console.error("package identity mismatch"); process.exit(1)}'
+`
+	case "pypi":
+		return `if [ -f "$_work/source/pyproject.toml" ]; then
+  test ! -L "$_work/source/pyproject.toml"
+elif [ -f "$_work/source/setup.cfg" ]; then
+  test ! -L "$_work/source/setup.cfg"
+else
+  echo 'package identity mismatch: pyproject.toml or setup.cfg is required' >&2
+  exit 1
+fi
+python -c '
+import configparser, pathlib, re, sys, tomllib
+root = pathlib.Path(sys.argv[1])
+expected = sys.argv[2]
+name = ""
+pyproject = root / "pyproject.toml"
+setup_cfg = root / "setup.cfg"
+if pyproject.is_file():
+    name = str(tomllib.loads(pyproject.read_text(encoding="utf-8")).get("project", {}).get("name", ""))
+elif setup_cfg.is_file():
+    config = configparser.ConfigParser()
+    config.read(setup_cfg, encoding="utf-8")
+    name = config.get("metadata", "name", fallback="")
+normalize = lambda value: re.sub(r"[-_.]+", "-", value).lower()
+if not name or normalize(name) != normalize(expected):
+    raise SystemExit("package identity mismatch")
+' "$_work/source" "$GOGATOZ_EXPECTED_PACKAGE"
+`
+	default:
+		return `set -- "$_work/source"/*.gemspec
+test "$#" -eq 1 && test -f "$1" && test ! -L "$1"
+ruby -e 'text=File.read(ARGV[0]); match=text.match(/\.name\s*=\s*["\x27]([^"\x27]+)["\x27]/); abort("package identity mismatch") unless match && match[1] == ENV.fetch("GOGATOZ_EXPECTED_PACKAGE")' "$1"
+`
+	}
 }
