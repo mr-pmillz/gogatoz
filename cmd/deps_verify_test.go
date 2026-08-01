@@ -1,10 +1,14 @@
 package cmd
 
 import (
+	"archive/tar"
 	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/mr-pmillz/gogatoz/pkg/analyze"
@@ -95,6 +99,65 @@ func TestRunDependencyVerifyFailOnFindings(t *testing.T) {
 	err := runDependencyVerify(command, nil)
 	if !errors.Is(err, ErrArtifactFindings) {
 		t.Fatalf("runDependencyVerify error = %v, want %v", err, ErrArtifactFindings)
+	}
+}
+
+func TestRunDependencyVerifyEndToEndSyntheticArchive(t *testing.T) {
+	originalVerifier := verifyPackageArtifact
+	defer func() { verifyPackageArtifact = originalVerifier }()
+	verifyPackageArtifact = artifactverify.Verify
+
+	var compressed bytes.Buffer
+	gz := gzip.NewWriter(&compressed)
+	tw := tar.NewWriter(gz)
+	manifest := []byte(`{"name":"gogatoz-cli-fixture","version":"1.0.0","scripts":{"postinstall":"node synthetic-noop.js"}}`)
+	if err := tw.WriteHeader(&tar.Header{
+		Name: "package/package.json", Mode: 0o644, Size: int64(len(manifest)), Typeflag: tar.TypeReg,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tw.Write(manifest); err != nil {
+		t.Fatal(err)
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := gz.Close(); err != nil {
+		t.Fatal(err)
+	}
+	artifactPath := filepath.Join(t.TempDir(), "gogatoz-cli-fixture.tgz")
+	if err := os.WriteFile(artifactPath, compressed.Bytes(), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	limits := artifactverify.DefaultLimits()
+	verifyArtifact = artifactPath
+	verifySource = ""
+	verifyProvenance = ""
+	verifyExpectedRepository = ""
+	verifyExpectedCommit = ""
+	verifyExpectedRef = ""
+	verifyExpectedPipeline = ""
+	verifyFormat = fmtJSON
+	verifyOutput = ""
+	verifyFailOnFindings = false
+	verifyMaxDownloadBytes = limits.MaxDownloadBytes
+	verifyMaxExpandedBytes = limits.MaxExpandedBytes
+	verifyMaxFileBytes = limits.MaxFileBytes
+	verifyMaxFiles = limits.MaxFiles
+	var output bytes.Buffer
+	command := &cobra.Command{}
+	command.SetOut(&output)
+	command.SetErr(&output)
+	if err := runDependencyVerify(command, nil); err != nil {
+		t.Fatalf("runDependencyVerify: %v", err)
+	}
+	var report artifactverify.Report
+	if err := json.Unmarshal(output.Bytes(), &report); err != nil {
+		t.Fatalf("decode CLI output: %v", err)
+	}
+	if report.Files != 1 || len(report.Findings) != 1 || report.Findings[0].ID != analyze.PackageExecutionTriggerID {
+		t.Fatalf("end-to-end report = %+v", report)
 	}
 }
 
