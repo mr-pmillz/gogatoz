@@ -22,6 +22,19 @@ type fakeDependencyScanRunner struct {
 	closed bool
 }
 
+func (s *fakeDependencyScanRunner) ScanSBOM(
+	_ context.Context,
+	paths []string,
+	format string,
+) (depscan.Report, []byte, error) {
+	s.paths = append([]string(nil), paths...)
+	sbom := map[string][]byte{
+		"cyclonedx": []byte(`{"bomFormat":"CycloneDX","components":[]}`),
+		"spdx":      []byte(`{"spdxVersion":"SPDX-2.3","packages":[]}`),
+	}[format]
+	return s.report, sbom, s.err
+}
+
 func (s *fakeDependencyScanRunner) Scan(_ context.Context, paths []string) (depscan.Report, error) {
 	s.paths = append([]string(nil), paths...)
 	return s.report, s.err
@@ -42,6 +55,11 @@ func dependencyReportFixture() depscan.Report {
 	return depscan.Report{
 		Engine: "depx", Dependencies: 1,
 		Summary: depscan.AuditSummary{Lockfiles: 1, Total: 1, Malicious: 1},
+		Packages: []depscan.AuditFinding{{
+			Verdict: "malicious", Ecosystem: "npm", Name: "synthetic-package",
+			Version: "1.2.3", IDs: []string{"MAL-2099-SYNTHETIC"},
+			Summary: "synthetic package record", Source: "bom.cdx.json",
+		}},
 		Findings: []analyze.Finding{{
 			ID: analyze.MaliciousDependencyID, Severity: analyze.SeverityCritical,
 			Title: "Known malicious dependency", Evidence: "synthetic metadata match",
@@ -74,7 +92,7 @@ func TestRunDependencyAuditSupportsAllFormats(t *testing.T) {
 	depsFailOnFindings = false
 	outputJSON = false
 
-	for _, format := range []string{fmtText, fmtJSON, fmtSARIF, fmtGLSAST} {
+	for _, format := range []string{fmtText, fmtJSON, fmtSARIF, fmtGLSAST, "cyclonedx", "spdx", "gldep"} {
 		t.Run(format, func(t *testing.T) {
 			runner := &fakeDependencyScanRunner{report: dependencyReportFixture()}
 			var gotOptions depscan.Options
@@ -123,6 +141,28 @@ func assertDependencyOutput(t *testing.T, format string, output []byte) {
 		var report glsastReport
 		if err := json.Unmarshal(output, &report); err != nil || len(report.Vulnerabilities) != 1 {
 			t.Fatalf("GitLab SAST output = %q, error = %v", output, err)
+		}
+	case "cyclonedx":
+		var report map[string]any
+		if err := json.Unmarshal(output, &report); err != nil || report["bomFormat"] != "CycloneDX" {
+			t.Fatalf("CycloneDX output = %q, error = %v", output, err)
+		}
+	case "spdx":
+		var report map[string]any
+		if err := json.Unmarshal(output, &report); err != nil || report["spdxVersion"] != "SPDX-2.3" {
+			t.Fatalf("SPDX output = %q, error = %v", output, err)
+		}
+	case "gldep":
+		var report map[string]any
+		if err := json.Unmarshal(output, &report); err != nil {
+			t.Fatalf("GitLab Dependency Scanning output = %q, error = %v", output, err)
+		}
+		if report["version"] != "15.2.4" {
+			t.Fatalf("GitLab Dependency Scanning version = %v", report["version"])
+		}
+		vulnerabilities, ok := report["vulnerabilities"].([]any)
+		if !ok || len(vulnerabilities) != 1 {
+			t.Fatalf("GitLab Dependency Scanning vulnerabilities = %#v", report["vulnerabilities"])
 		}
 	default:
 		if text := string(output); !strings.Contains(text, "Dependencies: 1") || !strings.Contains(text, "MALICIOUS_DEPENDENCY") {

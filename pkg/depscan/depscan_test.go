@@ -24,6 +24,18 @@ func (f *fakeAuditor) Audit(_ context.Context, paths []string) (AuditResult, err
 
 func (f *fakeAuditor) Close() { f.closed = true }
 
+type fakeSBOMAuditor struct {
+	fakeAuditor
+	sbom   []byte
+	format string
+}
+
+func (f *fakeSBOMAuditor) AuditSBOM(_ context.Context, paths []string, format string) (AuditResult, []byte, error) {
+	f.paths = append([]string(nil), paths...)
+	f.format = format
+	return f.result, append([]byte(nil), f.sbom...), f.err
+}
+
 func TestScanner_ScanMapsDepxVerdictsToFindings(t *testing.T) {
 	auditor := &fakeAuditor{result: AuditResult{
 		Dependencies: 3,
@@ -167,5 +179,33 @@ func TestScanner_ScanSerializesNativeAudits(t *testing.T) {
 
 	if got := auditor.maxActive.Load(); got != 1 {
 		t.Fatalf("maximum concurrent depx audits = %d, want 1", got)
+	}
+}
+
+func TestScanner_ScanSBOMUsesNativeDepxExporter(t *testing.T) {
+	auditor := &fakeSBOMAuditor{
+		fakeAuditor: fakeAuditor{result: AuditResult{
+			Dependencies: 1,
+			Findings: []AuditFinding{{
+				Verdict: "malicious", Ecosystem: "npm", Name: "synthetic-package",
+				Version: "1.2.3", Source: "/repo/package-lock.json",
+			}},
+		}},
+		sbom: []byte(`{"bomFormat":"CycloneDX"}`),
+	}
+	scanner := NewScanner(auditor)
+
+	report, sbom, err := scanner.ScanSBOM(context.Background(), []string{" /repo "}, "cyclonedx")
+	if err != nil {
+		t.Fatalf("ScanSBOM: %v", err)
+	}
+	if auditor.format != "cyclonedx" || len(auditor.paths) != 1 || auditor.paths[0] != "/repo" {
+		t.Fatalf("native export call = format %q paths %v", auditor.format, auditor.paths)
+	}
+	if report.Dependencies != 1 || len(report.Findings) != 1 {
+		t.Fatalf("report = %+v", report)
+	}
+	if string(sbom) != `{"bomFormat":"CycloneDX"}` {
+		t.Fatalf("SBOM = %q", sbom)
 	}
 }

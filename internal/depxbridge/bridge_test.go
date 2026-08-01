@@ -20,14 +20,14 @@ func TestAuditor_AuditUsesDepxNativeService(t *testing.T) {
 		"source":         "gogatoz-test",
 		"packages": []map[string]any{
 			{
-				"ecosystem":        "npm",
-				"name":             "gogatoz-synthetic-malicious",
-				"ids":              []string{"MAL-2099-GOGATOZ-TEST"},
-				"all_versions":     true,
-				"summary":          "Synthetic malicious-package record for GoGatoZ tests",
-				"published_at":     now.Format(time.RFC3339),
-				"modified_at":      now.Format(time.RFC3339),
-				"imported_at":      now.Format(time.RFC3339),
+				"ecosystem":         "npm",
+				"name":              "gogatoz-synthetic-malicious",
+				"ids":               []string{"MAL-2099-GOGATOZ-TEST"},
+				"all_versions":      true,
+				"summary":           "Synthetic malicious-package record for GoGatoZ tests",
+				"published_at":      now.Format(time.RFC3339),
+				"modified_at":       now.Format(time.RFC3339),
+				"imported_at":       now.Format(time.RFC3339),
 				"affected_versions": []string{"1.2.3"},
 			},
 		},
@@ -99,5 +99,27 @@ func TestAuditor_AuditUsesDepxNativeService(t *testing.T) {
 	}
 	if len(finding.IDs) != 1 || finding.IDs[0] != "MAL-2099-GOGATOZ-TEST" {
 		t.Fatalf("finding IDs = %v", finding.IDs)
+	}
+
+	for _, format := range []string{"cyclonedx", "spdx"} {
+		t.Run("native "+format+" export", func(t *testing.T) {
+			exportedResult, sbom, exportErr := auditor.AuditSBOM(context.Background(), []string{projectDir}, format)
+			if exportErr != nil {
+				t.Fatalf("AuditSBOM: %v", exportErr)
+			}
+			if exportedResult.Dependencies != 1 || len(exportedResult.Findings) != 1 {
+				t.Fatalf("exported result = %+v", exportedResult)
+			}
+			var document map[string]any
+			if err := json.Unmarshal(sbom, &document); err != nil {
+				t.Fatalf("decode %s SBOM: %v", format, err)
+			}
+			if format == "cyclonedx" && document["bomFormat"] != "CycloneDX" {
+				t.Fatalf("CycloneDX document = %+v", document)
+			}
+			if format == "spdx" && document["spdxVersion"] != "SPDX-2.3" {
+				t.Fatalf("SPDX document = %+v", document)
+			}
+		})
 	}
 }
