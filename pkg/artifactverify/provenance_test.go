@@ -84,6 +84,17 @@ func TestVerifyReportsMissingProvenanceForExpectedIdentity(t *testing.T) {
 	}
 }
 
+func TestReleaseTagCheckIgnoresBareBranchName(t *testing.T) {
+	t.Parallel()
+
+	files := []FileRecord{{
+		Path: "package/package.json", content: []byte(`{"name":"gogatoz-fixture","version":"1.2.3"}`),
+	}}
+	if findings := releaseTagFindings(files, "main"); len(findings) != 0 {
+		t.Fatalf("bare branch produced release-tag findings: %+v", findings)
+	}
+}
+
 func writeProvenanceFixture(t *testing.T, body string) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "provenance.json")
