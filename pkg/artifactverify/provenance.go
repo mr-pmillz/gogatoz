@@ -40,7 +40,10 @@ type provenanceValues struct {
 	pipelines    []string
 }
 
-var packageVersionRe = regexp.MustCompile(`(?m)^Version:\s*([^\s]+)\s*$`)
+var (
+	packageVersionRe = regexp.MustCompile(`(?m)^Version:\s*([^\s]+)\s*$`)
+	semanticTagRe    = regexp.MustCompile(`^v?\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$`)
+)
 
 func inspectProvenance(
 	ctx context.Context,
@@ -223,10 +226,14 @@ func pipelineMatches(expected, actual string) bool {
 
 func releaseTagFindings(files []FileRecord, expectedRef string) []analyze.Finding {
 	tag := strings.TrimSpace(expectedRef)
+	isTagRef := strings.HasPrefix(tag, "refs/tags/")
 	if strings.HasPrefix(tag, "refs/heads/") || tag == "" {
 		return nil
 	}
 	tag = strings.TrimPrefix(tag, "refs/tags/")
+	if !isTagRef && !semanticTagRe.MatchString(tag) {
+		return nil
+	}
 	version := packageVersion(files)
 	if version == "" || strings.TrimPrefix(tag, "v") == strings.TrimPrefix(version, "v") {
 		return nil
