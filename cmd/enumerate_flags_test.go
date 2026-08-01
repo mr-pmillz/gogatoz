@@ -89,6 +89,15 @@ func TestEnumerate_LogScrape_Flags_Map_To_Options(t *testing.T) {
 	logScrape = true
 	logMaxPipelines = 5
 	logMaxJobs = 7
+	runnerLogMaxPipelines = 4
+	runnerLogMaxJobs = 9
+	defer func() {
+		logScrape = false
+		logMaxPipelines = 3
+		logMaxJobs = 20
+		runnerLogMaxPipelines = 3
+		runnerLogMaxJobs = 10
+	}()
 
 	// Use JSONL to avoid template execution paths in test
 	enumFormat = fmtJSONL
@@ -113,6 +122,12 @@ func TestEnumerate_LogScrape_Flags_Map_To_Options(t *testing.T) {
 	}
 	if got.LogMaxJobs != 7 {
 		t.Fatalf("expected LogMaxJobs=7, got %d", got.LogMaxJobs)
+	}
+	if got.RunnerLogMaxPipelines != 4 {
+		t.Fatalf("expected RunnerLogMaxPipelines=4, got %d", got.RunnerLogMaxPipelines)
+	}
+	if got.RunnerLogMaxJobs != 9 {
+		t.Fatalf("expected RunnerLogMaxJobs=9, got %d", got.RunnerLogMaxJobs)
 	}
 }
 
