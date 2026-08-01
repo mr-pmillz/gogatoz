@@ -16,7 +16,10 @@ const (
 	packageTamperLive    = "live-publish"
 )
 
-var packageNameRe = regexp.MustCompile(`^[A-Za-z0-9@._/-]+$`)
+var (
+	packageNameRe  = regexp.MustCompile(`^[A-Za-z0-9@._/-]+$`)
+	packageEntryRe = regexp.MustCompile(`^[-A-Za-z0-9@._/+]+$`)
+)
 
 // PackageTamperOptions configures a bounded package-tamper simulation. The
 // generated job only creates a preview artifact unless LivePublish is enabled
@@ -241,7 +244,7 @@ func validatePackageEntryFile(entryFile string) error {
 	cleaned := path.Clean(entryFile)
 	if strings.ContainsRune(entryFile, '\x00') || strings.Contains(entryFile, `\`) ||
 		path.IsAbs(entryFile) || cleaned == "." || cleaned == ".." ||
-		strings.HasPrefix(cleaned, "../") || cleaned != entryFile {
+		strings.HasPrefix(cleaned, "../") || cleaned != entryFile || !packageEntryRe.MatchString(entryFile) {
 		return fmt.Errorf("target entry file must be a canonical relative path")
 	}
 	return nil
