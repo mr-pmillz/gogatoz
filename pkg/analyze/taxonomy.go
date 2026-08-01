@@ -126,6 +126,46 @@ var taxonomyRegistry = map[string]Taxonomy{
 		ATTACKRefs:    []ATTACKRef{attackT1195_001, attackT1078},
 		OWASPCICDRefs: []OWASPCICDRef{owaspSec1, owaspSec5},
 	},
+	"REF_SHA_CHANGED": {
+		CWEs:          []CWERef{cwe345},
+		ATTACKRefs:    []ATTACKRef{attackT1565_001},
+		OWASPCICDRefs: []OWASPCICDRef{owaspSec10},
+	},
+	"REF_NON_FAST_FORWARD": {
+		CWEs:          []CWERef{cwe345, cwe284},
+		ATTACKRefs:    []ATTACKRef{attackT1565_001, attackT1195_002},
+		OWASPCICDRefs: []OWASPCICDRef{owaspSec1, owaspSec9},
+	},
+	"TAG_TARGET_CHANGED": {
+		CWEs:          []CWERef{cwe345, cwe829},
+		ATTACKRefs:    []ATTACKRef{attackT1553, attackT1195_002},
+		OWASPCICDRefs: []OWASPCICDRef{owaspSec9, owaspSec3},
+	},
+	"TAG_DELETED": {
+		CWEs:          []CWERef{cwe345},
+		ATTACKRefs:    []ATTACKRef{attackT1553},
+		OWASPCICDRefs: []OWASPCICDRef{owaspSec9, owaspSec10},
+	},
+	"TAG_RECREATED": {
+		CWEs:          []CWERef{cwe345, cwe829},
+		ATTACKRefs:    []ATTACKRef{attackT1553, attackT1195_002},
+		OWASPCICDRefs: []OWASPCICDRef{owaspSec9, owaspSec3},
+	},
+	"SHORT_LIVED_CI_BRANCH": {
+		CWEs:          []CWERef{cwe284},
+		ATTACKRefs:    []ATTACKRef{attackT1195_002},
+		OWASPCICDRefs: []OWASPCICDRef{owaspSec4, owaspSec10},
+	},
+	"REF_CREATION_BURST": {
+		CWEs:          []CWERef{cwe284},
+		ATTACKRefs:    []ATTACKRef{attackT1195_002},
+		OWASPCICDRefs: []OWASPCICDRef{owaspSec10, owaspSec1},
+	},
+	"RELEASE_WORKFLOW_CHANGED": {
+		CWEs:          []CWERef{cwe345, cwe284},
+		ATTACKRefs:    []ATTACKRef{attackT1195_002},
+		OWASPCICDRefs: []OWASPCICDRef{owaspSec3, owaspSec9},
+	},
 
 	// --- Include risks ---
 	IncludeRemoteID: {

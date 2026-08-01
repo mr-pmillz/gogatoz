@@ -67,6 +67,46 @@ var findingCodeRegistry = map[string]FindingCodeInfo{
 		Description: "A publishing job can run without a specific protected branch or protected tag gate.",
 		Remediation: "Restrict publishing rules to explicitly protected release branches or tag patterns and gate the target environment with approvals.",
 	},
+	"REF_SHA_CHANGED": {
+		ID: "REF_SHA_CHANGED", Severity: SeverityInformational, Title: "Git branch target changed",
+		Description: "A monitored branch points to a new commit.",
+		Remediation: "Review the commit and confirm the branch movement was expected.",
+	},
+	"REF_NON_FAST_FORWARD": {
+		ID: "REF_NON_FAST_FORWARD", Severity: SeverityCritical, Title: "Git branch moved non-fast-forward",
+		Description: "A monitored publishing branch no longer descends from its previously observed commit.",
+		Remediation: "Freeze publishing, investigate the force push or history rewrite, restore the reviewed ref if appropriate, and rotate any credentials exposed to resulting pipelines.",
+	},
+	"TAG_TARGET_CHANGED": {
+		ID: "TAG_TARGET_CHANGED", Severity: SeverityCritical, Title: "Release tag target changed",
+		Description: "A previously observed Git tag now resolves to a different commit.",
+		Remediation: "Freeze releases, verify tag audit events and provenance, restore the reviewed tag only after investigation, and prevent unauthorized tag creation or deletion.",
+	},
+	"TAG_DELETED": {
+		ID: "TAG_DELETED", Severity: SeverityHigh, Title: "Monitored release tag deleted",
+		Description: "A previously observed Git tag disappeared.",
+		Remediation: "Review tag deletion audit events and ensure release-tag deletion is restricted to authorized maintainers.",
+	},
+	"TAG_RECREATED": {
+		ID: "TAG_RECREATED", Severity: SeverityCritical, Title: "Release tag recreated",
+		Description: "A deleted Git tag was recreated, potentially at a different commit.",
+		Remediation: "Freeze publishing, validate the recreated target and package provenance, and restrict tag creation and deletion permissions.",
+	},
+	"SHORT_LIVED_CI_BRANCH": {
+		ID: "SHORT_LIVED_CI_BRANCH", Severity: SeverityHigh, Title: "Short-lived CI branch disappeared",
+		Description: "A recently created branch with pipeline activity disappeared shortly afterward.",
+		Remediation: "Review the branch, pipeline, job logs, artifacts, actor, and audit events before log retention expires.",
+	},
+	"REF_CREATION_BURST": {
+		ID: "REF_CREATION_BURST", Severity: SeverityHigh, Title: "Unusual Git ref creation burst",
+		Description: "Many branches or tags appeared during one monitoring interval.",
+		Remediation: "Validate the release automation and actors responsible for the burst; investigate unexpected refs before allowing publication.",
+	},
+	"RELEASE_WORKFLOW_CHANGED": {
+		ID: "RELEASE_WORKFLOW_CHANGED", Severity: SeverityHigh, Title: "Release workflow changed",
+		Description: "Publishing-job configuration changed after the monitoring baseline.",
+		Remediation: "Review the exact workflow diff and ensure trusted publishing remains bound to an approved commit, protected ref, and approved environment.",
+	},
 	"INCLUDE_PROJECT_UNPINNED": {
 		ID:          "INCLUDE_PROJECT_UNPINNED",
 		Severity:    SeverityHigh,
