@@ -43,10 +43,15 @@ func DefaultLimits() Limits {
 
 // Options configures one artifact verification operation.
 type Options struct {
-	Artifact   string
-	Source     string
-	Limits     Limits
-	HTTPClient *http.Client
+	Artifact           string
+	Source             string
+	Provenance         string
+	ExpectedRepository string
+	ExpectedCommit     string
+	ExpectedRef        string
+	ExpectedPipeline   string
+	Limits             Limits
+	HTTPClient         *http.Client
 }
 
 // FileRecord is static metadata collected from a regular archive member.
@@ -62,12 +67,16 @@ type FileRecord struct {
 
 // Report is the machine-readable result of archive verification.
 type Report struct {
-	Artifact       string            `json:"artifact"`
-	ArtifactType   string            `json:"artifact_type"`
-	ArtifactSHA256 string            `json:"artifact_sha256"`
-	Files          int               `json:"files"`
-	ExpandedBytes  int64             `json:"expanded_bytes"`
-	Findings       []analyze.Finding `json:"findings"`
+	Artifact       string             `json:"artifact"`
+	ArtifactType   string             `json:"artifact_type"`
+	ArtifactSHA256 string             `json:"artifact_sha256"`
+	Files          int                `json:"files"`
+	ExpandedBytes  int64              `json:"expanded_bytes"`
+	Source         string             `json:"source,omitempty"`
+	SourceFiles    int                `json:"source_files,omitempty"`
+	SourceBytes    int64              `json:"source_expanded_bytes,omitempty"`
+	Provenance     *ProvenanceSummary `json:"provenance,omitempty"`
+	Findings       []analyze.Finding  `json:"findings"`
 }
 
 // Verify statically inspects a local or remote package artifact.
