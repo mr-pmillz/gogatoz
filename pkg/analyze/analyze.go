@@ -28,16 +28,24 @@ var AllSeverities = []Severity{SeverityCritical, SeverityHigh, SeverityMedium, S
 
 // Finding ID constants.
 const (
-	IncludeRemoteID         = "INCLUDE_REMOTE"
-	SecretExfilHTTPID       = "SECRET_EXFIL_HTTP"     //nolint:gosec // finding ID, not a credential
-	SecretExfilArtifactID   = "SECRET_EXFIL_ARTIFACT" //nolint:gosec // finding ID, not a credential
-	ScriptEncodedPayloadID  = "SCRIPT_ENCODED_PAYLOAD"
-	WhitespaceHidingID      = "SCRIPT_WHITESPACE_HIDING"
-	CharcodeObfuscationID   = "CHARCODE_OBFUSCATION"
-	SuspiciousNetworkID     = "SUSPICIOUS_NETWORK_TARGET"
-	CampaignMatchID         = "CAMPAIGN_MATCH"
-	MaliciousDependencyID   = "MALICIOUS_DEPENDENCY"
-	QuarantinedDependencyID = "QUARANTINED_DEPENDENCY"
+	IncludeRemoteID            = "INCLUDE_REMOTE"
+	SecretExfilHTTPID          = "SECRET_EXFIL_HTTP"     //nolint:gosec // finding ID, not a credential
+	SecretExfilArtifactID      = "SECRET_EXFIL_ARTIFACT" //nolint:gosec // finding ID, not a credential
+	ScriptEncodedPayloadID     = "SCRIPT_ENCODED_PAYLOAD"
+	WhitespaceHidingID         = "SCRIPT_WHITESPACE_HIDING"
+	CharcodeObfuscationID      = "CHARCODE_OBFUSCATION"
+	SuspiciousNetworkID        = "SUSPICIOUS_NETWORK_TARGET"
+	CampaignMatchID            = "CAMPAIGN_MATCH"
+	MaliciousDependencyID      = "MALICIOUS_DEPENDENCY"
+	QuarantinedDependencyID    = "QUARANTINED_DEPENDENCY"
+	PackageExecutionTriggerID  = "PACKAGE_EXECUTION_TRIGGER"
+	PackagePersistenceID       = "PACKAGE_PERSISTENCE_INDICATOR"
+	PackageExecutableID        = "PACKAGE_EXECUTABLE_PAYLOAD"
+	PackageObfuscationID       = "PACKAGE_OBFUSCATION"
+	ArtifactSourceDivergenceID = "ARTIFACT_SOURCE_DIVERGENCE"
+	ArtifactPartialBuildID     = "ARTIFACT_PARTIAL_BUILD"
+	ProvenanceMismatchID       = "PROVENANCE_MISMATCH"
+	ReleaseTagMismatchID       = "RELEASE_TAG_MISMATCH"
 )
 
 // Dependency records a structured cross-project reference extracted during analysis.

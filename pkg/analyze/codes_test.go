@@ -93,3 +93,17 @@ func TestWithRecommendations_preserves_existing(t *testing.T) {
 		t.Errorf("expected existing recommendation to be preserved, got %q", result[0].Recommendation)
 	}
 }
+
+func TestPackageArtifactFindingCodesRegistered(t *testing.T) {
+	for _, id := range []string{
+		PackageExecutionTriggerID, PackagePersistenceID, PackageExecutableID, PackageObfuscationID,
+		ArtifactSourceDivergenceID, ArtifactPartialBuildID, ProvenanceMismatchID, ReleaseTagMismatchID,
+	} {
+		t.Run(id, func(t *testing.T) {
+			info := LookupFinding(id)
+			if info == nil || info.Remediation == "" {
+				t.Fatalf("finding code %s is not fully registered: %+v", id, info)
+			}
+		})
+	}
+}

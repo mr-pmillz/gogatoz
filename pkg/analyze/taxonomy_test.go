@@ -210,6 +210,20 @@ func TestTaxonomySpecificMappings(t *testing.T) {
 	}
 }
 
+func TestPackageArtifactTaxonomyRegistered(t *testing.T) {
+	for _, id := range []string{
+		PackageExecutionTriggerID, PackagePersistenceID, PackageExecutableID, PackageObfuscationID,
+		ArtifactSourceDivergenceID, ArtifactPartialBuildID, ProvenanceMismatchID, ReleaseTagMismatchID,
+	} {
+		t.Run(id, func(t *testing.T) {
+			taxonomy := LookupTaxonomy(id)
+			if taxonomy == nil || len(taxonomy.CWEs) == 0 || len(taxonomy.ATTACKRefs) == 0 || len(taxonomy.OWASPCICDRefs) == 0 {
+				t.Fatalf("package artifact taxonomy %s is incomplete: %+v", id, taxonomy)
+			}
+		})
+	}
+}
+
 func TestCWERefFormat(t *testing.T) {
 	tax := LookupTaxonomy("PLAINTEXT_SECRET")
 	if tax == nil {

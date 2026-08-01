@@ -280,6 +280,24 @@ func TestBuildSARIF_DependencyLocationUsesSourceFile(t *testing.T) {
 	}
 }
 
+func TestBuildSARIF_PackageArtifactTaxonomy(t *testing.T) {
+	for _, findingID := range []string{
+		analyze.PackageExecutionTriggerID, analyze.PackagePersistenceID, analyze.PackageExecutableID,
+		analyze.PackageObfuscationID, analyze.ArtifactSourceDivergenceID, analyze.ArtifactPartialBuildID,
+		analyze.ProvenanceMismatchID, analyze.ReleaseTagMismatchID,
+	} {
+		t.Run(findingID, func(t *testing.T) {
+			rule := buildSARIF([]analyze.Finding{{
+				ID: findingID, Severity: analyze.SeverityHigh, Title: "package artifact",
+			}}, "1.0.0").Runs[0].Tool.Driver.Rules[0]
+			tags, ok := rule.Properties["tags"].([]string)
+			if !ok || len(tags) < 3 {
+				t.Fatalf("package artifact taxonomy tags missing: %+v", rule.Properties)
+			}
+		})
+	}
+}
+
 func TestBuildSARIF_MutableRefTaxonomy(t *testing.T) {
 	rule := buildSARIF([]analyze.Finding{{
 		ID: analyze.IncludeMutableRefID, Severity: analyze.SeverityHigh, Title: "Mutable include ref",
