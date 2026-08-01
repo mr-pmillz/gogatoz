@@ -9,10 +9,11 @@ GoGatoZ provides several commands, each with its own set of options:
 2. [Enumerate Command](/user-guide/command-reference/enumerate/) - Analyze GitLab projects for exploitable CI/CD issues
 3. [Deps Command](/user-guide/command-reference/deps/) - Audit lockfiles and SBOMs for malicious dependencies
 4. [Attack Command](/user-guide/command-reference/attack/) - Stage payloads or commit CI for ethical testing
-5. [Explain Command](/user-guide/command-reference/explain/) - Look up finding codes and remediation guidance
-6. [PBOM Command](/user-guide/command-reference/pbom/) - Generate Pipeline Bill of Materials
-7. [Query Command](/user-guide/command-reference/query/) - Query the local results database
-8. [Secretscan Command](/user-guide/command-reference/secretscan/) - Clone and scan repos for secrets
+5. [Watch Command](/user-guide/command-reference/watch/) - Monitor release refs and publishing workflow drift
+6. [Explain Command](/user-guide/command-reference/explain/) - Look up finding codes and remediation guidance
+7. [PBOM Command](/user-guide/command-reference/pbom/) - Generate Pipeline Bill of Materials
+8. [Query Command](/user-guide/command-reference/query/) - Query the local results database
+9. [Secretscan Command](/user-guide/command-reference/secretscan/) - Clone and scan repos for secrets
 
 ## Common Global Flags
 
@@ -44,6 +45,7 @@ Where `[command]` is one of:
 - `enumerate` - Enumerate projects for CI/CD risks
 - `deps` - Audit dependency metadata with native depx
 - `attack` - Execute payloads or commit CI YAML
+- `watch` - Monitor release refs and publishing workflow drift
 - `explain` - Look up finding codes and remediation
 - `pbom` - Generate Pipeline Bill of Materials
 - `query` - Query stored scan results
@@ -59,6 +61,7 @@ gogatoz search --help
 gogatoz enumerate --help
 gogatoz deps audit --help
 gogatoz attack --help
+gogatoz watch --help
 gogatoz explain --help
 gogatoz pbom --help
 gogatoz query --help

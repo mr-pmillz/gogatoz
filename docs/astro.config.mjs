@@ -55,6 +55,7 @@ export default defineConfig({
 								{ label: 'Search', slug: 'user-guide/command-reference/search' },
 								{ label: 'Enumerate', slug: 'user-guide/command-reference/enumerate' },
 								{ label: 'Deps', slug: 'user-guide/command-reference/deps' },
+								{ label: 'Watch', slug: 'user-guide/command-reference/watch' },
 								{ label: 'Attack', slug: 'user-guide/command-reference/attack' },
 								{ label: 'Pivot', slug: 'user-guide/command-reference/pivot' },
 								{ label: 'Persistence', slug: 'user-guide/command-reference/persistence' },

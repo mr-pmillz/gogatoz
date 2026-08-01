@@ -144,9 +144,32 @@ gogatoz deps audit package-lock.json bom.cdx.json \
 
 # GitLab SAST report
 gogatoz deps audit . --format glsast --output gl-sast-report.json
+
+# Hold newly published npm/PyPI/RubyGems versions for review
+gogatoz deps audit . --cooldown 72h --format json
 ```
 
-Supported output formats are `text`, `json`, `sarif`, and `glsast`. Findings use `MALICIOUS_DEPENDENCY` or `QUARANTINED_DEPENDENCY` and include the source metadata file.
+Supported output formats are `text`, `json`, `sarif`, `glsast`, `gldep`,
+`cyclonedx`, and `spdx`. Malicious and quarantined findings include their
+source metadata file. When `--cooldown` is enabled, depx's native CycloneDX
+component inventory is enriched with release timestamps to detect newly
+published versions, dormant-package resurrection, and coordinated release
+bursts. Registry enrichment is disabled by default and never downloads package
+archives or executes package content.
+
+### watch
+
+Continuously monitor GitLab branch/tag targets and release workflow changes:
+
+```bash
+gogatoz watch --target group/project --branches main,next --interval 60s
+gogatoz watch --target group/project --format json --notify https://alerts.example.test/gogatoz
+```
+
+The first poll establishes an in-memory baseline. Later polls report
+non-fast-forward branch movement, tag retargeting/deletion/recreation,
+short-lived branches with recent pipeline activity, ref-creation bursts, and
+publishing-job changes.
 
 ### attack
 

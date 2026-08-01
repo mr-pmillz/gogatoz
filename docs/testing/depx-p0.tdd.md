@@ -16,6 +16,12 @@ request and the StepSecurity threat-intelligence review:
 5. As a scanner user, untrusted GitLab archives remain bounded and confined;
    links, traversal, devices, and other filesystem-capable tar types are
    rejected.
+6. As a release owner, I can require a configurable minimum package age and
+   detect dormant-package resurrection or coordinated release bursts without
+   downloading a package artifact.
+7. As a GitLab operator, I can audit every publishing branch/tag gate and
+   monitor ref SHA movement, tag recreation, short-lived CI branches, release
+   bursts, and publishing-workflow changes.
 
 ## RED/GREEN checkpoints
 
@@ -29,6 +35,9 @@ report.
 | Mutable include release refs | `2a2804b` | `c66a6ca` | Governance tests failed for tags, branches, selectors, short SHAs, and dynamic refs, then passed while full 40/64-character SHAs remained accepted. |
 | GitLab POSIX PAX archive metadata | `b2e18f0` | `dd53721` | RED: `unsupported archive entry: "GlobalHead.0.0" has tar type 103`; GREEN permits only `TypeXGlobalHeader` metadata and retains all link/type rejections. |
 | SBOM discovery inside GitLab archives | `f81cf3f` | `df42676` | RED: `audit paths = [.../repository], want extraction root plus explicit SBOM path`; GREEN passes depx the root plus bounded, regular SBOM files and removes temporary paths from output. |
+| Release branch and tag governance | `2a9c1c1` | `9d04eb2` | Publishing-job tests failed before protected branch/tag evaluation existed, then passed for broad, weak, and reviewed release paths. |
+| Release ref lifecycle monitoring | `c422216` | `bd7f967` | Ref-state tests failed before the monitor existed, then passed for rewrites, tag retarget/recreation, short-lived CI branches, and bursts. GitLab snapshot and command integration continued in `5ee8dc2`/`8151774` and `5f1a6db`/`717f32e`. |
+| Package release intelligence | `e7f5820` | `d7d7132` | Native component/cooldown tests failed before release metadata enrichment, then passed for npm, PyPI, RubyGems, dormancy, bursts, and fail-open warnings. |
 
 Coverage was raised in `51ac468` with native-adapter, close, and bounded-writer
 tests. Documentation was recorded in `968a238`.
@@ -49,6 +58,9 @@ tests. Documentation was recorded in `968a238`.
 | 10 | Mutable tags/branches/selectors/short SHAs are findings; full commit SHAs are not | `pkg/analyze/governance_test.go` | Unit | PASS |
 | 11 | Live local GitLab returns one synthetic `MALICIOUS_DEPENDENCY` at `bom.cdx.json` | `release-metadata-service` Tier 2 QA command | E2E | PASS |
 | 12 | The safe CTF fixture has four inert files, a disabled workflow, no external threat references, and zero pipelines | GitLab API safety assertions | E2E/security | PASS |
+| 13 | Cooldown analysis uses depx's native exact-version component export and bounded metadata-only registry requests | `pkg/depscan/release_intel_test.go` | Unit/integration | PASS |
+| 14 | Publishing branch/tag governance reaches SARIF and GitLab SAST taxonomy | `pkg/enumerate/release_governance_test.go`, reporter tests | Unit | PASS |
+| 15 | Ref monitoring distinguishes fast-forward movement, rewrite, tag lifecycle, short-lived CI branches, and release-workflow changes | `pkg/refwatch/monitor_test.go`, `cmd/watch_test.go` | Unit/command integration | PASS |
 
 ## Validation results
 
