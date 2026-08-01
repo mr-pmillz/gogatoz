@@ -496,14 +496,14 @@ func registryBase(environmentName, fallback string) (*url.URL, error) {
 
 func registryURL(base *url.URL, pathParts ...string) string {
 	copyURL := *base
-	segments := make([]string, 0, len(pathParts)+1)
-	if basePath := strings.Trim(base.Path, "/"); basePath != "" {
-		segments = append(segments, basePath)
-	}
+	decodedPath := strings.TrimRight(base.Path, "/")
+	escapedPath := strings.TrimRight(base.EscapedPath(), "/")
 	for _, part := range pathParts {
-		segments = append(segments, url.PathEscape(strings.TrimSpace(part)))
+		part = strings.TrimSpace(part)
+		decodedPath += "/" + part
+		escapedPath += "/" + url.PathEscape(part)
 	}
-	copyURL.Path = "/" + strings.Join(segments, "/")
-	copyURL.RawPath = ""
+	copyURL.Path = decodedPath
+	copyURL.RawPath = escapedPath
 	return copyURL.String()
 }
