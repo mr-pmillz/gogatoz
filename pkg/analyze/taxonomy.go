@@ -111,6 +111,21 @@ var taxonomyRegistry = map[string]Taxonomy{
 		ATTACKRefs:    []ATTACKRef{attackT1195_001},
 		OWASPCICDRefs: []OWASPCICDRef{owaspSec3},
 	},
+	"RELEASE_BRANCH_WEAK_PROTECTION": {
+		CWEs:          []CWERef{cwe284, cwe345},
+		ATTACKRefs:    []ATTACKRef{attackT1195_001},
+		OWASPCICDRefs: []OWASPCICDRef{owaspSec1, owaspSec3},
+	},
+	"RELEASE_TAG_WEAK_PROTECTION": {
+		CWEs:          []CWERef{cwe345, cwe829},
+		ATTACKRefs:    []ATTACKRef{attackT1553, attackT1195_001},
+		OWASPCICDRefs: []OWASPCICDRef{owaspSec3, owaspSec9},
+	},
+	"RELEASE_JOB_BROAD_TRIGGER": {
+		CWEs:          []CWERef{cwe284},
+		ATTACKRefs:    []ATTACKRef{attackT1195_001, attackT1078},
+		OWASPCICDRefs: []OWASPCICDRef{owaspSec1, owaspSec5},
+	},
 
 	// --- Include risks ---
 	IncludeRemoteID: {

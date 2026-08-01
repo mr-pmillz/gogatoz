@@ -490,6 +490,14 @@ func scanOne(ctx context.Context, cl *gitlabx.Client, ident string, opts Options
 		appendError(&r, fmt.Sprintf("analysis error: %v", ferr))
 	}
 	r.Findings = append(r.Findings, findings...)
+	if opts.FetchProtected {
+		releaseFindings, releaseErr := checkReleaseGovernance(ctx, cl, proj.ID, proj.DefaultBranch, ciDocResolved)
+		if releaseErr != nil {
+			appendError(&r, fmt.Sprintf("release governance: %v", releaseErr))
+		} else {
+			r.Findings = append(r.Findings, releaseFindings...)
+		}
+	}
 	// Post-analysis: emit executor-specific findings before severity adjustment
 	addExecutorFindings(&r, ciDocResolved)
 	// Post-analysis: adjust severities based on runner risk correlation, if available

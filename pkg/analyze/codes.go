@@ -46,6 +46,27 @@ var findingCodeRegistry = map[string]FindingCodeInfo{
 		Remediation: "Remove the quarantined dependency without installing it. Confirm the intended package name and registry, audit the introducing change, rotate potentially exposed credentials, and rebuild only from verified dependencies.",
 		DocURL:      "https://github.com/projectdiscovery/depx",
 	},
+	"RELEASE_BRANCH_WEAK_PROTECTION": {
+		ID:          "RELEASE_BRANCH_WEAK_PROTECTION",
+		Severity:    SeverityHigh,
+		Title:       "Publishing branch has weak protection",
+		Description: "A branch that can publish a release is missing protection, permits direct or force pushes, or lacks required code-owner review.",
+		Remediation: "Protect every publishing branch, disallow direct and force pushes, require merge requests and code-owner approval, and ensure trusted publishing only runs from the reviewed commit.",
+	},
+	"RELEASE_TAG_WEAK_PROTECTION": {
+		ID:          "RELEASE_TAG_WEAK_PROTECTION",
+		Severity:    SeverityHigh,
+		Title:       "Publishing tag has weak protection",
+		Description: "A tag pattern that can publish a release is unprotected or can be created by developers.",
+		Remediation: "Protect every release-tag pattern and restrict tag creation and deletion to trusted maintainers following the reviewed release process.",
+	},
+	"RELEASE_JOB_BROAD_TRIGGER": {
+		ID:          "RELEASE_JOB_BROAD_TRIGGER",
+		Severity:    SeverityHigh,
+		Title:       "Publishing job accepts broad refs",
+		Description: "A publishing job can run without a specific protected branch or protected tag gate.",
+		Remediation: "Restrict publishing rules to explicitly protected release branches or tag patterns and gate the target environment with approvals.",
+	},
 	"INCLUDE_PROJECT_UNPINNED": {
 		ID:          "INCLUDE_PROJECT_UNPINNED",
 		Severity:    SeverityHigh,
