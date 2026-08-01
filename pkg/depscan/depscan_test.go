@@ -4,7 +4,10 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 )
 
 type fakeAuditor struct {
@@ -111,5 +114,46 @@ func TestScanner_ScanWrapsAuditorError(t *testing.T) {
 	_, err := scanner.Scan(context.Background(), []string{"."})
 	if !errors.Is(err, wantErr) {
 		t.Fatalf("Scan error = %v, want wrapped %v", err, wantErr)
+	}
+}
+
+type concurrentAuditor struct {
+	active    atomic.Int32
+	maxActive atomic.Int32
+}
+
+func (a *concurrentAuditor) Audit(_ context.Context, _ []string) (AuditResult, error) {
+	active := a.active.Add(1)
+	for {
+		maximum := a.maxActive.Load()
+		if active <= maximum || a.maxActive.CompareAndSwap(maximum, active) {
+			break
+		}
+	}
+	time.Sleep(20 * time.Millisecond)
+	a.active.Add(-1)
+	return AuditResult{}, nil
+}
+
+func (a *concurrentAuditor) Close() {}
+
+func TestScanner_ScanSerializesNativeAudits(t *testing.T) {
+	auditor := &concurrentAuditor{}
+	scanner := NewScanner(auditor)
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	for range 2 {
+		go func() {
+			defer wg.Done()
+			if _, err := scanner.Scan(context.Background(), []string{"."}); err != nil {
+				t.Errorf("Scan: %v", err)
+			}
+		}()
+	}
+	wg.Wait()
+
+	if got := auditor.maxActive.Load(); got != 1 {
+		t.Fatalf("maximum concurrent depx audits = %d, want 1", got)
 	}
 }

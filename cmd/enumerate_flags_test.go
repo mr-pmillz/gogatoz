@@ -165,3 +165,30 @@ func TestEnumerate_Redacted_Flag_Maps_To_Options(t *testing.T) {
 		t.Fatalf("expected Redact=true when --redacted set, got false")
 	}
 }
+
+func TestEnumerate_DependencyFlagsMapToOptions(t *testing.T) {
+	originalEnabled := enumDependencies
+	originalCache := enumDepxCacheDir
+	originalTimeout := enumDepxTimeout
+	defer func() {
+		enumDependencies = originalEnabled
+		enumDepxCacheDir = originalCache
+		enumDepxTimeout = originalTimeout
+	}()
+
+	enumDependencies = true
+	enumDepxCacheDir = " /tmp/gogatoz-depx-test "
+	enumDepxTimeout = "17s"
+	opts, err := buildEnumerateOptions(nil)
+	if err != nil {
+		t.Fatalf("buildEnumerateOptions: %v", err)
+	}
+	if !opts.ScanDependencies {
+		t.Fatal("ScanDependencies = false, want true")
+	}
+	for _, flagName := range []string{"dependencies", "depx-cache-dir", "depx-timeout"} {
+		if enumerateCmd.Flags().Lookup(flagName) == nil {
+			t.Errorf("enumerate flag --%s is not registered", flagName)
+		}
+	}
+}

@@ -10,6 +10,8 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/mr-pmillz/gogatoz/pkg/analyze"
+	"github.com/mr-pmillz/gogatoz/pkg/depscan"
 	"github.com/mr-pmillz/gogatoz/pkg/gitlabx"
 )
 
@@ -169,6 +171,58 @@ func TestEnumerateProjects_NoCIFile(t *testing.T) {
 	}
 	if results[0].CISummary != "no .gitlab-ci.yml" {
 		t.Fatalf("expected CISummary='no .gitlab-ci.yml', got %q", results[0].CISummary)
+	}
+}
+
+type fakeProjectDependencyScanner struct {
+	report    depscan.Report
+	projectID int64
+	ref       string
+}
+
+func (s *fakeProjectDependencyScanner) ScanGitLabProject(
+	_ context.Context,
+	_ *gitlabx.Client,
+	projectID int64,
+	ref string,
+) (depscan.Report, error) {
+	s.projectID = projectID
+	s.ref = ref
+	return s.report, nil
+}
+
+func TestEnumerateProjects_DependencyScanRunsWithoutCIFile(t *testing.T) {
+	client, server := newEnumMockServer(t, false)
+	defer server.Close()
+
+	finding := analyze.Finding{
+		ID: analyze.MaliciousDependencyID, Severity: analyze.SeverityCritical,
+		Title: "Known malicious dependency", SourceFile: "bom.cdx.json",
+	}
+	scanner := &fakeProjectDependencyScanner{report: depscan.Report{
+		Engine: "depx", Dependencies: 1, Findings: []analyze.Finding{finding},
+	}}
+	results, err := EnumerateProjects(context.Background(), client, []string{"42"}, Options{
+		Concurrency: 1, SkipAnalyze: true, ScanDependencies: true, DependencyScanner: scanner,
+	})
+	if err != nil {
+		t.Fatalf("EnumerateProjects: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("results = %d, want 1", len(results))
+	}
+	result := results[0]
+	if result.DependencyScan == nil || result.DependencyScan.Engine != "depx" {
+		t.Fatalf("dependency scan = %+v", result.DependencyScan)
+	}
+	if len(result.Findings) != 1 || result.Findings[0].ID != analyze.MaliciousDependencyID {
+		t.Fatalf("findings = %+v", result.Findings)
+	}
+	if scanner.projectID != 42 || scanner.ref != "main" {
+		t.Fatalf("scan call = project %d ref %q", scanner.projectID, scanner.ref)
+	}
+	if result.CISummary != "no .gitlab-ci.yml" {
+		t.Fatalf("CI summary = %q", result.CISummary)
 	}
 }
 

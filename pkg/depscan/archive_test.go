@@ -7,6 +7,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -98,6 +99,29 @@ func TestExtractTarGz_EnforcesExpandedSizeLimit(t *testing.T) {
 	archive := makeTarGz(t, []tarEntry{{name: "project/package-lock.json", body: "12345"}})
 
 	err := extractTarGz(bytes.NewReader(archive), dest, ArchiveLimits{MaxExpandedBytes: 4})
+	if !errors.Is(err, ErrArchiveTooLarge) {
+		t.Fatalf("error = %v, want ErrArchiveTooLarge", err)
+	}
+}
+
+func TestExtractTarGz_EnforcesCompressedSizeLimit(t *testing.T) {
+	dest := t.TempDir()
+	archive := makeTarGz(t, []tarEntry{{name: "project/package-lock.json", body: strings.Repeat("x", 1024)}})
+
+	err := extractTarGz(bytes.NewReader(archive), dest, ArchiveLimits{MaxArchiveBytes: 8})
+	if !errors.Is(err, ErrArchiveTooLarge) {
+		t.Fatalf("error = %v, want ErrArchiveTooLarge", err)
+	}
+}
+
+func TestExtractTarGz_EnforcesEntryLimit(t *testing.T) {
+	dest := t.TempDir()
+	archive := makeTarGz(t, []tarEntry{
+		{name: "project/one", body: "1"},
+		{name: "project/two", body: "2"},
+	})
+
+	err := extractTarGz(bytes.NewReader(archive), dest, ArchiveLimits{MaxFiles: 1})
 	if !errors.Is(err, ErrArchiveTooLarge) {
 		t.Fatalf("error = %v, want ErrArchiveTooLarge", err)
 	}

@@ -282,6 +282,32 @@ func TestBuildGLSAST_OWASPCICDIdentifiers(t *testing.T) {
 	}
 }
 
+func TestBuildGLSAST_DependencyLocationAndTaxonomy(t *testing.T) {
+	finding := analyze.Finding{
+		ID: analyze.MaliciousDependencyID, Severity: analyze.SeverityCritical,
+		Title: "Known malicious dependency", SourceFile: "bom.cdx.json",
+	}
+	vulnerability := buildGLSAST([]analyze.Finding{finding}, "1.0.0", time.Now(), time.Now()).Vulnerabilities[0]
+	if vulnerability.Location.File != "bom.cdx.json" {
+		t.Fatalf("location = %q, want bom.cdx.json", vulnerability.Location.File)
+	}
+
+	wants := map[string]string{
+		"cwe":          "829",
+		"owasp_cicd":   "CICD-SEC-3",
+		"mitre_attack": "T1195.001",
+	}
+	for identifierType, value := range wants {
+		found := false
+		for _, identifier := range vulnerability.Identifiers {
+			found = found || (identifier.Type == identifierType && identifier.Value == value)
+		}
+		if !found {
+			t.Errorf("identifiers %+v missing %s=%s", vulnerability.Identifiers, identifierType, value)
+		}
+	}
+}
+
 func TestBuildGLSAST_IdentifierCount(t *testing.T) {
 	f := analyze.Finding{
 		ID:       "PLAINTEXT_SECRET",

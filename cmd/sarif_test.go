@@ -247,6 +247,37 @@ func TestBuildSARIF_LocationIsGitlabCI(t *testing.T) {
 	}
 }
 
+func TestBuildSARIF_DependencyLocationUsesSourceFile(t *testing.T) {
+	findings := []analyze.Finding{{
+		ID: analyze.MaliciousDependencyID, Severity: analyze.SeverityCritical,
+		Title: "Known malicious dependency", SourceFile: "package-lock.json",
+	}}
+
+	result := buildSARIF(findings, "1.0.0").Runs[0].Results[0]
+	if got := result.Locations[0].PhysicalLocation.ArtifactLocation.URI; got != "package-lock.json" {
+		t.Fatalf("artifact URI = %q, want package-lock.json", got)
+	}
+
+	rule := buildSARIF(findings, "1.0.0").Runs[0].Tool.Driver.Rules[0]
+	tags, ok := rule.Properties["tags"].([]string)
+	if !ok {
+		t.Fatalf("taxonomy tags missing: %+v", rule.Properties)
+	}
+	for _, want := range []string{
+		"external/cwe/cwe-829",
+		"external/owasp-cicd/CICD-SEC-3",
+		"external/mitre-attack/T1195.001",
+	} {
+		found := false
+		for _, tag := range tags {
+			found = found || tag == want
+		}
+		if !found {
+			t.Errorf("tags %v missing %q", tags, want)
+		}
+	}
+}
+
 func TestWriteSARIF_ProducesValidJSON(t *testing.T) {
 	findings := []analyze.Finding{
 		{ID: "PLAINTEXT_SECRET", Severity: analyze.SeverityMedium, Title: "t", Evidence: "e"},
