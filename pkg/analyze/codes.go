@@ -107,6 +107,21 @@ var findingCodeRegistry = map[string]FindingCodeInfo{
 		Description: "Publishing-job configuration changed after the monitoring baseline.",
 		Remediation: "Review the exact workflow diff and ensure trusted publishing remains bound to an approved commit, protected ref, and approved environment.",
 	},
+	"DEPENDENCY_COOLDOWN": {
+		ID: "DEPENDENCY_COOLDOWN", Severity: SeverityMedium, Title: "Dependency version is inside the release cooldown",
+		Description: "The selected dependency version was published more recently than the configured minimum package age.",
+		Remediation: "Delay adoption until the cooldown expires, then verify provenance, source and artifact contents, maintainer activity, and downstream security reports before updating.",
+	},
+	"DORMANT_PACKAGE_RESURRECTION": {
+		ID: "DORMANT_PACKAGE_RESURRECTION", Severity: SeverityHigh, Title: "Dormant package published a new version",
+		Description: "A newly selected version followed a long gap in package releases, a pattern that warrants maintainer and artifact verification.",
+		Remediation: "Verify the maintainer and publishing account, compare the release with its source tag and prior package, inspect provenance, and keep the version behind the cooldown until reviewed.",
+	},
+	"DEPENDENCY_RELEASE_BURST": {
+		ID: "DEPENDENCY_RELEASE_BURST", Severity: SeverityHigh, Title: "Coordinated dependency release burst",
+		Description: "Several selected dependency versions were published within a narrow time window.",
+		Remediation: "Review whether the versions share maintainers, release infrastructure, source changes, or campaign indicators; hold the updates until each artifact and provenance record is verified.",
+	},
 	"INCLUDE_PROJECT_UNPINNED": {
 		ID:          "INCLUDE_PROJECT_UNPINNED",
 		Severity:    SeverityHigh,

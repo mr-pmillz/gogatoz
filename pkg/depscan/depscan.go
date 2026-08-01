@@ -80,23 +80,26 @@ type sbomAuditor interface {
 
 // Report combines depx counts with GoGatoZ-native findings.
 type Report struct {
-	Engine       string            `json:"engine"`
-	Paths        []string          `json:"paths"`
-	Lockfiles    []Lockfile        `json:"lockfiles"`
-	Dependencies int               `json:"dependencies"`
-	Summary      AuditSummary      `json:"summary"`
-	Packages     []AuditFinding    `json:"packages,omitempty"`
-	Findings     []analyze.Finding `json:"findings"`
-	Mode         string            `json:"mode,omitempty"`
-	DurationMS   int64             `json:"duration_ms,omitempty"`
-	SBOMPath     string            `json:"sbom_path,omitempty"`
+	Engine       string                `json:"engine"`
+	Paths        []string              `json:"paths"`
+	Lockfiles    []Lockfile            `json:"lockfiles"`
+	Dependencies int                   `json:"dependencies"`
+	Summary      AuditSummary          `json:"summary"`
+	Packages     []AuditFinding        `json:"packages,omitempty"`
+	Components   []DependencyComponent `json:"components,omitempty"`
+	Findings     []analyze.Finding     `json:"findings"`
+	Warnings     []string              `json:"warnings,omitempty"`
+	Mode         string                `json:"mode,omitempty"`
+	DurationMS   int64                 `json:"duration_ms,omitempty"`
+	SBOMPath     string                `json:"sbom_path,omitempty"`
 }
 
 // Scanner maps native depx verdicts to GoGatoZ's finding model.
 type Scanner struct {
-	auditor       Auditor
-	auditMu       sync.Mutex
-	archiveLimits ArchiveLimits
+	auditor         Auditor
+	auditMu         sync.Mutex
+	archiveLimits   ArchiveLimits
+	releaseProvider ReleaseProvider
 }
 
 func NewScanner(auditor Auditor) *Scanner {

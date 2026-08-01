@@ -28,6 +28,12 @@ func New(opts Options) (*Scanner, error) {
 	}
 	scanner := NewScanner(&nativeAuditor{auditor: auditor})
 	scanner.archiveLimits = opts.ArchiveLimits
+	releaseProvider, err := newRegistryReleaseProvider(opts.Timeout)
+	if err != nil {
+		auditor.Close()
+		return nil, fmt.Errorf("create registry release metadata provider: %w", err)
+	}
+	scanner.releaseProvider = releaseProvider
 	return scanner, nil
 }
 
