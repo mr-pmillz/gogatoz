@@ -30,6 +30,22 @@ var findingCodeRegistry = map[string]FindingCodeInfo{
 		Description: "Pipeline includes a remote URL. If the remote is compromised or modified, your pipeline can be hijacked. Prefer project includes with pinned refs.",
 		Remediation: "Avoid remote includes; prefer project includes pinned to a commit. If remote is necessary, allowlist hosts and pin exact versions. See: https://docs.gitlab.com/ee/ci/yaml/includes.html#includeremote",
 	},
+	MaliciousDependencyID: {
+		ID:          MaliciousDependencyID,
+		Severity:    SeverityCritical,
+		Title:       "Known malicious dependency",
+		Description: "A dependency version matched depx malicious-package intelligence. Treat any installation or build that consumed this dependency as a potential supply-chain compromise.",
+		Remediation: "Remove the affected dependency version without installing it. Review prior install and build logs, rotate credentials exposed to affected jobs, inspect produced artifacts and contacted endpoints, and pin a verified replacement before rebuilding.",
+		DocURL:      "https://github.com/projectdiscovery/depx",
+	},
+	QuarantinedDependencyID: {
+		ID:          QuarantinedDependencyID,
+		Severity:    SeverityCritical,
+		Title:       "Quarantined dependency",
+		Description: "A dependency matched a package quarantined by depx because the registry identifies it as a security holding package. It must not be installed or executed.",
+		Remediation: "Remove the quarantined dependency without installing it. Confirm the intended package name and registry, audit the introducing change, rotate potentially exposed credentials, and rebuild only from verified dependencies.",
+		DocURL:      "https://github.com/projectdiscovery/depx",
+	},
 	"INCLUDE_PROJECT_UNPINNED": {
 		ID:          "INCLUDE_PROJECT_UNPINNED",
 		Severity:    SeverityHigh,

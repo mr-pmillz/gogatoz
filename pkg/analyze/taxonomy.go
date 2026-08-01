@@ -101,6 +101,17 @@ var (
 
 // taxonomyRegistry maps finding IDs to their standard taxonomy references.
 var taxonomyRegistry = map[string]Taxonomy{
+	MaliciousDependencyID: {
+		CWEs:          []CWERef{cwe829, cwe1104},
+		ATTACKRefs:    []ATTACKRef{attackT1195_001},
+		OWASPCICDRefs: []OWASPCICDRef{owaspSec3},
+	},
+	QuarantinedDependencyID: {
+		CWEs:          []CWERef{cwe829, cwe1104},
+		ATTACKRefs:    []ATTACKRef{attackT1195_001},
+		OWASPCICDRefs: []OWASPCICDRef{owaspSec3},
+	},
+
 	// --- Include risks ---
 	IncludeRemoteID: {
 		CWEs:          []CWERef{cwe829, cwe494},

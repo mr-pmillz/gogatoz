@@ -28,14 +28,16 @@ var AllSeverities = []Severity{SeverityCritical, SeverityHigh, SeverityMedium, S
 
 // Finding ID constants.
 const (
-	IncludeRemoteID        = "INCLUDE_REMOTE"
-	SecretExfilHTTPID      = "SECRET_EXFIL_HTTP"     //nolint:gosec // finding ID, not a credential
-	SecretExfilArtifactID  = "SECRET_EXFIL_ARTIFACT" //nolint:gosec // finding ID, not a credential
-	ScriptEncodedPayloadID = "SCRIPT_ENCODED_PAYLOAD"
-	WhitespaceHidingID     = "SCRIPT_WHITESPACE_HIDING"
-	CharcodeObfuscationID  = "CHARCODE_OBFUSCATION"
-	SuspiciousNetworkID    = "SUSPICIOUS_NETWORK_TARGET"
-	CampaignMatchID        = "CAMPAIGN_MATCH"
+	IncludeRemoteID         = "INCLUDE_REMOTE"
+	SecretExfilHTTPID       = "SECRET_EXFIL_HTTP"     //nolint:gosec // finding ID, not a credential
+	SecretExfilArtifactID   = "SECRET_EXFIL_ARTIFACT" //nolint:gosec // finding ID, not a credential
+	ScriptEncodedPayloadID  = "SCRIPT_ENCODED_PAYLOAD"
+	WhitespaceHidingID      = "SCRIPT_WHITESPACE_HIDING"
+	CharcodeObfuscationID   = "CHARCODE_OBFUSCATION"
+	SuspiciousNetworkID     = "SUSPICIOUS_NETWORK_TARGET"
+	CampaignMatchID         = "CAMPAIGN_MATCH"
+	MaliciousDependencyID   = "MALICIOUS_DEPENDENCY"
+	QuarantinedDependencyID = "QUARANTINED_DEPENDENCY"
 )
 
 // Dependency records a structured cross-project reference extracted during analysis.
@@ -53,6 +55,7 @@ type Finding struct {
 	Evidence       string   `json:"evidence,omitempty"`
 	JobName        string   `json:"job_name,omitempty"`
 	Recommendation string   `json:"recommendation,omitempty"`
+	SourceFile     string   `json:"source_file,omitempty"`
 
 	FalsePositive       bool   `json:"false_positive,omitempty"`
 	FalsePositiveReason string `json:"false_positive_reason,omitempty"`
