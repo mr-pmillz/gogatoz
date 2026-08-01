@@ -111,6 +111,12 @@ func extractArchiveEntry(
 	expandedBytes *int64,
 	limits ArchiveLimits,
 ) error {
+	// GitLab archive exports may begin with a POSIX PAX global header. It only
+	// supplies metadata to archive/tar and has no filesystem representation.
+	// Continue rejecting every other non-directory/non-regular entry below.
+	if header.Typeflag == tar.TypeXGlobalHeader {
+		return nil
+	}
 	entryPath, err := safeArchivePath(header.Name)
 	if err != nil {
 		return err
