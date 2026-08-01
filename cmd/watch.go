@@ -90,7 +90,7 @@ campaign matches, critical findings, or other supply chain indicators.`,
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 
-		renderInfo(cmd.OutOrStdout(), fmt.Sprintf("Watching %s (branches: %s, interval: %s)",
+		renderInfo(cmd.ErrOrStderr(), fmt.Sprintf("Watching %s (branches: %s, interval: %s)",
 			watchTarget, strings.Join(branches, ","), interval))
 
 		checkOnce := func() {
@@ -141,7 +141,7 @@ campaign matches, critical findings, or other supply chain indicators.`,
 		for {
 			select {
 			case <-sigCh:
-				renderInfo(cmd.OutOrStdout(), "Received signal, shutting down")
+				renderInfo(cmd.ErrOrStderr(), "Received signal, shutting down")
 				return nil
 			case <-ctx.Done():
 				return nil
