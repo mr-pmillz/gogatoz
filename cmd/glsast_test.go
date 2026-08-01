@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/mr-pmillz/gogatoz/pkg/analyze"
+	"github.com/mr-pmillz/gogatoz/pkg/enumerate"
 )
 
 func TestBuildGLSAST_VulnerabilityCount(t *testing.T) {
@@ -305,6 +306,29 @@ func TestBuildGLSAST_DependencyLocationAndTaxonomy(t *testing.T) {
 		if !found {
 			t.Errorf("identifiers %+v missing %s=%s", vulnerability.Identifiers, identifierType, value)
 		}
+	}
+}
+
+func TestBuildGLSAST_ReleaseGovernanceTaxonomy(t *testing.T) {
+	for _, findingID := range []string{
+		enumerate.ReleaseBranchWeakProtectionID,
+		enumerate.ReleaseTagWeakProtectionID,
+		enumerate.ReleaseJobBroadTriggerID,
+	} {
+		t.Run(findingID, func(t *testing.T) {
+			vulnerability := buildGLSAST([]analyze.Finding{{
+				ID: findingID, Severity: analyze.SeverityHigh, Title: "release governance",
+			}}, "1.0.0", time.Now(), time.Now()).Vulnerabilities[0]
+			identifierTypes := map[string]bool{}
+			for _, identifier := range vulnerability.Identifiers {
+				identifierTypes[identifier.Type] = true
+			}
+			for _, want := range []string{"cwe", "owasp_cicd", "mitre_attack"} {
+				if !identifierTypes[want] {
+					t.Errorf("identifiers %+v missing %s", vulnerability.Identifiers, want)
+				}
+			}
+		})
 	}
 }
 

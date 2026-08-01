@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/mr-pmillz/gogatoz/pkg/analyze"
+	"github.com/mr-pmillz/gogatoz/pkg/enumerate"
 )
 
 func TestBuildSARIF_MixedSeverities(t *testing.T) {
@@ -295,6 +296,24 @@ func TestBuildSARIF_MutableRefTaxonomy(t *testing.T) {
 		if !slices.Contains(tags, want) {
 			t.Errorf("tags %v missing %q", tags, want)
 		}
+	}
+}
+
+func TestBuildSARIF_ReleaseGovernanceTaxonomy(t *testing.T) {
+	for _, findingID := range []string{
+		enumerate.ReleaseBranchWeakProtectionID,
+		enumerate.ReleaseTagWeakProtectionID,
+		enumerate.ReleaseJobBroadTriggerID,
+	} {
+		t.Run(findingID, func(t *testing.T) {
+			rule := buildSARIF([]analyze.Finding{{
+				ID: findingID, Severity: analyze.SeverityHigh, Title: "release governance",
+			}}, "1.0.0").Runs[0].Tool.Driver.Rules[0]
+			tags, ok := rule.Properties["tags"].([]string)
+			if !ok || len(tags) < 3 {
+				t.Fatalf("release taxonomy tags missing: %+v", rule.Properties)
+			}
+		})
 	}
 }
 

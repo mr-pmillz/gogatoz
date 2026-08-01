@@ -177,6 +177,9 @@ func TestTaxonomySpecificMappings(t *testing.T) {
 		{DepConfusionRiskID, 427, "T1195.001", "CICD-SEC-3"},
 		{SecretExfilHTTPID, 319, "T1567", "CICD-SEC-6"},
 		{DinDDetectedID, 250, "T1611", "CICD-SEC-7"},
+		{"RELEASE_BRANCH_WEAK_PROTECTION", 284, "T1195.001", "CICD-SEC-1"},
+		{"RELEASE_TAG_WEAK_PROTECTION", 345, "T1553", "CICD-SEC-3"},
+		{"RELEASE_JOB_BROAD_TRIGGER", 284, "T1195.001", "CICD-SEC-1"},
 	}
 
 	for _, tt := range tests {
