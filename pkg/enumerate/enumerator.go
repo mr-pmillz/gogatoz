@@ -56,10 +56,11 @@ type Result struct {
 	GroupVariables   []analyze.VariableInfo    `json:"group_variables,omitempty"`
 	Environments     []analyze.EnvironmentInfo `json:"environments,omitempty"`
 	// Log scraping (optional)
-	LogFindingsCount int            `json:"log_findings_count,omitempty"`
-	RunnerLog        *RunnerLogInfo `json:"runner_log,omitempty"`
-	DurationMS       int64          `json:"duration_ms,omitempty"`
-	Error            string         `json:"error,omitempty"`
+	LogFindingsCount int             `json:"log_findings_count,omitempty"`
+	RunnerLog        *RunnerLogInfo  `json:"runner_log,omitempty"`
+	RunnerLogs       []RunnerLogInfo `json:"runner_logs,omitempty"`
+	DurationMS       int64           `json:"duration_ms,omitempty"`
+	Error            string          `json:"error,omitempty"`
 }
 
 // Options controls enumeration behavior.
@@ -83,9 +84,11 @@ type Options struct {
 	RunnerScope    string // project|group|instance (default: project)
 	AllowAdmin     bool   // allow admin-only operations when RunnerScope=instance
 	// Logs scraping (optional)
-	LogScrape       bool // scrape recent job logs for key=value findings
-	LogMaxPipelines int  // cap pipelines per ref
-	LogMaxJobs      int  // cap jobs per pipeline
+	LogScrape             bool // scrape recent job logs for key=value findings
+	LogMaxPipelines       int  // cap pipelines per ref
+	LogMaxJobs            int  // cap jobs per pipeline
+	RunnerLogMaxPipelines int  // cap pipelines inspected for runner fallback
+	RunnerLogMaxJobs      int  // cap jobs inspected per pipeline for runner fallback
 	// Variable metadata
 	FetchVariables bool // fetch project and group CI/CD variable metadata (requires api scope)
 	// Environment metadata
@@ -387,8 +390,26 @@ func scanOne(ctx context.Context, cl *gitlabx.Client, ident string, opts Options
 	r.HasCIPipeline = true
 	r.CISummary = ciDocResolved.DebugString()
 
+	// Runner metadata fallback: inspect a bounded sample of recent jobs when
+	// inventory was not requested, returned no runners, or was denied.
+	if len(fetchedRunners) == 0 {
+		runnerLogs, runnerLogErr := DiscoverRunnersFromLogs(ctx, cl, proj.ID, refToUse, RunnerLogLimits{
+			Pipelines: opts.RunnerLogMaxPipelines,
+			Jobs:      opts.RunnerLogMaxJobs,
+		})
+		if runnerLogErr != nil {
+			slog.Debug("runner log fallback unavailable", "project", r.ProjectPathWithNS, "error", runnerLogErr)
+		} else if len(runnerLogs) > 0 {
+			r.RunnerLogs = runnerLogs
+			legacy := runnerLogs[0]
+			r.RunnerLog = &legacy
+			fetchedRunners = runnerLogsToInventory(runnerLogs)
+			applyRunnerInfo(&r, fetchedRunners)
+		}
+	}
+
 	// Correlate job tags with fetched runners (if any)
-	if opts.FetchRunners && len(fetchedRunners) > 0 {
+	if len(fetchedRunners) > 0 {
 		// Collect unique job tags from the resolved pipeline
 		jobTags := map[string]struct{}{}
 		for _, j := range ciDocResolved.Jobs {
@@ -454,13 +475,6 @@ func scanOne(ctx context.Context, cl *gitlabx.Client, ident string, opts Options
 		}
 	}
 
-	// Run-log runner detection (fallback when --runners not available)
-	if r.RunnerLog == nil && !opts.FetchRunners {
-		if trace := fetchFirstJobTrace(ctx, cl, proj.ID, refToUse); trace != "" {
-			r.RunnerLog = ExtractRunnerFromLog(trace)
-		}
-	}
-
 	if opts.SkipAnalyze {
 		return r
 	}
@@ -506,6 +520,17 @@ func scanOne(ctx context.Context, cl *gitlabx.Client, ident string, opts Options
 	adjustFindingsForProtectedBranches(&r, ciDocResolved)
 	slog.Debug("project scanned", "project", r.ProjectPathWithNS, "findings", len(r.Findings), "ref", ref, "duration_ms", r.DurationMS)
 	return r
+}
+
+func runnerLogsToInventory(logs []RunnerLogInfo) []gitlabx.RunnerInfo {
+	runners := make([]gitlabx.RunnerInfo, 0, len(logs))
+	for _, info := range logs {
+		runners = append(runners, gitlabx.RunnerInfo{
+			ID: info.RunnerID, Description: info.Description,
+			TagList: append([]string(nil), info.Tags...), Executor: info.Executor,
+		})
+	}
+	return runners
 }
 
 // determineRefs returns the list of refs to scan based on options, deduped and capped.
