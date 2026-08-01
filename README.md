@@ -16,7 +16,8 @@ GoGatoZ discovers GitLab projects, scans their CI/CD configurations for security
 ## Features
 
 - **Search** -- discover GitLab projects by name, language, topic, code content, or file path patterns
-- **Enumerate** -- scan `.gitlab-ci.yml` pipelines for 37 finding types across includes, runners, secrets, injection, supply chain, and LOTP vectors
+- **Enumerate** -- scan `.gitlab-ci.yml` pipelines and optional dependency metadata across includes, runners, secrets, injection, supply chain, and LOTP vectors
+- **Deps** -- audit lockfiles and CycloneDX/SPDX SBOMs in-process with native depx malicious-package intelligence
 - **Attack** -- 15+ exploitation modules: CI injection, secrets exfiltration, deploy keys, runner-on-runner, AI poisoning, supply chain attacks, and more
 - **Pivot** -- automated BFS lateral movement: enumerate, attack, harvest tokens, validate, and repeat at depth
 - **SecretScan** -- clone and scan repos for leaked secrets via TruffleHog, Gitleaks, or Titus
@@ -61,8 +62,8 @@ export GITLAB_TOKEN=glpat-xxx
 # 2. Search for projects
 gogatoz search -q "deploy" --per-page 20 --max-pages 1
 
-# 3. Enumerate CI/CD risks
-gogatoz enumerate --input targets.txt --concurrency 16 --json
+# 3. Enumerate CI/CD and dependency risks
+gogatoz enumerate --input targets.txt --concurrency 16 --dependencies --json
 
 # 4. Generate an HTML report
 gogatoz report --input results.jsonl --output report.html
@@ -102,7 +103,7 @@ Key flags: `--query`, `--language`, `--topic`, `--code-content`, `--path-pattern
 
 ### enumerate
 
-Scan projects for CI/CD configuration vulnerabilities. Detects 37 finding types including include risks, runner exposure, MR-triggered jobs, variable injection, artifact poisoning, plaintext secrets, fork risks, script injection, LOTP tool execution, OIDC token exposure, cache poisoning, and more.
+Scan projects for CI/CD configuration vulnerabilities. Detects include risks, mutable release refs, runner exposure, MR-triggered jobs, variable injection, artifact poisoning, plaintext secrets, fork risks, script injection, LOTP tool execution, OIDC token exposure, cache poisoning, and more.
 
 ```bash
 # Scan from file
@@ -117,6 +118,9 @@ gogatoz enumerate --group myorg/platform --group-recursive --format jsonl
 # With runners and protected branch info
 gogatoz enumerate --input targets.txt --runners --protected-branches --score
 
+# Also audit repository lockfiles and SBOMs with native depx
+gogatoz enumerate --input targets.txt --dependencies --json
+
 # Output as SARIF + HTML
 gogatoz enumerate --input targets.txt --format html --output report.html --sarif-output scan.sarif
 
@@ -124,7 +128,25 @@ gogatoz enumerate --input targets.txt --format html --output report.html --sarif
 gogatoz search -q "runner" --format jsonl | gogatoz enumerate --input - --only-findings --json
 ```
 
-Key flags: `--input`, `--group`, `--groups`, `--concurrency`, `--timeout`, `--follow-includes`, `--include-depth`, `--deep`, `--runners`, `--runners-scope`, `--protected-branches`, `--score`, `--filter-false-positives`, `--only-findings`, `--redacted`, `--log-scrape`, `--format`, `--sarif-output`, `--glsast-output`, `--bloodhound-export`, `--webhook-url`.
+Key flags: `--input`, `--group`, `--groups`, `--concurrency`, `--timeout`, `--follow-includes`, `--include-depth`, `--deep`, `--dependencies`, `--depx-cache-dir`, `--depx-timeout`, `--runners`, `--runners-scope`, `--protected-branches`, `--score`, `--filter-false-positives`, `--only-findings`, `--redacted`, `--log-scrape`, `--format`, `--sarif-output`, `--glsast-output`, `--bloodhound-export`, `--webhook-url`.
+
+### deps
+
+Audit dependency metadata directly with [ProjectDiscovery depx](https://github.com/projectdiscovery/depx). GoGatoZ calls depx's native Go implementation in-process; it never invokes a package manager and never installs or executes package contents or lifecycle scripts.
+
+```bash
+# Audit the current repository
+gogatoz deps audit .
+
+# Scan explicit lockfiles or SBOMs and fail CI on a finding
+gogatoz deps audit package-lock.json bom.cdx.json \
+  --format sarif --output dependency-findings.sarif --fail-on-findings
+
+# GitLab SAST report
+gogatoz deps audit . --format glsast --output gl-sast-report.json
+```
+
+Supported output formats are `text`, `json`, `sarif`, and `glsast`. Findings use `MALICIOUS_DEPENDENCY` or `QUARANTINED_DEPENDENCY` and include the source metadata file.
 
 ### attack
 

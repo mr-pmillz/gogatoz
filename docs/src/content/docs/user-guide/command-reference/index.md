@@ -7,11 +7,12 @@ GoGatoZ provides several commands, each with its own set of options:
 
 1. [Search Command](/user-guide/command-reference/search/) - Discover GitLab projects of interest
 2. [Enumerate Command](/user-guide/command-reference/enumerate/) - Analyze GitLab projects for exploitable CI/CD issues
-3. [Attack Command](/user-guide/command-reference/attack/) - Stage payloads or commit CI for ethical testing
-4. [Explain Command](/user-guide/command-reference/explain/) - Look up finding codes and remediation guidance
-5. [PBOM Command](/user-guide/command-reference/pbom/) - Generate Pipeline Bill of Materials
-6. [Query Command](/user-guide/command-reference/query/) - Query the local results database
-7. [Secretscan Command](/user-guide/command-reference/secretscan/) - Clone and scan repos for secrets
+3. [Deps Command](/user-guide/command-reference/deps/) - Audit lockfiles and SBOMs for malicious dependencies
+4. [Attack Command](/user-guide/command-reference/attack/) - Stage payloads or commit CI for ethical testing
+5. [Explain Command](/user-guide/command-reference/explain/) - Look up finding codes and remediation guidance
+6. [PBOM Command](/user-guide/command-reference/pbom/) - Generate Pipeline Bill of Materials
+7. [Query Command](/user-guide/command-reference/query/) - Query the local results database
+8. [Secretscan Command](/user-guide/command-reference/secretscan/) - Clone and scan repos for secrets
 
 ## Common Global Flags
 
@@ -41,6 +42,7 @@ gogatoz [command] [options]
 Where `[command]` is one of:
 - `search` - Search for GitLab projects
 - `enumerate` - Enumerate projects for CI/CD risks
+- `deps` - Audit dependency metadata with native depx
 - `attack` - Execute payloads or commit CI YAML
 - `explain` - Look up finding codes and remediation
 - `pbom` - Generate Pipeline Bill of Materials
@@ -55,6 +57,7 @@ To see the available options for any command, use the `-h` or `--help` flag:
 gogatoz --help
 gogatoz search --help
 gogatoz enumerate --help
+gogatoz deps audit --help
 gogatoz attack --help
 gogatoz explain --help
 gogatoz pbom --help

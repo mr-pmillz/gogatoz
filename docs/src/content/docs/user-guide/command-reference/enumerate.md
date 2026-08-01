@@ -45,6 +45,9 @@ Analysis behavior:
 - --remote-max-bytes       Max bytes to fetch for a remote include (0 uses default 1MiB)
 - --remote-timeout         Per-remote include fetch timeout (e.g., 5s). Empty uses default 10s
 - --include-cache-ttl      Enable cross-call cache for remote includes with TTL (e.g., 10m). Empty disables
+- --dependencies          Download a bounded repository archive and audit lockfiles/SBOMs with native depx (default: false)
+- --depx-cache-dir        depx inventory cache directory (optional)
+- --depx-timeout          depx inventory and registry request timeout (default: 30s)
 
 Non-default refs (deep-dive):
 - --ref                    A single Git reference (branch or tag) to scan in addition to the default branch
@@ -124,6 +127,17 @@ another-group/subgroup/proj
 ./gogatoz enumerate -i projects.txt --include-depth 3
 ```
 
+### Audit dependency metadata
+
+```bash
+./gogatoz enumerate -i projects.txt --dependencies --json
+```
+
+Dependency scanning is metadata-only. GoGatoZ downloads a bounded GitLab
+repository archive, extracts only regular files and directories into an
+isolated temporary directory, and calls depx in-process. It never invokes a
+package manager and never installs or executes repository or package content.
+
 ### Enumerate an entire group
 
 ```bash
@@ -191,6 +205,7 @@ Text output prints one line per project with a brief CI summary or an error. JSO
 - has_ci_pipeline (bool)
 - ci_summary (string)
 - findings (array)
+- dependency_scan (object) — native depx summary and source metadata files when `--dependencies` is set
 - protected_branches (array) — when --protected-branches is set, the names of protected branches
 - duration_ms (int)
 - error (string)
@@ -202,6 +217,8 @@ Findings include a severity, rule identifier, and evidence where applicable.
 The analyzer currently flags common risky patterns in GitLab CI:
 - Remote include risk (HIGH)
 - Unpinned project include (HIGH)
+- Mutable project/component include ref such as a branch, tag, version selector, short SHA, or dynamic value (HIGH); only full 40- or 64-character commit SHAs are treated as immutable
+- Known malicious or quarantined dependencies from lockfiles and SBOMs (CRITICAL, with `--dependencies`)
 - CI/CD component usage (MEDIUM)
 - Tagged runner with broad triggers (HIGH)
 - Merge Request triggers on tagged runners (MEDIUM)
