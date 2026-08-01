@@ -133,6 +133,11 @@ var taxonomyRegistry = map[string]Taxonomy{
 		ATTACKRefs:    []ATTACKRef{attackT1195_002},
 		OWASPCICDRefs: []OWASPCICDRef{owaspSec3, owaspSec9},
 	},
+	IncludeMutableRefID: {
+		CWEs:          []CWERef{cwe829, cwe345},
+		ATTACKRefs:    []ATTACKRef{attackT1195_001},
+		OWASPCICDRefs: []OWASPCICDRef{owaspSec3, owaspSec9},
+	},
 
 	// --- Runner exposure ---
 	"SELF_HOSTED_EXPOSED": {

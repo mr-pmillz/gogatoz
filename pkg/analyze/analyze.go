@@ -157,7 +157,7 @@ func checkIncludeRisks(doc *pipeline.Document) []Finding {
 				ID:          "INCLUDE_COMPONENT",
 				Severity:    SeverityMedium,
 				Title:       "CI/CD component include",
-				Description: "Pipeline uses a CI/CD component. Ensure the component source is trusted and pinned.",
+				Description: "Pipeline uses a CI/CD component. Ensure the component source is trusted and pinned to a full commit SHA.",
 				Evidence:    fmt.Sprintf("component=%s", inc.Component),
 				Deps:        []Dependency{{Kind: "component", Path: inc.Component}},
 			})
