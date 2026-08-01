@@ -147,6 +147,16 @@ gogatoz deps audit . --format glsast --output gl-sast-report.json
 
 # Hold newly published npm/PyPI/RubyGems versions for review
 gogatoz deps audit . --cooldown 72h --format json
+
+# Statically inspect an exact package archive without installing it
+gogatoz deps verify --artifact /path/to/package.tgz --format json
+
+# Compare the artifact with reviewed source and signed-build provenance
+gogatoz deps verify --artifact /path/to/package.tgz \
+  --source /path/to/reviewed-source \
+  --provenance /path/to/provenance.json \
+  --expected-commit 0123456789abcdef0123456789abcdef01234567 \
+  --expected-ref refs/tags/v1.2.3 --fail-on-findings
 ```
 
 Supported output formats are `text`, `json`, `sarif`, `glsast`, `gldep`,
@@ -156,6 +166,12 @@ component inventory is enriched with release timestamps to detect newly
 published versions, dormant-package resurrection, and coordinated release
 bursts. Registry enrichment is disabled by default and never downloads package
 archives or executes package content.
+
+`deps verify` supports npm tarballs, Python wheels, Ruby gems, ZIP, and tar
+archives. It parses bounded members in memory and never extracts, installs, or
+executes package content. Optional source and SLSA/in-toto provenance checks
+detect artifact-only code, partial builds, and repository/commit/ref/pipeline
+mismatches. Verifier output is available as text, JSON, SARIF, or GitLab SAST.
 
 ### watch
 

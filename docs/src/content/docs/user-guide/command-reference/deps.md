@@ -8,11 +8,21 @@ The `deps audit` command checks dependency metadata against
 quarantined package intelligence. The integration uses depx's native Go
 implementation in-process.
 
+The `deps verify` command statically inspects a package archive and can compare
+it with reviewed source and SLSA/in-toto provenance. Use it before installing a
+new package version or promoting a release artifact.
+
 ## Safety boundary
 
 `deps audit` reads metadata only. It does not invoke npm, pip, Go, Cargo,
 Bundler, Maven, or another package manager. It does not install packages,
 execute package contents, or run lifecycle scripts.
+
+`deps verify` applies the same no-execution rule. It parses bounded archive
+members in memory and never extracts them onto the filesystem. HTTP(S) inputs
+use same-origin redirects and strict download, member, file-count, and expanded
+size limits. GoGatoZ does not resolve package names through a registry: provide
+the exact archive URL or a local archive that you trust GoGatoZ to read.
 
 ## Basic usage
 
@@ -90,6 +100,50 @@ choose text, JSON, SARIF, GitLab SAST, or GitLab Dependency Scanning instead.
 Treat a finding as an incident-response signal. Remove or replace the affected
 dependency without installing it, determine whether any build consumed it, and
 rotate credentials available to affected CI jobs.
+
+## Verify a package artifact
+
+Inspect an npm tarball, Python wheel, Ruby gem, ZIP, or tar archive without
+installing it:
+
+```bash
+gogatoz deps verify --artifact /path/to/package.tgz
+
+gogatoz deps verify \
+  --artifact /path/to/package.tgz \
+  --source /path/to/reviewed-source \
+  --provenance /path/to/provenance.json \
+  --expected-repository https://gitlab.example.test/team/package \
+  --expected-commit 0123456789abcdef0123456789abcdef01234567 \
+  --expected-ref refs/tags/v1.2.3 \
+  --expected-pipeline 987 \
+  --format sarif \
+  --output artifact-verification.sarif \
+  --fail-on-findings
+```
+
+Supported verifier formats are `text`, `json`, `sarif`, and `glsast`. SARIF
+and GitLab SAST output include CWE, OWASP CI/CD, and MITRE ATT&CK metadata.
+
+The verifier reports:
+
+- `PACKAGE_EXECUTION_TRIGGER` — lifecycle, native build, Python path, or import-time execution behavior
+- `PACKAGE_PERSISTENCE_INDICATOR` — developer-tool, detached-process, cron, or systemd persistence behavior
+- `PACKAGE_EXECUTABLE_PAYLOAD` — executable content or a file extension that disagrees with its magic bytes
+- `PACKAGE_OBFUSCATION` — numeric byte arrays reconstructed through `String.fromCharCode`
+- `ARTIFACT_SOURCE_DIVERGENCE` — published content is absent from or changed relative to reviewed source
+- `ARTIFACT_PARTIAL_BUILD` — the artifact contains substantially fewer files or bytes than reviewed source
+- `PROVENANCE_MISMATCH` — provenance does not match the expected repository, commit, ref, or pipeline
+- `RELEASE_TAG_MISMATCH` — the package version does not match an expected release tag
+
+Source divergence can be legitimate when a release adds generated or compiled
+outputs. Treat it as a review queue: explain and reproduce each difference from
+the expected commit before consuming the artifact.
+
+Verifier resource limits default to a 64 MiB download, 256 MiB expanded
+content, 8 MiB per member, and 10,000 regular files. They can be reduced with
+`--max-download-bytes`, `--max-expanded-bytes`, `--max-file-bytes`, and
+`--max-files`.
 
 ## Scan GitLab projects
 

@@ -7,7 +7,7 @@ GoGatoZ provides several commands, each with its own set of options:
 
 1. [Search Command](/user-guide/command-reference/search/) - Discover GitLab projects of interest
 2. [Enumerate Command](/user-guide/command-reference/enumerate/) - Analyze GitLab projects for exploitable CI/CD issues
-3. [Deps Command](/user-guide/command-reference/deps/) - Audit lockfiles and SBOMs for malicious dependencies
+3. [Deps Command](/user-guide/command-reference/deps/) - Audit dependency metadata and statically verify package artifacts
 4. [Attack Command](/user-guide/command-reference/attack/) - Stage payloads or commit CI for ethical testing
 5. [Watch Command](/user-guide/command-reference/watch/) - Monitor release refs and publishing workflow drift
 6. [Explain Command](/user-guide/command-reference/explain/) - Look up finding codes and remediation guidance
@@ -43,7 +43,7 @@ gogatoz [command] [options]
 Where `[command]` is one of:
 - `search` - Search for GitLab projects
 - `enumerate` - Enumerate projects for CI/CD risks
-- `deps` - Audit dependency metadata with native depx
+- `deps` - Audit dependency metadata and statically verify package artifacts
 - `attack` - Execute payloads or commit CI YAML
 - `watch` - Monitor release refs and publishing workflow drift
 - `explain` - Look up finding codes and remediation
@@ -60,6 +60,7 @@ gogatoz --help
 gogatoz search --help
 gogatoz enumerate --help
 gogatoz deps audit --help
+gogatoz deps verify --help
 gogatoz attack --help
 gogatoz watch --help
 gogatoz explain --help
