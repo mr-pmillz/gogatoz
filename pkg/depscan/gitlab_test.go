@@ -19,6 +19,7 @@ func (a *archiveAuditor) Audit(_ context.Context, paths []string) (AuditResult, 
 	a.paths = append([]string(nil), paths...)
 	source := filepath.Join(paths[0], "safe-project-deadbeef", "bom.cdx.json")
 	return AuditResult{
+		Paths:        append([]string(nil), paths...),
 		Dependencies: 1,
 		Summary:      AuditSummary{Lockfiles: 1, Total: 1, Malicious: 1},
 		Lockfiles:    []Lockfile{{Path: source, Type: "sbom", Ecosystem: "npm", Dependencies: 1}},
@@ -68,6 +69,9 @@ func TestScanner_ScanGitLabProjectUsesBoundedArchiveAndRelativeLocations(t *test
 	}
 	if len(report.Lockfiles) != 1 || report.Lockfiles[0].Path != "bom.cdx.json" {
 		t.Fatalf("lockfiles = %+v, want repository-relative bom.cdx.json", report.Lockfiles)
+	}
+	if len(report.Paths) != 2 || report.Paths[0] != "." || report.Paths[1] != "bom.cdx.json" {
+		t.Fatalf("report paths = %v, want repository-relative audit paths", report.Paths)
 	}
 	if len(report.Findings) != 1 || report.Findings[0].SourceFile != "bom.cdx.json" {
 		t.Fatalf("findings = %+v, want repository-relative bom.cdx.json", report.Findings)

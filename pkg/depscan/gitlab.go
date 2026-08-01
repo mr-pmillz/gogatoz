@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/mr-pmillz/gogatoz/pkg/gitlabx"
@@ -115,9 +116,14 @@ func (s *Scanner) ScanGitLabProject(
 	if closeErr != nil {
 		return Report{}, fmt.Errorf("close downloaded repository archive: %w", closeErr)
 	}
+	auditPaths, err := gitLabDependencyAuditPaths(extractionRoot)
+	if err != nil {
+		return Report{}, fmt.Errorf("discover GitLab repository SBOMs: %w", err)
+	}
 
-	slog.Info("auditing GitLab repository dependency metadata", "project_id", projectID, "ref", ref)
-	report, err := s.Scan(ctx, []string{extractionRoot})
+	slog.Info("auditing GitLab repository dependency metadata", "project_id", projectID, "ref", ref,
+		"paths", len(auditPaths))
+	report, err := s.Scan(ctx, auditPaths)
 	if err != nil {
 		return Report{}, fmt.Errorf("scan GitLab repository dependency metadata: %w", err)
 	}
@@ -125,9 +131,63 @@ func (s *Scanner) ScanGitLabProject(
 	return report, nil
 }
 
+// gitLabDependencyAuditPaths supplements depx's recursive lockfile discovery
+// with explicit SBOM paths. depx v0.1.1 accepts these names when provided as
+// files but its directory discovery currently enumerates lockfiles only.
+func gitLabDependencyAuditPaths(extractionRoot string) ([]string, error) {
+	paths := []string{extractionRoot}
+	err := filepath.WalkDir(extractionRoot, func(filePath string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() || entry.Type()&os.ModeSymlink != 0 || !isDepxSBOMFilename(entry.Name()) {
+			return nil
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		if info.Mode().IsRegular() {
+			paths = append(paths, filePath)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	sort.Strings(paths[1:])
+	return paths, nil
+}
+
+// isDepxSBOMFilename mirrors the native depx v0.1.1 SBOM filename contract.
+// depx remains responsible for parsing the file and auditing its dependencies.
+func isDepxSBOMFilename(name string) bool {
+	base := strings.ToLower(strings.TrimSpace(name))
+	if base == "bom.json" || base == "bom.xml" {
+		return true
+	}
+	for _, suffix := range []string{
+		".cdx.json", ".cdx.xml",
+		".cyclonedx.json", ".cyclonedx.xml",
+		".spdx.json", ".spdx", ".spdx.yml", ".spdx.rdf", ".spdx.rdf.xml",
+	} {
+		if strings.HasSuffix(base, suffix) {
+			return true
+		}
+	}
+	return false
+}
+
 func normalizeRepositoryLocations(report *Report, extractionRoot string) {
 	if report == nil {
 		return
+	}
+	for i := range report.Paths {
+		if filepath.Clean(report.Paths[i]) == filepath.Clean(extractionRoot) {
+			report.Paths[i] = "."
+			continue
+		}
+		report.Paths[i] = repositoryRelativePath(report.Paths[i], extractionRoot)
 	}
 	for i := range report.Lockfiles {
 		report.Lockfiles[i].Path = repositoryRelativePath(report.Lockfiles[i].Path, extractionRoot)
