@@ -294,6 +294,7 @@ func TestGeneratePackageTamperYAMLRejectsUnsafeConfiguration(t *testing.T) {
 		{name: "Python lifecycle", opts: PackageTamperOptions{Ecosystem: "pypi", Trigger: "postinstall"}, want: "trigger"},
 		{name: "import needs entry", opts: PackageTamperOptions{Ecosystem: "npm", Trigger: "import"}, want: "entry file"},
 		{name: "entry traversal", opts: PackageTamperOptions{Ecosystem: "pypi", Trigger: "import", EntryFile: "../setup.py"}, want: "entry file"},
+		{name: "entry shell expansion", opts: PackageTamperOptions{Ecosystem: "pypi", Trigger: "import", EntryFile: "src/$(touch-owned)/__init__.py"}, want: "entry file"},
 		{name: "live package", opts: PackageTamperOptions{Ecosystem: "npm", LivePublish: true}, want: "package name"},
 		{
 			name: "live registry",
