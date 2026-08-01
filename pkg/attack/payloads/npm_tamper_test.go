@@ -3,6 +3,12 @@
 package payloads
 
 import (
+	"archive/tar"
+	"compress/gzip"
+	"io"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -144,6 +150,8 @@ func TestGeneratePackageTamperYAMLLivePublishGates(t *testing.T) {
 			_ = mustParse(t, yaml)
 			for _, want := range append([]string{
 				"GOGATOZ_PACKAGE_TAMPER_APPROVED",
+				"GOGATOZ_EXPECTED_PACKAGE",
+				"package identity mismatch",
 				"mode=live-publish",
 				"when: manual",
 			}, tt.contains...) {
@@ -158,6 +166,122 @@ func TestGeneratePackageTamperYAMLLivePublishGates(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestPackageTamperPreviewMutatesOnlyAnIsolatedCopy(t *testing.T) {
+	projectDir := t.TempDir()
+	entryPath := filepath.Join(projectDir, "src", "acme_fixture", "__init__.py")
+	if err := os.MkdirAll(filepath.Dir(entryPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	original := []byte("VALUE = 1\n")
+	if err := os.WriteFile(entryPath, original, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	yaml, err := GeneratePackageTamperYAML(PackageTamperOptions{
+		Ecosystem:      "pypi",
+		Trigger:        "import",
+		EntryFile:      "src/acme_fixture/__init__.py",
+		InjectedScript: `open("SHOULD_NOT_EXIST", "w").write("executed")`,
+	})
+	if err != nil {
+		t.Fatalf("GeneratePackageTamperYAML() error = %v", err)
+	}
+	document := mustParse(t, yaml)
+	if len(document.Jobs) != 1 || len(document.Jobs[0].Script) != 1 {
+		t.Fatalf("unexpected generated jobs: %+v", document.Jobs)
+	}
+	command := exec.Command("sh", "-c", document.Jobs[0].Script[0]) //nolint:gosec // Executes only locally generated preview shell in an isolated test directory.
+	command.Dir = projectDir
+	command.Env = append(os.Environ(), "CI_PROJECT_DIR="+projectDir)
+	if output, runErr := command.CombinedOutput(); runErr != nil {
+		t.Fatalf("preview command failed: %v\n%s", runErr, output)
+	}
+	if _, statErr := os.Stat(filepath.Join(projectDir, "SHOULD_NOT_EXIST")); !os.IsNotExist(statErr) {
+		t.Fatalf("injected Python unexpectedly executed: %v", statErr)
+	}
+	gotOriginal, err := os.ReadFile(entryPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(gotOriginal) != string(original) {
+		t.Fatalf("source checkout was modified: %q", gotOriginal)
+	}
+	previewEntry := readTarGzipMember(t, filepath.Join(projectDir, "package-tamper-preview.tar.gz"), "./src/acme_fixture/__init__.py")
+	if !strings.Contains(previewEntry, "SHOULD_NOT_EXIST") {
+		t.Fatalf("preview archive does not contain inert injected content: %q", previewEntry)
+	}
+}
+
+func TestPackageTamperPreviewRejectsSymlinkEntry(t *testing.T) {
+	projectDir := t.TempDir()
+	targetPath := filepath.Join(projectDir, "outside.py")
+	if err := os.WriteFile(targetPath, []byte("SAFE\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	entryPath := filepath.Join(projectDir, "src", "acme_fixture", "__init__.py")
+	if err := os.MkdirAll(filepath.Dir(entryPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(targetPath, entryPath); err != nil {
+		t.Fatal(err)
+	}
+
+	yaml, err := GeneratePackageTamperYAML(PackageTamperOptions{
+		Ecosystem: "pypi", Trigger: "import", EntryFile: "src/acme_fixture/__init__.py",
+	})
+	if err != nil {
+		t.Fatalf("GeneratePackageTamperYAML() error = %v", err)
+	}
+	document := mustParse(t, yaml)
+	command := exec.Command("sh", "-c", document.Jobs[0].Script[0]) //nolint:gosec // Executes only locally generated preview shell in an isolated test directory.
+	command.Dir = projectDir
+	command.Env = append(os.Environ(), "CI_PROJECT_DIR="+projectDir)
+	if output, runErr := command.CombinedOutput(); runErr == nil {
+		t.Fatalf("preview accepted symlink entry:\n%s", output)
+	}
+	content, err := os.ReadFile(targetPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(content) != "SAFE\n" {
+		t.Fatalf("symlink target was modified: %q", content)
+	}
+}
+
+func readTarGzipMember(t *testing.T, archivePath, memberPath string) string {
+	t.Helper()
+	file, err := os.Open(archivePath) //nolint:gosec // Test-controlled temporary path.
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+	gzipReader, err := gzip.NewReader(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer gzipReader.Close()
+	tarReader := tar.NewReader(gzipReader)
+	for {
+		header, nextErr := tarReader.Next()
+		if nextErr == io.EOF {
+			break
+		}
+		if nextErr != nil {
+			t.Fatal(nextErr)
+		}
+		if header.Name != memberPath {
+			continue
+		}
+		content, readErr := io.ReadAll(tarReader)
+		if readErr != nil {
+			t.Fatal(readErr)
+		}
+		return string(content)
+	}
+	t.Fatalf("archive member %q not found", memberPath)
+	return ""
 }
 
 func TestGeneratePackageTamperYAMLRejectsUnsafeConfiguration(t *testing.T) {
