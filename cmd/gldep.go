@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mr-pmillz/gogatoz/pkg/analyze"
 	"github.com/mr-pmillz/gogatoz/pkg/depscan"
 )
 
@@ -59,12 +60,9 @@ func buildGLDependencyScanning(report depscan.Report, toolVersion string, startT
 		ID: "gogatoz", Name: "GoGatoZ", Version: toolVersion,
 		Vendor: glsastVendor{Name: "mr-pmillz"},
 	}
-	vulnerabilities := make([]glDependencyVuln, 0, len(report.Packages))
-	for i, pkg := range report.Packages {
-		if i >= len(report.Findings) {
-			break
-		}
-		finding := report.Findings[i]
+	vulnerabilities := make([]glDependencyVuln, 0, len(report.Findings))
+	for _, finding := range report.Findings {
+		pkg := dependencyCoordinateForFinding(report, finding)
 		identifiers := packageIdentifiers(pkg, finding.ID)
 		file := strings.TrimSpace(pkg.Source)
 		if file == "" {
@@ -99,6 +97,55 @@ func buildGLDependencyScanning(report depscan.Report, toolVersion string, startT
 		},
 		Vulnerabilities: vulnerabilities,
 	}
+}
+
+func dependencyCoordinateForFinding(report depscan.Report, finding analyze.Finding) depscan.AuditFinding {
+	name := evidenceValue(finding.Evidence, "package")
+	version := evidenceValue(finding.Evidence, "version")
+	ecosystem := evidenceValue(finding.Evidence, "ecosystem")
+	for _, pkg := range report.Packages {
+		if dependencyIdentityMatches(pkg.Ecosystem, pkg.Name, pkg.Version, ecosystem, name, version) {
+			return pkg
+		}
+	}
+	for _, component := range report.Components {
+		if dependencyIdentityMatches(component.Ecosystem, component.Name, component.Version, ecosystem, name, version) {
+			return depscan.AuditFinding{
+				Ecosystem: component.Ecosystem, Name: component.Name, Version: component.Version,
+				Source: dependencyReportSource(report, finding), PackageURL: component.PURL,
+			}
+		}
+	}
+	return depscan.AuditFinding{
+		Ecosystem: ecosystem, Name: name, Version: version,
+		Source: dependencyReportSource(report, finding),
+	}
+}
+
+func dependencyIdentityMatches(pkgEcosystem, pkgName, pkgVersion, ecosystem, name, version string) bool {
+	return strings.EqualFold(strings.TrimSpace(pkgEcosystem), strings.TrimSpace(ecosystem)) &&
+		strings.EqualFold(strings.TrimSpace(pkgName), strings.TrimSpace(name)) &&
+		strings.TrimSpace(pkgVersion) == strings.TrimSpace(version)
+}
+
+func dependencyReportSource(report depscan.Report, finding analyze.Finding) string {
+	if source := strings.TrimSpace(finding.SourceFile); source != "" {
+		return source
+	}
+	if len(report.Lockfiles) > 0 && strings.TrimSpace(report.Lockfiles[0].Path) != "" {
+		return strings.TrimSpace(report.Lockfiles[0].Path)
+	}
+	return "dependency-metadata"
+}
+
+func evidenceValue(evidence, key string) string {
+	prefix := key + "="
+	for _, field := range strings.Fields(evidence) {
+		if value, ok := strings.CutPrefix(field, prefix); ok {
+			return strings.TrimSpace(strings.TrimSuffix(value, ","))
+		}
+	}
+	return ""
 }
 
 func packageIdentifiers(pkg depscan.AuditFinding, fallback string) []glsastIdentifier {
