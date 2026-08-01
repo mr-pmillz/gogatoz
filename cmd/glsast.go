@@ -147,6 +147,13 @@ func buildGLSAST(findings []analyze.Finding, toolVersion string, startTime, endT
 					Value: owasp.ID,
 				})
 			}
+			for _, attack := range tax.ATTACKRefs {
+				identifiers = append(identifiers, glsastIdentifier{
+					Type:  "mitre_attack",
+					Name:  attack.ID + ": " + attack.Name,
+					Value: attack.ID,
+				})
+			}
 		}
 
 		vulns = append(vulns, glsastVuln{
@@ -161,7 +168,7 @@ func buildGLSAST(findings []analyze.Finding, toolVersion string, startTime, endT
 			},
 			Identifiers: identifiers,
 			Location: glsastLocation{
-				File: ".gitlab-ci.yml",
+				File: findingSourceFile(f),
 			},
 		})
 	}

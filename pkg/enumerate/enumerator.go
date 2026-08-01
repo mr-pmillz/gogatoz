@@ -13,6 +13,7 @@ import (
 	"github.com/mr-pmillz/gogatoz/pkg/analyze"
 	"github.com/mr-pmillz/gogatoz/pkg/attack/secretsdump"
 	"github.com/mr-pmillz/gogatoz/pkg/config"
+	"github.com/mr-pmillz/gogatoz/pkg/depscan"
 	"github.com/mr-pmillz/gogatoz/pkg/gitlabx"
 	"github.com/mr-pmillz/gogatoz/pkg/pipeline"
 	gitlab "gitlab.com/gitlab-org/api/client-go"
@@ -39,6 +40,7 @@ type Result struct {
 	HasCIPipeline     bool              `json:"has_ci_pipeline"`
 	CISummary         string            `json:"ci_summary,omitempty"`
 	Findings          []analyze.Finding `json:"findings,omitempty"`
+	DependencyScan    *depscan.Report   `json:"dependency_scan,omitempty"`
 	ProtectedBranches []string          `json:"protected_branches,omitempty"`
 	// Runner enrichment (optional)
 	RunnerScope     string         `json:"runner_scope,omitempty"`
@@ -93,8 +95,18 @@ type Options struct {
 	Redact      bool                    // when true, mask plaintext secret values in findings (default: unredacted)
 	Controls    *config.ControlsConfig  // per-detection configuration (nil = use defaults)
 	ThreatIntel *config.ThreatIntelFeed // external threat intel feed (nil = use hardcoded blocklist only)
+	// Native depx dependency metadata auditing.
+	ScanDependencies  bool
+	DependencyScanner DependencyScanner
 	// Progress, if set, is called once per completed project result.
 	Progress func(Result)
+}
+
+// DependencyScanner is the repository-archive scan surface used by
+// enumeration. Implementations must inspect metadata only and never execute
+// repository or package content.
+type DependencyScanner interface {
+	ScanGitLabProject(context.Context, *gitlabx.Client, int64, string) (depscan.Report, error)
 }
 
 func appendError(r *Result, msg string) {
@@ -138,6 +150,9 @@ func dedup(idents []string) []string {
 // Unlike EnumerateProjects, it does not accumulate results in memory.
 // The emit function is called from worker goroutines and is serialized internally.
 func EnumerateProjectsStream(ctx context.Context, cl *gitlabx.Client, idents []string, opts Options, emit func(Result)) error {
+	if opts.ScanDependencies && opts.DependencyScanner == nil {
+		return errors.New("dependency scanning requires a configured depx scanner")
+	}
 	if opts.Concurrency <= 0 {
 		opts.Concurrency = DefaultConcurrency
 	}
@@ -316,6 +331,18 @@ func scanOne(ctx context.Context, cl *gitlabx.Client, ident string, opts Options
 		// No ref to scan (no default branch and none provided) => likely empty project
 		r.CISummary = "no default branch"
 		return r
+	}
+	if opts.ScanDependencies {
+		dependencyReport, dependencyErr := opts.DependencyScanner.ScanGitLabProject(ctx, cl, proj.ID, refToUse)
+		if dependencyErr != nil {
+			appendError(&r, fmt.Sprintf("dependency scan: %v", dependencyErr))
+		} else {
+			r.DependencyScan = &dependencyReport
+			r.Findings = append(r.Findings, dependencyReport.Findings...)
+			slog.Debug("dependency metadata scanned", "project", r.ProjectPathWithNS,
+				"ref", refToUse, "dependencies", dependencyReport.Dependencies,
+				"findings", len(dependencyReport.Findings))
+		}
 	}
 
 	file, resp, err := cl.GL.RepositoryFiles.GetFile(proj.ID, ".gitlab-ci.yml", &gitlab.GetFileOptions{Ref: new(refToUse)}, gitlab.WithContext(ctx))

@@ -101,28 +101,33 @@ func TestRunDependencyAuditSupportsAllFormats(t *testing.T) {
 				t.Fatalf("scanner options = %+v", gotOptions)
 			}
 
-			switch format {
-			case fmtJSON:
-				var report depscan.Report
-				if err := json.Unmarshal(output.Bytes(), &report); err != nil || report.Engine != "depx" {
-					t.Fatalf("JSON output = %q, error = %v", output.String(), err)
-				}
-			case fmtSARIF:
-				var report sarifLog
-				if err := json.Unmarshal(output.Bytes(), &report); err != nil || len(report.Runs) != 1 {
-					t.Fatalf("SARIF output = %q, error = %v", output.String(), err)
-				}
-			case fmtGLSAST:
-				var report glsastReport
-				if err := json.Unmarshal(output.Bytes(), &report); err != nil || len(report.Vulnerabilities) != 1 {
-					t.Fatalf("GitLab SAST output = %q, error = %v", output.String(), err)
-				}
-			default:
-				if !strings.Contains(output.String(), "Dependencies: 1") || !strings.Contains(output.String(), "MALICIOUS_DEPENDENCY") {
-					t.Fatalf("text output = %q", output.String())
-				}
-			}
+			assertDependencyOutput(t, format, output.Bytes())
 		})
+	}
+}
+
+func assertDependencyOutput(t *testing.T, format string, output []byte) {
+	t.Helper()
+	switch format {
+	case fmtJSON:
+		var report depscan.Report
+		if err := json.Unmarshal(output, &report); err != nil || report.Engine != "depx" {
+			t.Fatalf("JSON output = %q, error = %v", output, err)
+		}
+	case fmtSARIF:
+		var report sarifLog
+		if err := json.Unmarshal(output, &report); err != nil || len(report.Runs) != 1 {
+			t.Fatalf("SARIF output = %q, error = %v", output, err)
+		}
+	case fmtGLSAST:
+		var report glsastReport
+		if err := json.Unmarshal(output, &report); err != nil || len(report.Vulnerabilities) != 1 {
+			t.Fatalf("GitLab SAST output = %q, error = %v", output, err)
+		}
+	default:
+		if text := string(output); !strings.Contains(text, "Dependencies: 1") || !strings.Contains(text, "MALICIOUS_DEPENDENCY") {
+			t.Fatalf("text output = %q", output)
+		}
 	}
 }
 

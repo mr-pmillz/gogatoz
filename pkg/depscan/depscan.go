@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/mr-pmillz/gogatoz/pkg/analyze"
@@ -88,7 +89,9 @@ type Report struct {
 
 // Scanner maps native depx verdicts to GoGatoZ's finding model.
 type Scanner struct {
-	auditor Auditor
+	auditor       Auditor
+	auditMu       sync.Mutex
+	archiveLimits ArchiveLimits
 }
 
 func NewScanner(auditor Auditor) *Scanner {
@@ -107,7 +110,9 @@ func (s *Scanner) Scan(ctx context.Context, paths []string) (Report, error) {
 	paths = normalizePaths(paths)
 
 	slog.Info("starting dependency metadata scan", "engine", "depx", "paths", len(paths))
+	s.auditMu.Lock()
 	auditResult, err := s.auditor.Audit(ctx, paths)
+	s.auditMu.Unlock()
 	if err != nil {
 		return Report{}, fmt.Errorf("audit dependencies with depx: %w", err)
 	}

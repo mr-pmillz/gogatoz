@@ -10,9 +10,10 @@ import (
 
 // Options configures a native depx scanner.
 type Options struct {
-	CacheDir string
-	Timeout  time.Duration
-	Version  string
+	CacheDir      string
+	Timeout       time.Duration
+	Version       string
+	ArchiveLimits ArchiveLimits
 }
 
 // New constructs a Scanner backed by depx's native Go implementation.
@@ -25,7 +26,9 @@ func New(opts Options) (*Scanner, error) {
 	if err != nil {
 		return nil, fmt.Errorf("create native depx scanner: %w", err)
 	}
-	return NewScanner(&nativeAuditor{auditor: auditor}), nil
+	scanner := NewScanner(&nativeAuditor{auditor: auditor})
+	scanner.archiveLimits = opts.ArchiveLimits
+	return scanner, nil
 }
 
 type nativeAuditor struct {

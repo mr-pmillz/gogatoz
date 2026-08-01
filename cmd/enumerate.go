@@ -87,6 +87,10 @@ var (
 	enumThreatIntelFile string
 	// local/offline scanning
 	enumLocalPath string
+	// native depx dependency metadata scanning
+	enumDependencies bool
+	enumDepxCacheDir string
+	enumDepxTimeout  string
 )
 
 var enumerateFunc = enumerate.EnumerateProjects
@@ -100,6 +104,15 @@ var enumerateCmd = &cobra.Command{
 		var results []enumerate.Result
 		var client *gitlabx.Client
 		scanStart := time.Now()
+		var dependencyScanner dependencyScanRunner
+		if enumDependencies {
+			var dependencyErr error
+			dependencyScanner, dependencyErr = makeDependencyScanner(enumDepxCacheDir, enumDepxTimeout)
+			if dependencyErr != nil {
+				return dependencyErr
+			}
+			defer dependencyScanner.Close()
+		}
 
 		// Local enumerate mode — no token or API needed
 		if lp := strings.TrimSpace(enumLocalPath); lp != "" {
@@ -107,6 +120,7 @@ var enumerateCmd = &cobra.Command{
 			if lerr != nil {
 				return lerr
 			}
+			localOpts.DependencyScanner = dependencyScanner
 			results, lerr = enumerate.EnumerateLocal(ctx, []string{lp}, localOpts)
 			if lerr != nil {
 				return lerr
@@ -195,6 +209,7 @@ var enumerateCmd = &cobra.Command{
 			if err != nil {
 				return err
 			}
+			opts.DependencyScanner = dependencyScanner
 
 			// Simple progress indicator when not JSON and verbose
 			if !outputJSON && verbose {
@@ -410,6 +425,9 @@ func init() {
 	enumerateCmd.Flags().StringVar(&remoteCacheTTL, "remote-cache-ttl", "", "Cross-call TTL cache for remote includes (e.g., 5m). Empty disables")
 	enumerateCmd.Flags().BoolVar(&onlyFindings, "only-findings", false, "When printing text, only show projects with findings")
 	enumerateCmd.Flags().BoolVar(&enumRedact, "redacted", false, "Redact (mask) plaintext secret values in findings; unredacted by default")
+	enumerateCmd.Flags().BoolVar(&enumDependencies, "dependencies", false, "Audit repository lockfiles and SBOMs with native depx (metadata only; never executes packages)")
+	enumerateCmd.Flags().StringVar(&enumDepxCacheDir, "depx-cache-dir", "", "depx inventory cache directory")
+	enumerateCmd.Flags().StringVar(&enumDepxTimeout, "depx-timeout", "30s", "depx inventory and registry request timeout")
 	// Notifications / webhook
 	enumerateCmd.Flags().StringVar(&webhookURL, "webhook-url", "", "Webhook URL to POST findings as JSON envelopes (one per finding)")
 	enumerateCmd.Flags().StringArrayVar(&webhookHeaders, "webhook-header", nil, "Additional HTTP header for webhook POST (repeatable), e.g., 'Authorization: Bearer x'")
@@ -709,6 +727,7 @@ func buildEnumerateOptions(controlsCfg *config.ControlsConfig) (enumerate.Option
 	opts.LogMaxJobs = logMaxJobs
 	opts.Redact = enumRedact
 	opts.Controls = controlsCfg
+	opts.ScanDependencies = enumDependencies
 	if u := strings.TrimSpace(enumThreatIntelURL); u != "" {
 		feed, ferr := config.LoadThreatIntelFeed(u)
 		if ferr != nil {
