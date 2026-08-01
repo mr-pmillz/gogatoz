@@ -519,6 +519,68 @@ func TestScanOne_FetchRunners_ProjectScope(t *testing.T) {
 	}
 }
 
+func TestScanOne_RunnerAPIDeniedFallsBackToJobLogs(t *testing.T) {
+	t.Parallel()
+
+	ciEncoded := base64.StdEncoding.EncodeToString([]byte(testCIYAML))
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.URL.Path == "/api/v4/projects/42/runners":
+			w.WriteHeader(http.StatusForbidden)
+		case r.URL.Path == "/api/v4/projects/42/pipelines":
+			_ = json.NewEncoder(w).Encode([]map[string]any{{"id": 501}})
+		case r.URL.Path == "/api/v4/projects/42/pipelines/501/jobs":
+			_ = json.NewEncoder(w).Encode([]map[string]any{{
+				"id": 601, "tag_list": []string{"shell", "internal"},
+				"runner":         map[string]any{"id": 77, "description": "fallback-runner", "runner_type": "project_type"},
+				"runner_manager": map[string]any{"system_id": "s_fallback", "version": "18.1.0", "platform": "linux", "architecture": "amd64"},
+			}})
+		case r.URL.Path == "/api/v4/projects/42/jobs/601/trace":
+			w.Header().Set("Content-Type", "text/plain")
+			_, _ = w.Write([]byte("Preparing the \"shell\" executor\nRunning on fallback-host..."))
+		case strings.Contains(r.URL.Path, "/repository/files/"):
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"file_name": ".gitlab-ci.yml", "file_path": ".gitlab-ci.yml",
+				"encoding": "base64", "content": ciEncoded,
+			})
+		case r.URL.Path == "/api/v4/projects/42":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"id": int64(42), "path_with_namespace": "group/fallback-project",
+				"web_url": "https://gitlab.local/group/fallback-project", "default_branch": "main",
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	client, err := gitlabx.New(server.URL, "test-token")
+	if err != nil {
+		t.Fatalf("gitlabx.New: %v", err)
+	}
+	results, err := EnumerateProjects(context.Background(), client, []string{"42"}, Options{
+		Concurrency: 1, SkipAnalyze: true, FetchRunners: true, RunnerScope: "project",
+		RunnerLogMaxPipelines: 2, RunnerLogMaxJobs: 3,
+	})
+	if err != nil {
+		t.Fatalf("EnumerateProjects: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("result count = %d, want 1", len(results))
+	}
+	result := results[0]
+	if !strings.Contains(result.Error, "runners(project)") {
+		t.Errorf("result error = %q, want original runner API denial", result.Error)
+	}
+	if len(result.RunnerLogs) != 1 {
+		t.Fatalf("runner logs = %+v, want one fallback result", result.RunnerLogs)
+	}
+	if result.RunnerLog == nil || result.RunnerLog.RunnerID != 77 || result.RunnerLog.Executor != "shell" {
+		t.Fatalf("legacy runner log = %+v", result.RunnerLog)
+	}
+}
+
 func TestScanOne_WithAnalysis(t *testing.T) {
 	ciEncoded := base64.StdEncoding.EncodeToString([]byte(testCIYAMLWithSecret))
 
