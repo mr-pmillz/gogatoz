@@ -308,6 +308,26 @@ func TestBuildGLSAST_DependencyLocationAndTaxonomy(t *testing.T) {
 	}
 }
 
+func TestBuildGLSAST_MutableRefTaxonomy(t *testing.T) {
+	vulnerability := buildGLSAST([]analyze.Finding{{
+		ID: analyze.IncludeMutableRefID, Severity: analyze.SeverityHigh, Title: "Mutable include ref",
+	}}, "1.0.0", time.Now(), time.Now()).Vulnerabilities[0]
+	wants := map[string]string{
+		"cwe":          "829",
+		"owasp_cicd":   "CICD-SEC-3",
+		"mitre_attack": "T1195.001",
+	}
+	for identifierType, value := range wants {
+		found := false
+		for _, identifier := range vulnerability.Identifiers {
+			found = found || (identifier.Type == identifierType && identifier.Value == value)
+		}
+		if !found {
+			t.Errorf("identifiers %+v missing %s=%s", vulnerability.Identifiers, identifierType, value)
+		}
+	}
+}
+
 func TestBuildGLSAST_IdentifierCount(t *testing.T) {
 	f := analyze.Finding{
 		ID:       "PLAINTEXT_SECRET",
