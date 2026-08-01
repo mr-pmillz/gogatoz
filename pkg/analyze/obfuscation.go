@@ -11,6 +11,9 @@ import (
 
 var (
 	fromCharCodeRe = regexp.MustCompile(`(?i)String\.fromCharCode\s*\([\d,\s]{20,}\)`)
+	numericCharCodeMapRe = regexp.MustCompile(
+		`(?i)\[\s*(?:\d{1,3}\s*,\s*){5,}\d{1,3}\s*,?\s*\]\s*\.map\s*\(.{0,120}String\.fromCharCode`,
+	)
 	pythonChrRe    = regexp.MustCompile(`(?i)(chr\(\d+\)\s*\+\s*){5,}`)
 	pythonBytesRe  = regexp.MustCompile(`(?i)bytes\(\s*\[\s*(\d+\s*,\s*){5,}`)
 	rubyPackRe     = regexp.MustCompile(`(?i)\[\s*(\d+\s*,\s*){5,}.*\]\.pack\s*\(\s*"C\*"\s*\)`)
@@ -106,6 +109,9 @@ func checkWhitespaceHiding(line string) string {
 }
 
 func checkCharCodeObfuscation(line string) string {
+	if numericCharCodeMapRe.MatchString(line) {
+		return "numeric byte array mapped through String.fromCharCode"
+	}
 	if fromCharCodeRe.MatchString(line) {
 		return "String.fromCharCode"
 	}
