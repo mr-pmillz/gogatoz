@@ -4,6 +4,7 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -11,6 +12,41 @@ import (
 	"testing"
 	"time"
 )
+
+func TestAuditorRejectsInvalidStateAndFormats(t *testing.T) {
+	t.Parallel()
+
+	var nilAuditor *Auditor
+	if _, err := nilAuditor.Audit(context.Background(), nil); err == nil {
+		t.Fatal("nil Auditor.Audit returned nil error")
+	}
+
+	auditor := &Auditor{closed: true}
+	if _, err := auditor.Audit(context.Background(), nil); !errors.Is(err, ErrClosed) {
+		t.Fatalf("closed Auditor.Audit error = %v, want %v", err, ErrClosed)
+	}
+	if _, _, err := auditor.AuditSBOM(context.Background(), nil, "html"); err == nil {
+		t.Fatal("AuditSBOM with unsupported format returned nil error")
+	}
+
+	auditor.Close()
+	nilAuditor.Close()
+	if got := mapResult(nil); got.Dependencies != 0 || len(got.Findings) != 0 {
+		t.Fatalf("mapResult(nil) = %+v", got)
+	}
+}
+
+func TestNewRejectsCachePathThatIsAFile(t *testing.T) {
+	t.Parallel()
+
+	cachePath := filepath.Join(t.TempDir(), "cache-file")
+	if err := os.WriteFile(cachePath, []byte("not a directory"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := New(Options{CacheDir: cachePath}); err == nil {
+		t.Fatal("New returned nil error for a cache path that is a file")
+	}
+}
 
 func TestAuditor_AuditUsesDepxNativeService(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
