@@ -317,6 +317,23 @@ func TestBuildSARIF_ReleaseGovernanceTaxonomy(t *testing.T) {
 	}
 }
 
+func TestBuildSARIF_RefWatchTaxonomy(t *testing.T) {
+	for _, findingID := range []string{
+		"REF_NON_FAST_FORWARD", "TAG_TARGET_CHANGED", "TAG_RECREATED",
+		"SHORT_LIVED_CI_BRANCH", "REF_CREATION_BURST", "RELEASE_WORKFLOW_CHANGED",
+	} {
+		t.Run(findingID, func(t *testing.T) {
+			rule := buildSARIF([]analyze.Finding{{
+				ID: findingID, Severity: analyze.SeverityHigh, Title: "ref watch",
+			}}, "1.0.0").Runs[0].Tool.Driver.Rules[0]
+			tags, ok := rule.Properties["tags"].([]string)
+			if !ok || len(tags) < 3 {
+				t.Fatalf("ref-watch taxonomy tags missing: %+v", rule.Properties)
+			}
+		})
+	}
+}
+
 func TestWriteSARIF_ProducesValidJSON(t *testing.T) {
 	findings := []analyze.Finding{
 		{ID: "PLAINTEXT_SECRET", Severity: analyze.SeverityMedium, Title: "t", Evidence: "e"},

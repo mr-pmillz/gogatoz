@@ -352,6 +352,28 @@ func TestBuildGLSAST_MutableRefTaxonomy(t *testing.T) {
 	}
 }
 
+func TestBuildGLSAST_RefWatchTaxonomy(t *testing.T) {
+	for _, findingID := range []string{
+		"REF_NON_FAST_FORWARD", "TAG_TARGET_CHANGED", "TAG_RECREATED",
+		"SHORT_LIVED_CI_BRANCH", "REF_CREATION_BURST", "RELEASE_WORKFLOW_CHANGED",
+	} {
+		t.Run(findingID, func(t *testing.T) {
+			vulnerability := buildGLSAST([]analyze.Finding{{
+				ID: findingID, Severity: analyze.SeverityHigh, Title: "ref watch",
+			}}, "1.0.0", time.Now(), time.Now()).Vulnerabilities[0]
+			identifierTypes := map[string]bool{}
+			for _, identifier := range vulnerability.Identifiers {
+				identifierTypes[identifier.Type] = true
+			}
+			for _, want := range []string{"cwe", "owasp_cicd", "mitre_attack"} {
+				if !identifierTypes[want] {
+					t.Errorf("identifiers %+v missing %s", vulnerability.Identifiers, want)
+				}
+			}
+		})
+	}
+}
+
 func TestBuildGLSAST_IdentifierCount(t *testing.T) {
 	f := analyze.Finding{
 		ID:       "PLAINTEXT_SECRET",
