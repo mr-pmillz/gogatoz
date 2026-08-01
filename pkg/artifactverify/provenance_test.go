@@ -67,6 +67,23 @@ func TestVerifyReportsProvenanceAndReleaseTagMismatch(t *testing.T) {
 	}
 }
 
+func TestVerifyReportsMissingProvenanceForExpectedIdentity(t *testing.T) {
+	t.Parallel()
+
+	artifact := writeSyntheticTarGz(t, []syntheticArchiveFile{
+		{path: "package/package.json", content: []byte(`{"name":"gogatoz-fixture","version":"1.2.3"}`)},
+	})
+	report, err := Verify(context.Background(), Options{
+		Artifact: artifact, ExpectedCommit: strings.Repeat("c", 40),
+	})
+	if err != nil {
+		t.Fatalf("Verify: %v", err)
+	}
+	if !reportHasFinding(report, ProvenanceMismatchID) {
+		t.Fatalf("missing provenance finding: %+v", report.Findings)
+	}
+}
+
 func writeProvenanceFixture(t *testing.T, body string) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "provenance.json")

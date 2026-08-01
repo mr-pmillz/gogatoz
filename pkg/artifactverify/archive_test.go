@@ -72,6 +72,59 @@ func TestVerifySupportsRubyGemDataArchive(t *testing.T) {
 	}
 }
 
+func TestVerifySupportsUncompressedTar(t *testing.T) {
+	t.Parallel()
+
+	var body bytes.Buffer
+	tw := tar.NewWriter(&body)
+	content := []byte("fixture\n")
+	if err := tw.WriteHeader(&tar.Header{Name: "package/README.md", Mode: 0o644, Size: int64(len(content)), Typeflag: tar.TypeReg}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tw.Write(content); err != nil {
+		t.Fatal(err)
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	archivePath := filepath.Join(t.TempDir(), "fixture.tar")
+	if err := os.WriteFile(archivePath, body.Bytes(), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	report, err := Verify(context.Background(), Options{Artifact: archivePath})
+	if err != nil {
+		t.Fatalf("Verify: %v", err)
+	}
+	if report.ArtifactType != "tar" || report.Files != 1 {
+		t.Fatalf("tar report = %+v", report)
+	}
+}
+
+func TestDetectArchiveMemberMagic(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		content []byte
+		want    string
+	}{
+		{name: "PE", content: []byte{'M', 'Z', 0, 0}, want: "pe"},
+		{name: "Mach-O", content: []byte{0xfe, 0xed, 0xfa, 0xcf}, want: "mach-o"},
+		{name: "script", content: []byte("#!/bin/sh\n"), want: "script"},
+		{name: "zip", content: []byte{'P', 'K', 3, 4}, want: "zip"},
+		{name: "gzip", content: []byte{0x1f, 0x8b, 0, 0}, want: "gzip"},
+		{name: "png", content: []byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n'}, want: "png"},
+		{name: "text", content: []byte("fixture"), want: ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := detectMagic(tt.content); got != tt.want {
+				t.Fatalf("detectMagic = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func syntheticTarGzBytes(t *testing.T, files []syntheticArchiveFile) []byte {
 	t.Helper()
 	var body bytes.Buffer

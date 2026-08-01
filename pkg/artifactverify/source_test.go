@@ -72,3 +72,28 @@ func TestInspectSourceRejectsSymlink(t *testing.T) {
 		t.Fatalf("inspectSource error = %v, want %v", err, ErrUnsafeArchive)
 	}
 }
+
+func TestInspectSourceDirectoryCollectsRegularFilesAndSkipsGit(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, ".git"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, ".git", "config"), []byte("ignored"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, "src"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "src", "fixture.go"), []byte("package fixture\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	report, err := inspectSource(context.Background(), root, DefaultLimits(), nil)
+	if err != nil {
+		t.Fatalf("inspectSource: %v", err)
+	}
+	if len(report.files) != 1 || report.files[0].Path != "src/fixture.go" {
+		t.Fatalf("source directory report = %+v", report)
+	}
+}

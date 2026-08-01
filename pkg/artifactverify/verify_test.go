@@ -8,6 +8,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -45,6 +46,15 @@ func TestVerifyScansSyntheticArchiveWithoutExecution(t *testing.T) {
 	for _, id := range wantIDs {
 		if !reportHasFinding(report, id) {
 			t.Errorf("missing %s in findings: %+v", id, report.Findings)
+		}
+	}
+	for _, evidence := range []string{
+		"trigger=lifecycle", "trigger=binding.gyp", "trigger=import_time", "trigger=detached_child",
+		"trigger=python_pth", "trigger=os_persistence", "trigger=developer_tool_path",
+		"reason=magic_extension_mismatch", "technique=numeric_array_from_char_code",
+	} {
+		if !reportHasEvidence(report, evidence) {
+			t.Errorf("missing evidence %q in findings: %+v", evidence, report.Findings)
 		}
 	}
 }
@@ -152,6 +162,15 @@ func writeSyntheticTarGz(t *testing.T, files []syntheticArchiveFile) string {
 func reportHasFinding(report Report, id string) bool {
 	for _, finding := range report.Findings {
 		if finding.ID == id {
+			return true
+		}
+	}
+	return false
+}
+
+func reportHasEvidence(report Report, text string) bool {
+	for _, finding := range report.Findings {
+		if strings.Contains(finding.Evidence, text) {
 			return true
 		}
 	}
