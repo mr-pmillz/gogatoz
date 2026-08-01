@@ -1,7 +1,9 @@
 package depscan
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -10,6 +12,24 @@ import (
 
 	"github.com/mr-pmillz/gogatoz/pkg/gitlabx"
 )
+
+func TestBoundedArchiveWriterStopsAtLimit(t *testing.T) {
+	var destination bytes.Buffer
+	writer := &boundedArchiveWriter{writer: &destination, remaining: 4}
+
+	if n, err := writer.Write([]byte("ab")); err != nil || n != 2 {
+		t.Fatalf("first Write = (%d, %v), want (2, nil)", n, err)
+	}
+	if n, err := writer.Write([]byte("cde")); !errors.Is(err, ErrArchiveTooLarge) || n != 2 {
+		t.Fatalf("limited Write = (%d, %v), want (2, ErrArchiveTooLarge)", n, err)
+	}
+	if destination.String() != "abcd" || !writer.exceeded || writer.remaining != 0 {
+		t.Fatalf("writer state = content %q exceeded=%v remaining=%d", destination.String(), writer.exceeded, writer.remaining)
+	}
+	if n, err := writer.Write([]byte("f")); !errors.Is(err, ErrArchiveTooLarge) || n != 0 {
+		t.Fatalf("exhausted Write = (%d, %v), want (0, ErrArchiveTooLarge)", n, err)
+	}
+}
 
 type archiveAuditor struct {
 	paths []string

@@ -14,6 +14,7 @@ type fakeAuditor struct {
 	result AuditResult
 	err    error
 	paths  []string
+	closed bool
 }
 
 func (f *fakeAuditor) Audit(_ context.Context, paths []string) (AuditResult, error) {
@@ -21,7 +22,7 @@ func (f *fakeAuditor) Audit(_ context.Context, paths []string) (AuditResult, err
 	return f.result, f.err
 }
 
-func (f *fakeAuditor) Close() {}
+func (f *fakeAuditor) Close() { f.closed = true }
 
 func TestScanner_ScanMapsDepxVerdictsToFindings(t *testing.T) {
 	auditor := &fakeAuditor{result: AuditResult{
@@ -105,6 +106,17 @@ func TestScanner_ScanDefaultsToCurrentDirectory(t *testing.T) {
 	if len(auditor.paths) != 1 || auditor.paths[0] != "." {
 		t.Fatalf("auditor paths = %v, want [.]", auditor.paths)
 	}
+}
+
+func TestScanner_CloseReleasesAuditorAndIsNilSafe(t *testing.T) {
+	auditor := &fakeAuditor{}
+	NewScanner(auditor).Close()
+	if !auditor.closed {
+		t.Fatal("Close did not release the auditor")
+	}
+
+	var nilScanner *Scanner
+	nilScanner.Close()
 }
 
 func TestScanner_ScanWrapsAuditorError(t *testing.T) {
