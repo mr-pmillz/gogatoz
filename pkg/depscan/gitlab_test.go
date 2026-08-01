@@ -62,8 +62,9 @@ func TestScanner_ScanGitLabProjectUsesBoundedArchiveAndRelativeLocations(t *test
 	if requestedSHA != "main" {
 		t.Fatalf("requested sha = %q, want main", requestedSHA)
 	}
-	if len(auditor.paths) != 1 || auditor.paths[0] == "" {
-		t.Fatalf("audit paths = %v", auditor.paths)
+	if len(auditor.paths) != 2 || auditor.paths[0] == "" ||
+		!strings.HasSuffix(auditor.paths[1], filepath.Join("safe-project-deadbeef", "bom.cdx.json")) {
+		t.Fatalf("audit paths = %v, want extraction root plus explicit SBOM path", auditor.paths)
 	}
 	if len(report.Lockfiles) != 1 || report.Lockfiles[0].Path != "bom.cdx.json" {
 		t.Fatalf("lockfiles = %+v, want repository-relative bom.cdx.json", report.Lockfiles)
