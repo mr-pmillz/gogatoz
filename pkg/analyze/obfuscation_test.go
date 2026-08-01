@@ -191,6 +191,24 @@ func TestCharCodeObfuscation_FromCharCode(t *testing.T) {
 	}
 }
 
+func TestCharCodeObfuscation_NumericArrayMap(t *testing.T) {
+	doc := &pipeline.Document{
+		Jobs: []pipeline.Job{{
+			Name: "bundle-check",
+			Script: []string{
+				`node -e "const endpoint=[116,101,115,116,46,105,110,118,97,108,105,100].map((x) => String.fromCharCode(x)).join('')"`,
+			},
+		}},
+	}
+	findings, err := Run(doc)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if !hasFindingID(findings, CharcodeObfuscationID) {
+		t.Fatalf("expected %s for a numeric byte array mapped through String.fromCharCode", CharcodeObfuscationID)
+	}
+}
+
 func TestCharCodeObfuscation_PythonChr(t *testing.T) {
 	doc := &pipeline.Document{
 		Jobs: []pipeline.Job{{
