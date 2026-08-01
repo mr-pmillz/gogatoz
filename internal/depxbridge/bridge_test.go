@@ -101,6 +101,11 @@ func TestAuditor_AuditUsesDepxNativeService(t *testing.T) {
 		t.Fatalf("finding IDs = %v", finding.IDs)
 	}
 
+	assertNativeSBOMExports(t, auditor, projectDir)
+}
+
+func assertNativeSBOMExports(t *testing.T, auditor *Auditor, projectDir string) {
+	t.Helper()
 	for _, format := range []string{"cyclonedx", "spdx"} {
 		t.Run("native "+format+" export", func(t *testing.T) {
 			exportedResult, sbom, exportErr := auditor.AuditSBOM(context.Background(), []string{projectDir}, format)

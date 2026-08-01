@@ -8,8 +8,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -21,6 +23,8 @@ import (
 )
 
 const defaultVersion = "gogatoz"
+
+const maxSBOMBytes = 64 << 20
 
 var ErrClosed = errors.New("depx auditor is closed")
 
@@ -84,6 +88,7 @@ type Result struct {
 type Auditor struct {
 	service   *audit.Service
 	provider  intel.Provider
+	version   string
 	closeMu   sync.RWMutex
 	closed    bool
 	closeOnce sync.Once
@@ -115,12 +120,54 @@ func New(opts Options) (*Auditor, error) {
 	return &Auditor{
 		service:  audit.NewService(provider, reg, cfg.CacheDir),
 		provider: provider,
+		version:  version,
 	}, nil
 }
 
 // Audit discovers supported lockfiles and SBOMs and matches their dependencies
 // with depx malicious-package intelligence.
 func (a *Auditor) Audit(ctx context.Context, paths []string) (Result, error) {
+	return a.audit(ctx, paths, audit.Options{})
+}
+
+// AuditSBOM audits dependencies once and returns depx's native CycloneDX or
+// SPDX serialization alongside the normal verdict result.
+func (a *Auditor) AuditSBOM(ctx context.Context, paths []string, format string) (Result, []byte, error) {
+	format = strings.ToLower(strings.TrimSpace(format))
+	if format != "cyclonedx" && format != "spdx" {
+		return Result{}, nil, fmt.Errorf("unsupported depx SBOM format %q", format)
+	}
+	tempDir, err := os.MkdirTemp("", "gogatoz-depx-sbom-")
+	if err != nil {
+		return Result{}, nil, fmt.Errorf("create depx SBOM workspace: %w", err)
+	}
+	defer func() { _ = os.RemoveAll(tempDir) }()
+
+	exportPath := filepath.Join(tempDir, format+".json")
+	result, err := a.audit(ctx, paths, audit.Options{
+		SBOMExport:      exportPath,
+		SBOMFormat:      format,
+		SBOMToolVersion: a.version,
+	})
+	if err != nil {
+		return Result{}, nil, err
+	}
+	file, err := os.Open(exportPath)
+	if err != nil {
+		return Result{}, nil, fmt.Errorf("open native depx SBOM: %w", err)
+	}
+	defer file.Close()
+	data, err := io.ReadAll(io.LimitReader(file, maxSBOMBytes+1))
+	if err != nil {
+		return Result{}, nil, fmt.Errorf("read native depx SBOM: %w", err)
+	}
+	if len(data) > maxSBOMBytes {
+		return Result{}, nil, fmt.Errorf("native depx SBOM exceeds %d bytes", maxSBOMBytes)
+	}
+	return result, data, nil
+}
+
+func (a *Auditor) audit(ctx context.Context, paths []string, opts audit.Options) (Result, error) {
 	if a == nil {
 		return Result{}, errors.New("audit dependencies: nil depx auditor")
 	}
@@ -134,7 +181,7 @@ func (a *Auditor) Audit(ctx context.Context, paths []string) (Result, error) {
 	}
 
 	slog.Info("starting native depx dependency audit", "paths", len(paths))
-	result, err := a.service.Audit(ctx, paths)
+	result, err := a.service.AuditWithOptions(ctx, paths, opts)
 	if err != nil {
 		return Result{}, fmt.Errorf("run native depx audit: %w", err)
 	}

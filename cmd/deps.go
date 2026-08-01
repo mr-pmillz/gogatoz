@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -26,6 +27,7 @@ var (
 
 type dependencyScanRunner interface {
 	Scan(context.Context, []string) (depscan.Report, error)
+	ScanSBOM(context.Context, []string, string) (depscan.Report, []byte, error)
 	ScanGitLabProject(context.Context, *gitlabx.Client, int64, string) (depscan.Report, error)
 	Close()
 }
@@ -53,7 +55,7 @@ manager and never installs or executes package contents or lifecycle scripts.`,
 func init() {
 	rootCmd.AddCommand(depsCmd)
 	depsCmd.AddCommand(depsAuditCmd)
-	depsAuditCmd.Flags().StringVarP(&depsFormat, "format", "f", fmtText, "Output format: text|json|sarif|glsast")
+	depsAuditCmd.Flags().StringVarP(&depsFormat, "format", "f", fmtText, "Output format: text|json|sarif|glsast|gldep|cyclonedx|spdx")
 	depsAuditCmd.Flags().StringVarP(&depsOutput, "output", "o", "", "Write output to file (default: stdout)")
 	depsAuditCmd.Flags().StringVar(&depsCacheDir, "cache-dir", "", "depx inventory cache directory")
 	depsAuditCmd.Flags().StringVar(&depsTimeout, "timeout", "30s", "depx inventory and registry request timeout")
@@ -77,7 +79,14 @@ func runDependencyAudit(cmd *cobra.Command, args []string) error {
 	}
 	defer scanner.Close()
 
-	report, err := scanner.Scan(cmd.Context(), paths)
+	format := strings.ToLower(strings.TrimSpace(depsFormat))
+	var report depscan.Report
+	var sbom []byte
+	if format == fmtCDX || format == fmtSPDX {
+		report, sbom, err = scanner.ScanSBOM(cmd.Context(), paths, format)
+	} else {
+		report, err = scanner.Scan(cmd.Context(), paths)
+	}
 	if err != nil {
 		return err
 	}
@@ -88,7 +97,11 @@ func runDependencyAudit(cmd *cobra.Command, args []string) error {
 	if closer != nil {
 		defer closer()
 	}
-	if err := renderDependencyReport(writer, report, depsFormat); err != nil {
+	if len(sbom) > 0 {
+		if _, err := io.Copy(writer, bytes.NewReader(sbom)); err != nil {
+			return fmt.Errorf("write dependency SBOM: %w", err)
+		}
+	} else if err := renderDependencyReport(writer, report, format); err != nil {
 		return err
 	}
 	if depsFailOnFindings && len(report.Findings) > 0 {
@@ -137,6 +150,9 @@ func renderDependencyReport(writer io.Writer, report depscan.Report, format stri
 	case fmtGLSAST:
 		now := time.Now()
 		return WriteGLSAST(writer, report.Findings, version, now, now)
+	case fmtGLDep:
+		now := time.Now()
+		return WriteGLDependencyScanning(writer, report, version, now, now)
 	default:
 		return fmt.Errorf("unsupported dependency report format %q", format)
 	}

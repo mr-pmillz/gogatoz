@@ -40,6 +40,18 @@ func (a *nativeAuditor) Audit(ctx context.Context, paths []string) (AuditResult,
 	if err != nil {
 		return AuditResult{}, err
 	}
+	return mapNativeResult(result), nil
+}
+
+func (a *nativeAuditor) AuditSBOM(ctx context.Context, paths []string, format string) (AuditResult, []byte, error) {
+	result, sbom, err := a.auditor.AuditSBOM(ctx, paths, format)
+	if err != nil {
+		return AuditResult{}, nil, err
+	}
+	return mapNativeResult(result), sbom, nil
+}
+
+func mapNativeResult(result depxbridge.Result) AuditResult {
 	mapped := AuditResult{
 		Paths:        append([]string(nil), result.Paths...),
 		Lockfiles:    make([]Lockfile, 0, len(result.Lockfiles)),
@@ -70,7 +82,7 @@ func (a *nativeAuditor) Audit(ctx context.Context, paths []string) (AuditResult,
 			ProjectURL: finding.ProjectURL, PackageURL: finding.PackageURL,
 		})
 	}
-	return mapped, nil
+	return mapped
 }
 
 func (a *nativeAuditor) Close() {

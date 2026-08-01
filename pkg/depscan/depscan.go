@@ -21,20 +21,20 @@ const (
 
 // AuditFinding is a package verdict emitted by the native depx bridge.
 type AuditFinding struct {
-	Verdict    string
-	Ecosystem  string
-	Name       string
-	Version    string
-	IDs        []string
-	Summary    string
-	Published  time.Time
-	ModifiedAt time.Time
-	Source     string
-	SourceType string
-	Lockfile   string
-	ProjectDir string
-	ProjectURL string
-	PackageURL string
+	Verdict    string    `json:"verdict"`
+	Ecosystem  string    `json:"ecosystem"`
+	Name       string    `json:"name"`
+	Version    string    `json:"version"`
+	IDs        []string  `json:"ids,omitempty"`
+	Summary    string    `json:"summary,omitempty"`
+	Published  time.Time `json:"published_at,omitempty"`
+	ModifiedAt time.Time `json:"modified_at,omitempty"`
+	Source     string    `json:"source,omitempty"`
+	SourceType string    `json:"source_type,omitempty"`
+	Lockfile   string    `json:"lockfile,omitempty"`
+	ProjectDir string    `json:"project_dir,omitempty"`
+	ProjectURL string    `json:"project_url,omitempty"`
+	PackageURL string    `json:"package_url,omitempty"`
 }
 
 // Lockfile describes a supported lockfile or SBOM discovered by depx.
@@ -74,6 +74,10 @@ type Auditor interface {
 	Close()
 }
 
+type sbomAuditor interface {
+	AuditSBOM(context.Context, []string, string) (AuditResult, []byte, error)
+}
+
 // Report combines depx counts with GoGatoZ-native findings.
 type Report struct {
 	Engine       string            `json:"engine"`
@@ -81,6 +85,7 @@ type Report struct {
 	Lockfiles    []Lockfile        `json:"lockfiles"`
 	Dependencies int               `json:"dependencies"`
 	Summary      AuditSummary      `json:"summary"`
+	Packages     []AuditFinding    `json:"packages,omitempty"`
 	Findings     []analyze.Finding `json:"findings"`
 	Mode         string            `json:"mode,omitempty"`
 	DurationMS   int64             `json:"duration_ms,omitempty"`
@@ -117,7 +122,44 @@ func (s *Scanner) Scan(ctx context.Context, paths []string) (Report, error) {
 		return Report{}, fmt.Errorf("audit dependencies with depx: %w", err)
 	}
 
+	report := reportFromAuditResult(auditResult)
+	slog.Info("completed dependency metadata scan", "engine", "depx",
+		"dependencies", report.Dependencies, "findings", len(report.Findings))
+	return report, nil
+}
+
+// ScanSBOM audits metadata once and returns depx's native SBOM serialization.
+func (s *Scanner) ScanSBOM(ctx context.Context, paths []string, format string) (Report, []byte, error) {
+	if s == nil || s.auditor == nil {
+		return Report{}, nil, errors.New("scan dependencies: nil depx auditor")
+	}
+	exporter, ok := s.auditor.(sbomAuditor)
+	if !ok {
+		return Report{}, nil, errors.New("scan dependencies: native depx SBOM export unavailable")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	paths = normalizePaths(paths)
+	format = strings.ToLower(strings.TrimSpace(format))
+
+	slog.Info("starting dependency metadata scan with SBOM export", "engine", "depx",
+		"paths", len(paths), "format", format)
+	s.auditMu.Lock()
+	auditResult, sbom, err := exporter.AuditSBOM(ctx, paths, format)
+	s.auditMu.Unlock()
+	if err != nil {
+		return Report{}, nil, fmt.Errorf("audit dependencies with depx: %w", err)
+	}
+	report := reportFromAuditResult(auditResult)
+	slog.Info("completed dependency metadata scan with SBOM export", "engine", "depx",
+		"dependencies", report.Dependencies, "findings", len(report.Findings), "format", format)
+	return report, sbom, nil
+}
+
+func reportFromAuditResult(auditResult AuditResult) Report {
 	findings := make([]analyze.Finding, 0, len(auditResult.Findings))
+	packages := make([]AuditFinding, 0, len(auditResult.Findings))
 	for _, auditFinding := range auditResult.Findings {
 		finding, ok := mapFinding(auditFinding)
 		if !ok {
@@ -126,22 +168,21 @@ func (s *Scanner) Scan(ctx context.Context, paths []string) (Report, error) {
 			continue
 		}
 		findings = append(findings, finding)
+		packages = append(packages, auditFinding)
 	}
 
-	report := Report{
+	return Report{
 		Engine:       "depx",
 		Paths:        append([]string(nil), auditResult.Paths...),
 		Lockfiles:    append([]Lockfile(nil), auditResult.Lockfiles...),
 		Dependencies: auditResult.Dependencies,
 		Summary:      auditResult.Summary,
+		Packages:     packages,
 		Findings:     findings,
 		Mode:         auditResult.Mode,
 		DurationMS:   auditResult.DurationMS,
 		SBOMPath:     auditResult.SBOMPath,
 	}
-	slog.Info("completed dependency metadata scan", "engine", "depx",
-		"dependencies", report.Dependencies, "findings", len(report.Findings))
-	return report, nil
 }
 
 // Close releases the underlying depx provider.

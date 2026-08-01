@@ -200,6 +200,10 @@ func normalizeRepositoryLocations(report *Report, extractionRoot string) {
 			report.Findings[i].Evidence = strings.ReplaceAll(report.Findings[i].Evidence, oldSource, newSource)
 		}
 	}
+	for i := range report.Packages {
+		report.Packages[i].Source = repositoryRelativePath(report.Packages[i].Source, extractionRoot)
+		report.Packages[i].Lockfile = repositoryRelativePath(report.Packages[i].Lockfile, extractionRoot)
+	}
 	if report.SBOMPath != "" {
 		report.SBOMPath = repositoryRelativePath(report.SBOMPath, extractionRoot)
 	}
