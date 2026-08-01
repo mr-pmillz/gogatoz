@@ -28,6 +28,8 @@ files.
 - `ecf7598` — GREEN preview-first npm/PyPI/RubyGems implementation
 - `cd26224` — RED checkout isolation, symlink, and package-identity tests
 - `40f40d6` — GREEN isolation and identity hardening
+- `d4d56e1` — RED shell-expansion entry-path regression
+- `a159622` — GREEN canonical entry-path character enforcement
 
 ## Verification
 
