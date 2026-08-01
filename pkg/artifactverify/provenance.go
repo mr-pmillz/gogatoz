@@ -14,8 +14,8 @@ import (
 )
 
 const (
-	ProvenanceMismatchID = "PROVENANCE_MISMATCH"
-	ReleaseTagMismatchID = "RELEASE_TAG_MISMATCH"
+	ProvenanceMismatchID = analyze.ProvenanceMismatchID
+	ReleaseTagMismatchID = analyze.ReleaseTagMismatchID
 )
 
 // ProvenanceSummary records the source identity extracted from an attestation.

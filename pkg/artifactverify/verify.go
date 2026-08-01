@@ -200,21 +200,22 @@ func fetchInput(ctx context.Context, target *url.URL, maxBytes int64, suppliedCl
 	if target.User != nil || strings.TrimSpace(target.Hostname()) == "" {
 		return nil, errors.New("artifact URL must not contain credentials and must have a host")
 	}
-	client := suppliedClient
-	if client == nil {
-		originalHost := strings.ToLower(target.Host)
-		client = &http.Client{
-			Timeout: 30 * time.Second,
-			CheckRedirect: func(req *http.Request, via []*http.Request) error {
-				if len(via) >= 3 {
-					return errors.New("too many artifact redirects")
-				}
-				if strings.ToLower(req.URL.Host) != originalHost || req.URL.Scheme != target.Scheme {
-					return errors.New("artifact redirect changed origin")
-				}
-				return nil
-			},
+	client := &http.Client{Timeout: 30 * time.Second}
+	if suppliedClient != nil {
+		*client = *suppliedClient
+		if client.Timeout == 0 {
+			client.Timeout = 30 * time.Second
 		}
+	}
+	originalHost := strings.ToLower(target.Host)
+	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		if len(via) >= 3 {
+			return errors.New("too many artifact redirects")
+		}
+		if strings.ToLower(req.URL.Host) != originalHost || req.URL.Scheme != target.Scheme {
+			return errors.New("artifact redirect changed origin")
+		}
+		return nil
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target.String(), nil)
 	if err != nil {

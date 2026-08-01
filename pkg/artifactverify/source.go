@@ -18,8 +18,8 @@ import (
 )
 
 const (
-	SourceDivergenceID = "ARTIFACT_SOURCE_DIVERGENCE"
-	PartialBuildID     = "ARTIFACT_PARTIAL_BUILD"
+	SourceDivergenceID = analyze.ArtifactSourceDivergenceID
+	PartialBuildID     = analyze.ArtifactPartialBuildID
 )
 
 func inspectSource(ctx context.Context, input string, limits Limits, client *http.Client) (archiveReport, error) {

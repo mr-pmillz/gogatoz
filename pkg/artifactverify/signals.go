@@ -11,10 +11,10 @@ import (
 )
 
 const (
-	ExecutionTriggerID     = "PACKAGE_EXECUTION_TRIGGER"
-	PersistenceIndicatorID = "PACKAGE_PERSISTENCE_INDICATOR"
-	ExecutablePayloadID    = "PACKAGE_EXECUTABLE_PAYLOAD"
-	PackageObfuscationID   = "PACKAGE_OBFUSCATION"
+	ExecutionTriggerID     = analyze.PackageExecutionTriggerID
+	PersistenceIndicatorID = analyze.PackagePersistenceID
+	ExecutablePayloadID    = analyze.PackageExecutableID
+	PackageObfuscationID   = analyze.PackageObfuscationID
 )
 
 var (
@@ -242,15 +242,13 @@ func magicExtensionMismatch(lowerPath, magic string) bool {
 }
 
 func packageFinding(id string, severity analyze.Severity, title, description, evidence, source string) analyze.Finding {
-	recommendations := map[string]string{
-		ExecutionTriggerID:     "Inspect the referenced hook or entry point without executing it; remove undocumented automatic execution and rebuild from reviewed source.",
-		PersistenceIndicatorID: "Quarantine the artifact, compare it with reviewed source, and remove undocumented developer-tool or operating-system persistence files.",
-		ExecutablePayloadID:    "Verify the executable against reviewed source, platform expectations, and a cryptographic digest; remove disguised or undocumented binaries.",
-		PackageObfuscationID:   "Decode and review the hidden value in isolation, then require a transparent source change and reproducible artifact before release.",
+	recommendation := "Review and remediate this package artifact finding before release or installation."
+	if info := analyze.LookupFinding(id); info != nil {
+		recommendation = info.Remediation
 	}
 	return analyze.Finding{
 		ID: id, Severity: severity, Title: title, Description: description,
 		Evidence: stringutil.TruncateEvidence(evidence, 500), SourceFile: source,
-		Recommendation: recommendations[id],
+		Recommendation: recommendation,
 	}
 }
