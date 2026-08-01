@@ -167,8 +167,8 @@ func TestDiscoverRunnersFromLogs_BoundedAndMergesMetadata(t *testing.T) {
 	}
 
 	runners, err := DiscoverRunnersFromLogs(context.Background(), client, int64(42), "main", RunnerLogLimits{
-		Pipelines: 2,
-		Jobs:      2,
+		Pipelines:  2,
+		Jobs:       2,
 		TraceBytes: 64 << 10,
 	})
 	if err != nil {
