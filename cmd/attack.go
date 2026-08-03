@@ -92,7 +92,7 @@ var attackCmd = &cobra.Command{
 			if atkC2Channel {
 				modes++
 			}
-			if atkNpmTamper {
+			if atkNpmTamper || atkPackageTamper {
 				modes++
 			}
 			if atkVaultEnum {
@@ -126,7 +126,7 @@ var attackCmd = &cobra.Command{
 				modes++
 			}
 			if modes != 1 {
-				return fmt.Errorf("select exactly one mode: --commit-ci, --secrets, --cleanup, --deploy-key, --add-member, --ai-inject, --inject-script, --lotp-inject, --auto-merge, --tamper-release, --tamper-package, --tamper-tag, --harvest, --ror-listen, --memory-dump, --supply-chain-worm, --container-escape, --variable-inject, --c2-channel, --npm-tamper, --vault-enum, --k8s-secrets, --dead-man-switch, --branch-mutator, --sigstore, --dep-confusion, --runner-var-dump, --workflow-exfil, --commit-prefix, or --release-tamper-pipeline (or use --payload-only or --discover-tags)")
+				return fmt.Errorf("select exactly one mode: --commit-ci, --secrets, --cleanup, --deploy-key, --add-member, --ai-inject, --inject-script, --lotp-inject, --auto-merge, --tamper-release, --tamper-package, --tamper-tag, --harvest, --ror-listen, --memory-dump, --supply-chain-worm, --container-escape, --variable-inject, --c2-channel, --package-tamper, --npm-tamper, --vault-enum, --k8s-secrets, --dead-man-switch, --branch-mutator, --sigstore, --dep-confusion, --runner-var-dump, --workflow-exfil, --commit-prefix, or --release-tamper-pipeline (or use --payload-only or --discover-tags)")
 			}
 		}
 
@@ -182,8 +182,8 @@ var attackCmd = &cobra.Command{
 			return runAttackVariableInject(ctx, cmd, client)
 		case atkC2Channel:
 			return runAttackC2Channel(ctx, cmd, client)
-		case atkNpmTamper:
-			return runAttackNpmTamper(ctx, cmd, client)
+		case atkNpmTamper || atkPackageTamper:
+			return runAttackPackageTamper(ctx, cmd, client)
 		case atkVaultEnum:
 			return runAttackVaultEnum(ctx, cmd, client)
 		case atkK8sSecrets:

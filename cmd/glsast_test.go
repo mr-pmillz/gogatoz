@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/mr-pmillz/gogatoz/pkg/analyze"
+	"github.com/mr-pmillz/gogatoz/pkg/enumerate"
 )
 
 func TestBuildGLSAST_VulnerabilityCount(t *testing.T) {
@@ -279,6 +280,139 @@ func TestBuildGLSAST_OWASPCICDIdentifiers(t *testing.T) {
 	}
 	if !hasOWASP {
 		t.Errorf("expected OWASP CICD-SEC-4 identifier, got identifiers: %+v", v.Identifiers)
+	}
+}
+
+func TestBuildGLSAST_DependencyLocationAndTaxonomy(t *testing.T) {
+	finding := analyze.Finding{
+		ID: analyze.MaliciousDependencyID, Severity: analyze.SeverityCritical,
+		Title: "Known malicious dependency", SourceFile: "bom.cdx.json",
+	}
+	vulnerability := buildGLSAST([]analyze.Finding{finding}, "1.0.0", time.Now(), time.Now()).Vulnerabilities[0]
+	if vulnerability.Location.File != "bom.cdx.json" {
+		t.Fatalf("location = %q, want bom.cdx.json", vulnerability.Location.File)
+	}
+
+	wants := map[string]string{
+		"cwe":          "829",
+		"owasp_cicd":   "CICD-SEC-3",
+		"mitre_attack": "T1195.001",
+	}
+	for identifierType, value := range wants {
+		found := false
+		for _, identifier := range vulnerability.Identifiers {
+			found = found || (identifier.Type == identifierType && identifier.Value == value)
+		}
+		if !found {
+			t.Errorf("identifiers %+v missing %s=%s", vulnerability.Identifiers, identifierType, value)
+		}
+	}
+}
+
+func TestBuildGLSAST_PackageArtifactTaxonomy(t *testing.T) {
+	for _, findingID := range []string{
+		analyze.PackageExecutionTriggerID, analyze.PackagePersistenceID, analyze.PackageExecutableID,
+		analyze.PackageObfuscationID, analyze.ArtifactSourceDivergenceID, analyze.ArtifactPartialBuildID,
+		analyze.ProvenanceMismatchID, analyze.ReleaseTagMismatchID,
+	} {
+		t.Run(findingID, func(t *testing.T) {
+			vulnerability := buildGLSAST([]analyze.Finding{{
+				ID: findingID, Severity: analyze.SeverityHigh, Title: "package artifact",
+			}}, "1.0.0", time.Now(), time.Now()).Vulnerabilities[0]
+			identifierTypes := map[string]bool{}
+			for _, identifier := range vulnerability.Identifiers {
+				identifierTypes[identifier.Type] = true
+			}
+			for _, want := range []string{"cwe", "owasp_cicd", "mitre_attack"} {
+				if !identifierTypes[want] {
+					t.Errorf("identifiers %+v missing %s", vulnerability.Identifiers, want)
+				}
+			}
+		})
+	}
+}
+
+func TestBuildGLSAST_ReleaseGovernanceTaxonomy(t *testing.T) {
+	for _, findingID := range []string{
+		enumerate.ReleaseBranchWeakProtectionID,
+		enumerate.ReleaseTagWeakProtectionID,
+		enumerate.ReleaseJobBroadTriggerID,
+	} {
+		t.Run(findingID, func(t *testing.T) {
+			vulnerability := buildGLSAST([]analyze.Finding{{
+				ID: findingID, Severity: analyze.SeverityHigh, Title: "release governance",
+			}}, "1.0.0", time.Now(), time.Now()).Vulnerabilities[0]
+			identifierTypes := map[string]bool{}
+			for _, identifier := range vulnerability.Identifiers {
+				identifierTypes[identifier.Type] = true
+			}
+			for _, want := range []string{"cwe", "owasp_cicd", "mitre_attack"} {
+				if !identifierTypes[want] {
+					t.Errorf("identifiers %+v missing %s", vulnerability.Identifiers, want)
+				}
+			}
+		})
+	}
+}
+
+func TestBuildGLSAST_MutableRefTaxonomy(t *testing.T) {
+	vulnerability := buildGLSAST([]analyze.Finding{{
+		ID: analyze.IncludeMutableRefID, Severity: analyze.SeverityHigh, Title: "Mutable include ref",
+	}}, "1.0.0", time.Now(), time.Now()).Vulnerabilities[0]
+	wants := map[string]string{
+		"cwe":          "829",
+		"owasp_cicd":   "CICD-SEC-3",
+		"mitre_attack": "T1195.001",
+	}
+	for identifierType, value := range wants {
+		found := false
+		for _, identifier := range vulnerability.Identifiers {
+			found = found || (identifier.Type == identifierType && identifier.Value == value)
+		}
+		if !found {
+			t.Errorf("identifiers %+v missing %s=%s", vulnerability.Identifiers, identifierType, value)
+		}
+	}
+}
+
+func TestBuildGLSAST_RefWatchTaxonomy(t *testing.T) {
+	for _, findingID := range []string{
+		"REF_NON_FAST_FORWARD", "TAG_TARGET_CHANGED", "TAG_RECREATED",
+		"SHORT_LIVED_CI_BRANCH", "REF_CREATION_BURST", "RELEASE_WORKFLOW_CHANGED",
+	} {
+		t.Run(findingID, func(t *testing.T) {
+			vulnerability := buildGLSAST([]analyze.Finding{{
+				ID: findingID, Severity: analyze.SeverityHigh, Title: "ref watch",
+			}}, "1.0.0", time.Now(), time.Now()).Vulnerabilities[0]
+			identifierTypes := map[string]bool{}
+			for _, identifier := range vulnerability.Identifiers {
+				identifierTypes[identifier.Type] = true
+			}
+			for _, want := range []string{"cwe", "owasp_cicd", "mitre_attack"} {
+				if !identifierTypes[want] {
+					t.Errorf("identifiers %+v missing %s", vulnerability.Identifiers, want)
+				}
+			}
+		})
+	}
+}
+
+func TestBuildGLSAST_DependencyReleaseIntelTaxonomy(t *testing.T) {
+	for _, findingID := range []string{"DEPENDENCY_COOLDOWN", "DORMANT_PACKAGE_RESURRECTION", "DEPENDENCY_RELEASE_BURST"} {
+		t.Run(findingID, func(t *testing.T) {
+			vulnerability := buildGLSAST([]analyze.Finding{{
+				ID: findingID, Severity: analyze.SeverityHigh, Title: "release intelligence",
+			}}, "1.0.0", time.Now(), time.Now()).Vulnerabilities[0]
+			identifierTypes := map[string]bool{}
+			for _, identifier := range vulnerability.Identifiers {
+				identifierTypes[identifier.Type] = true
+			}
+			for _, want := range []string{"cwe", "owasp_cicd", "mitre_attack"} {
+				if !identifierTypes[want] {
+					t.Errorf("identifiers %+v missing %s", vulnerability.Identifiers, want)
+				}
+			}
+		})
 	}
 }
 

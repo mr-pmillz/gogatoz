@@ -28,14 +28,24 @@ var AllSeverities = []Severity{SeverityCritical, SeverityHigh, SeverityMedium, S
 
 // Finding ID constants.
 const (
-	IncludeRemoteID        = "INCLUDE_REMOTE"
-	SecretExfilHTTPID      = "SECRET_EXFIL_HTTP"     //nolint:gosec // finding ID, not a credential
-	SecretExfilArtifactID  = "SECRET_EXFIL_ARTIFACT" //nolint:gosec // finding ID, not a credential
-	ScriptEncodedPayloadID = "SCRIPT_ENCODED_PAYLOAD"
-	WhitespaceHidingID     = "SCRIPT_WHITESPACE_HIDING"
-	CharcodeObfuscationID  = "CHARCODE_OBFUSCATION"
-	SuspiciousNetworkID    = "SUSPICIOUS_NETWORK_TARGET"
-	CampaignMatchID        = "CAMPAIGN_MATCH"
+	IncludeRemoteID            = "INCLUDE_REMOTE"
+	SecretExfilHTTPID          = "SECRET_EXFIL_HTTP"     //nolint:gosec // finding ID, not a credential
+	SecretExfilArtifactID      = "SECRET_EXFIL_ARTIFACT" //nolint:gosec // finding ID, not a credential
+	ScriptEncodedPayloadID     = "SCRIPT_ENCODED_PAYLOAD"
+	WhitespaceHidingID         = "SCRIPT_WHITESPACE_HIDING"
+	CharcodeObfuscationID      = "CHARCODE_OBFUSCATION"
+	SuspiciousNetworkID        = "SUSPICIOUS_NETWORK_TARGET"
+	CampaignMatchID            = "CAMPAIGN_MATCH"
+	MaliciousDependencyID      = "MALICIOUS_DEPENDENCY"
+	QuarantinedDependencyID    = "QUARANTINED_DEPENDENCY"
+	PackageExecutionTriggerID  = "PACKAGE_EXECUTION_TRIGGER"
+	PackagePersistenceID       = "PACKAGE_PERSISTENCE_INDICATOR"
+	PackageExecutableID        = "PACKAGE_EXECUTABLE_PAYLOAD"
+	PackageObfuscationID       = "PACKAGE_OBFUSCATION"
+	ArtifactSourceDivergenceID = "ARTIFACT_SOURCE_DIVERGENCE"
+	ArtifactPartialBuildID     = "ARTIFACT_PARTIAL_BUILD"
+	ProvenanceMismatchID       = "PROVENANCE_MISMATCH"
+	ReleaseTagMismatchID       = "RELEASE_TAG_MISMATCH"
 )
 
 // Dependency records a structured cross-project reference extracted during analysis.
@@ -53,6 +63,7 @@ type Finding struct {
 	Evidence       string   `json:"evidence,omitempty"`
 	JobName        string   `json:"job_name,omitempty"`
 	Recommendation string   `json:"recommendation,omitempty"`
+	SourceFile     string   `json:"source_file,omitempty"`
 
 	FalsePositive       bool   `json:"false_positive,omitempty"`
 	FalsePositiveReason string `json:"false_positive_reason,omitempty"`
@@ -154,7 +165,7 @@ func checkIncludeRisks(doc *pipeline.Document) []Finding {
 				ID:          "INCLUDE_COMPONENT",
 				Severity:    SeverityMedium,
 				Title:       "CI/CD component include",
-				Description: "Pipeline uses a CI/CD component. Ensure the component source is trusted and pinned.",
+				Description: "Pipeline uses a CI/CD component. Ensure the component source is trusted and pinned to a full commit SHA.",
 				Evidence:    fmt.Sprintf("component=%s", inc.Component),
 				Deps:        []Dependency{{Kind: "component", Path: inc.Component}},
 			})

@@ -60,9 +60,11 @@ var (
 	runnerScope           string
 	allowAdminScope       bool
 	// logs scraping
-	logScrape       bool
-	logMaxPipelines int
-	logMaxJobs      int
+	logScrape             bool
+	logMaxPipelines       int
+	logMaxJobs            int
+	runnerLogMaxPipelines int
+	runnerLogMaxJobs      int
 	// notifications
 	webhookURL     string
 	webhookHeaders []string
@@ -87,6 +89,10 @@ var (
 	enumThreatIntelFile string
 	// local/offline scanning
 	enumLocalPath string
+	// native depx dependency metadata scanning
+	enumDependencies bool
+	enumDepxCacheDir string
+	enumDepxTimeout  string
 )
 
 var enumerateFunc = enumerate.EnumerateProjects
@@ -100,6 +106,15 @@ var enumerateCmd = &cobra.Command{
 		var results []enumerate.Result
 		var client *gitlabx.Client
 		scanStart := time.Now()
+		var dependencyScanner dependencyScanRunner
+		if enumDependencies {
+			var dependencyErr error
+			dependencyScanner, dependencyErr = makeDependencyScanner(enumDepxCacheDir, enumDepxTimeout)
+			if dependencyErr != nil {
+				return dependencyErr
+			}
+			defer dependencyScanner.Close()
+		}
 
 		// Local enumerate mode — no token or API needed
 		if lp := strings.TrimSpace(enumLocalPath); lp != "" {
@@ -107,6 +122,7 @@ var enumerateCmd = &cobra.Command{
 			if lerr != nil {
 				return lerr
 			}
+			localOpts.DependencyScanner = dependencyScanner
 			results, lerr = enumerate.EnumerateLocal(ctx, []string{lp}, localOpts)
 			if lerr != nil {
 				return lerr
@@ -195,6 +211,7 @@ var enumerateCmd = &cobra.Command{
 			if err != nil {
 				return err
 			}
+			opts.DependencyScanner = dependencyScanner
 
 			// Simple progress indicator when not JSON and verbose
 			if !outputJSON && verbose {
@@ -410,6 +427,9 @@ func init() {
 	enumerateCmd.Flags().StringVar(&remoteCacheTTL, "remote-cache-ttl", "", "Cross-call TTL cache for remote includes (e.g., 5m). Empty disables")
 	enumerateCmd.Flags().BoolVar(&onlyFindings, "only-findings", false, "When printing text, only show projects with findings")
 	enumerateCmd.Flags().BoolVar(&enumRedact, "redacted", false, "Redact (mask) plaintext secret values in findings; unredacted by default")
+	enumerateCmd.Flags().BoolVar(&enumDependencies, "dependencies", false, "Audit repository lockfiles and SBOMs with native depx (metadata only; never executes packages)")
+	enumerateCmd.Flags().StringVar(&enumDepxCacheDir, "depx-cache-dir", "", "depx inventory cache directory")
+	enumerateCmd.Flags().StringVar(&enumDepxTimeout, "depx-timeout", "30s", "depx inventory and registry request timeout")
 	// Notifications / webhook
 	enumerateCmd.Flags().StringVar(&webhookURL, "webhook-url", "", "Webhook URL to POST findings as JSON envelopes (one per finding)")
 	enumerateCmd.Flags().StringArrayVar(&webhookHeaders, "webhook-header", nil, "Additional HTTP header for webhook POST (repeatable), e.g., 'Authorization: Bearer x'")
@@ -435,6 +455,8 @@ func init() {
 	enumerateCmd.Flags().BoolVar(&logScrape, "log-scrape", false, "Scrape recent job logs for key=value findings (best-effort, bounded)")
 	enumerateCmd.Flags().IntVar(&logMaxPipelines, "log-max-pipelines", 3, "Max pipelines per ref to inspect for logs when --log-scrape is set")
 	enumerateCmd.Flags().IntVar(&logMaxJobs, "log-max-jobs", 20, "Max jobs per pipeline to scan logs when --log-scrape is set")
+	enumerateCmd.Flags().IntVar(&runnerLogMaxPipelines, "runner-log-max-pipelines", 3, "Max recent pipelines inspected for automatic runner log fallback (hard cap: 10)")
+	enumerateCmd.Flags().IntVar(&runnerLogMaxJobs, "runner-log-max-jobs", 10, "Max jobs per pipeline inspected for automatic runner log fallback (hard cap: 100)")
 	// Non-default refs scanning
 	enumerateCmd.Flags().StringVar(&refOne, "ref", "", "Git reference (branch or tag) to scan in addition to the default branch")
 	enumerateCmd.Flags().StringVar(&refsMany, "refs", "", "Comma-separated list of refs to scan per project (in addition to --ref)")
@@ -707,8 +729,11 @@ func buildEnumerateOptions(controlsCfg *config.ControlsConfig) (enumerate.Option
 	opts.LogScrape = logScrape
 	opts.LogMaxPipelines = logMaxPipelines
 	opts.LogMaxJobs = logMaxJobs
+	opts.RunnerLogMaxPipelines = runnerLogMaxPipelines
+	opts.RunnerLogMaxJobs = runnerLogMaxJobs
 	opts.Redact = enumRedact
 	opts.Controls = controlsCfg
+	opts.ScanDependencies = enumDependencies
 	if u := strings.TrimSpace(enumThreatIntelURL); u != "" {
 		feed, ferr := config.LoadThreatIntelFeed(u)
 		if ferr != nil {

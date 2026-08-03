@@ -17,6 +17,10 @@ var (
 	aiConfigFiles = []string{
 		".cursorrules", ".cursor/rules", "cursorrules",
 		".claude/settings.json", "claude.json", "CLAUDE.md",
+		".codex/", "AGENTS.md",
+		".gemini/", "GEMINI.md",
+		".kiro/",
+		".vscode/tasks.json", ".vscode/setup.mjs",
 		"copilot-instructions.md", ".github/copilot-instructions.md",
 		".copilot-instructions.md",
 		".aider.conf.yml", ".continue/config.json",
@@ -33,7 +37,8 @@ var (
 	aiConfigCreateRe = regexp.MustCompile(`(?i)(?:cat|echo|tee|cp|printf|write)\s+.*(?:>|>>)\s*\S*(?:` +
 		strings.Join([]string{
 			`\.cursorrules`, `copilot-instructions`, `\.claude`,
-			`\.aider`, `\.continue`, `\.codeium`,
+			`\.codex`, `agents\.md`, `\.gemini`, `gemini\.md`, `\.kiro`,
+			`\.vscode`, `\.aider`, `\.continue`, `\.codeium`,
 		}, "|") + `)`)
 
 	httpExfilInContentRe = regexp.MustCompile(`(?i)(?:curl|wget|fetch|http\.get|requests\.(?:get|post))\s+`)
@@ -52,7 +57,7 @@ func detectAIConfigHarvesters(doc *pipeline.Document) []Finding {
 		createsAIConfig := aiConfigCreateRe.MatchString(joined)
 		if !createsAIConfig {
 			for _, f := range aiConfigFiles {
-				if strings.Contains(lower, f) {
+				if strings.Contains(lower, strings.ToLower(f)) {
 					createsAIConfig = true
 					break
 				}

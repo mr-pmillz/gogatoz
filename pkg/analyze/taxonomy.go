@@ -84,6 +84,7 @@ var (
 	attackT1210     = ATTACKRef{ID: "T1210", Name: "Exploitation of Remote Services"}
 	attackT1528     = ATTACKRef{ID: "T1528", Name: "Steal Application Access Token"}
 	attackT1530     = ATTACKRef{ID: "T1530", Name: "Data from Cloud Storage Object"}
+	attackT1546     = ATTACKRef{ID: "T1546", Name: "Event Triggered Execution"}
 	attackT1550     = ATTACKRef{ID: "T1550", Name: "Use Alternate Authentication Material"}
 	attackT1552     = ATTACKRef{ID: "T1552", Name: "Unsecured Credentials"}
 	attackT1552_001 = ATTACKRef{ID: "T1552.001", Name: "Unsecured Credentials: Credentials In Files"}
@@ -101,6 +102,127 @@ var (
 
 // taxonomyRegistry maps finding IDs to their standard taxonomy references.
 var taxonomyRegistry = map[string]Taxonomy{
+	MaliciousDependencyID: {
+		CWEs:          []CWERef{cwe829, cwe1104},
+		ATTACKRefs:    []ATTACKRef{attackT1195_001},
+		OWASPCICDRefs: []OWASPCICDRef{owaspSec3},
+	},
+	QuarantinedDependencyID: {
+		CWEs:          []CWERef{cwe829, cwe1104},
+		ATTACKRefs:    []ATTACKRef{attackT1195_001},
+		OWASPCICDRefs: []OWASPCICDRef{owaspSec3},
+	},
+	PackageExecutionTriggerID: {
+		CWEs:          []CWERef{cwe506, cwe829},
+		ATTACKRefs:    []ATTACKRef{attackT1059, attackT1195_001},
+		OWASPCICDRefs: []OWASPCICDRef{owaspSec3, owaspSec9},
+	},
+	PackagePersistenceID: {
+		CWEs:          []CWERef{cwe506, cwe829},
+		ATTACKRefs:    []ATTACKRef{attackT1546, attackT1195_001},
+		OWASPCICDRefs: []OWASPCICDRef{owaspSec3, owaspSec9},
+	},
+	PackageExecutableID: {
+		CWEs:          []CWERef{cwe506, cwe494},
+		ATTACKRefs:    []ATTACKRef{attackT1105, attackT1195_001},
+		OWASPCICDRefs: []OWASPCICDRef{owaspSec9, owaspSec3},
+	},
+	PackageObfuscationID: {
+		CWEs:          []CWERef{cwe506, cwe94},
+		ATTACKRefs:    []ATTACKRef{attackT1027, attackT1195_001},
+		OWASPCICDRefs: []OWASPCICDRef{owaspSec3, owaspSec9},
+	},
+	ArtifactSourceDivergenceID: {
+		CWEs:          []CWERef{cwe345, cwe494},
+		ATTACKRefs:    []ATTACKRef{attackT1195_002, attackT1565_001},
+		OWASPCICDRefs: []OWASPCICDRef{owaspSec9, owaspSec3},
+	},
+	ArtifactPartialBuildID: {
+		CWEs:          []CWERef{cwe345},
+		ATTACKRefs:    []ATTACKRef{attackT1195_002},
+		OWASPCICDRefs: []OWASPCICDRef{owaspSec9},
+	},
+	ProvenanceMismatchID: {
+		CWEs:          []CWERef{cwe345, cwe346},
+		ATTACKRefs:    []ATTACKRef{attackT1553, attackT1195_002},
+		OWASPCICDRefs: []OWASPCICDRef{owaspSec9, owaspSec3},
+	},
+	ReleaseTagMismatchID: {
+		CWEs:          []CWERef{cwe345, cwe346},
+		ATTACKRefs:    []ATTACKRef{attackT1553, attackT1195_002},
+		OWASPCICDRefs: []OWASPCICDRef{owaspSec9, owaspSec3},
+	},
+	"RELEASE_BRANCH_WEAK_PROTECTION": {
+		CWEs:          []CWERef{cwe284, cwe345},
+		ATTACKRefs:    []ATTACKRef{attackT1195_001},
+		OWASPCICDRefs: []OWASPCICDRef{owaspSec1, owaspSec3},
+	},
+	"RELEASE_TAG_WEAK_PROTECTION": {
+		CWEs:          []CWERef{cwe345, cwe829},
+		ATTACKRefs:    []ATTACKRef{attackT1553, attackT1195_001},
+		OWASPCICDRefs: []OWASPCICDRef{owaspSec3, owaspSec9},
+	},
+	"RELEASE_JOB_BROAD_TRIGGER": {
+		CWEs:          []CWERef{cwe284},
+		ATTACKRefs:    []ATTACKRef{attackT1195_001, attackT1078},
+		OWASPCICDRefs: []OWASPCICDRef{owaspSec1, owaspSec5},
+	},
+	"REF_SHA_CHANGED": {
+		CWEs:          []CWERef{cwe345},
+		ATTACKRefs:    []ATTACKRef{attackT1565_001},
+		OWASPCICDRefs: []OWASPCICDRef{owaspSec10},
+	},
+	"REF_NON_FAST_FORWARD": {
+		CWEs:          []CWERef{cwe345, cwe284},
+		ATTACKRefs:    []ATTACKRef{attackT1565_001, attackT1195_002},
+		OWASPCICDRefs: []OWASPCICDRef{owaspSec1, owaspSec9},
+	},
+	"TAG_TARGET_CHANGED": {
+		CWEs:          []CWERef{cwe345, cwe829},
+		ATTACKRefs:    []ATTACKRef{attackT1553, attackT1195_002},
+		OWASPCICDRefs: []OWASPCICDRef{owaspSec9, owaspSec3},
+	},
+	"TAG_DELETED": {
+		CWEs:          []CWERef{cwe345},
+		ATTACKRefs:    []ATTACKRef{attackT1553},
+		OWASPCICDRefs: []OWASPCICDRef{owaspSec9, owaspSec10},
+	},
+	"TAG_RECREATED": {
+		CWEs:          []CWERef{cwe345, cwe829},
+		ATTACKRefs:    []ATTACKRef{attackT1553, attackT1195_002},
+		OWASPCICDRefs: []OWASPCICDRef{owaspSec9, owaspSec3},
+	},
+	"SHORT_LIVED_CI_BRANCH": {
+		CWEs:          []CWERef{cwe284},
+		ATTACKRefs:    []ATTACKRef{attackT1195_002},
+		OWASPCICDRefs: []OWASPCICDRef{owaspSec4, owaspSec10},
+	},
+	"REF_CREATION_BURST": {
+		CWEs:          []CWERef{cwe284},
+		ATTACKRefs:    []ATTACKRef{attackT1195_002},
+		OWASPCICDRefs: []OWASPCICDRef{owaspSec10, owaspSec1},
+	},
+	"RELEASE_WORKFLOW_CHANGED": {
+		CWEs:          []CWERef{cwe345, cwe284},
+		ATTACKRefs:    []ATTACKRef{attackT1195_002},
+		OWASPCICDRefs: []OWASPCICDRef{owaspSec3, owaspSec9},
+	},
+	"DEPENDENCY_COOLDOWN": {
+		CWEs:          []CWERef{cwe1104, cwe829},
+		ATTACKRefs:    []ATTACKRef{attackT1195_001},
+		OWASPCICDRefs: []OWASPCICDRef{owaspSec3, owaspSec9},
+	},
+	"DORMANT_PACKAGE_RESURRECTION": {
+		CWEs:          []CWERef{cwe829, cwe345},
+		ATTACKRefs:    []ATTACKRef{attackT1195_001},
+		OWASPCICDRefs: []OWASPCICDRef{owaspSec3, owaspSec9},
+	},
+	"DEPENDENCY_RELEASE_BURST": {
+		CWEs:          []CWERef{cwe829},
+		ATTACKRefs:    []ATTACKRef{attackT1195_001},
+		OWASPCICDRefs: []OWASPCICDRef{owaspSec10, owaspSec3},
+	},
+
 	// --- Include risks ---
 	IncludeRemoteID: {
 		CWEs:          []CWERef{cwe829, cwe494},
@@ -120,6 +242,11 @@ var taxonomyRegistry = map[string]Taxonomy{
 	IncludeForbiddenVersionID: {
 		CWEs:          []CWERef{cwe829, cwe345},
 		ATTACKRefs:    []ATTACKRef{attackT1195_002},
+		OWASPCICDRefs: []OWASPCICDRef{owaspSec3, owaspSec9},
+	},
+	IncludeMutableRefID: {
+		CWEs:          []CWERef{cwe829, cwe345},
+		ATTACKRefs:    []ATTACKRef{attackT1195_001},
 		OWASPCICDRefs: []OWASPCICDRef{owaspSec3, owaspSec9},
 	},
 

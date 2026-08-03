@@ -259,14 +259,9 @@ func renderPayload() (string, error) {
 			KeepAlive:   atkC2KeepAlive,
 			CallbackURL: strings.TrimSpace(atkC2CallbackURL),
 		}), nil
-	case "npm-tamper", "npm_tamper", "npmtamper":
-		return payloadgen.GenerateNpmTamperYAML(payloadgen.NpmTamperOptions{
-			Common:         common,
-			RegistryURL:    strings.TrimSpace(atkNpmRegistry),
-			PackageName:    strings.TrimSpace(atkNpmPackage),
-			InjectedScript: strings.TrimSpace(atkNpmInjectScript),
-			CallbackURL:    strings.TrimSpace(atkWebhook),
-		}), nil
+	case "package-tamper", "package_tamper", "packagetamper", "npm-tamper", "npm_tamper", "npmtamper":
+		legacyNPM := p == "npm-tamper" || p == "npm_tamper" || p == "npmtamper"
+		return payloadgen.GeneratePackageTamperYAML(packageTamperOptions(common, legacyNPM))
 	case "vault-enum", "vault_enum", "vaultenum":
 		return payloadgen.GenerateVaultEnumYAML(payloadgen.VaultEnumOptions{
 			Common:      common,
@@ -355,6 +350,37 @@ func renderPayload() (string, error) {
 		}), nil
 	default:
 		return renderExpansionPayload(p, common)
+	}
+}
+
+func packageTamperOptions(common payloadgen.CommonOptions, legacyNPM bool) payloadgen.PackageTamperOptions {
+	ecosystem := strings.TrimSpace(atkTamperEcosystem)
+	registry := strings.TrimSpace(atkTamperRegistry)
+	packageName := strings.TrimSpace(atkTamperPackageName)
+	injected := strings.TrimSpace(atkTamperInjectScript)
+	trigger := strings.TrimSpace(atkTamperTrigger)
+	if legacyNPM {
+		ecosystem = "npm"
+		if registry == "" {
+			registry = strings.TrimSpace(atkNpmRegistry)
+		}
+		if packageName == "" {
+			packageName = strings.TrimSpace(atkNpmPackage)
+		}
+		if injected == "" {
+			injected = strings.TrimSpace(atkNpmInjectScript)
+		}
+		if trigger == "" {
+			trigger = "preinstall"
+		}
+	}
+	return payloadgen.PackageTamperOptions{
+		Common: common, Ecosystem: ecosystem, RegistryURL: registry,
+		PackageName: packageName, Trigger: trigger,
+		EntryFile: strings.TrimSpace(atkTamperEntryFile), InjectedScript: injected,
+		CallbackURL: strings.TrimSpace(atkWebhook), LivePublish: atkTamperLivePublish,
+		PublishAuthorization: strings.TrimSpace(atkTamperPublishAuthorization),
+		AllowPublicRegistry:  atkTamperAllowPublicRegistry,
 	}
 }
 

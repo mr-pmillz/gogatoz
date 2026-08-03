@@ -192,6 +192,17 @@ var (
 	atkNpmRegistry     string // npm registry URL
 	atkNpmPackage      string // specific package to tamper
 	atkNpmInjectScript string // preinstall hook content
+	// Safe multi-ecosystem package tamper mode
+	atkPackageTamper              bool
+	atkTamperEcosystem            string
+	atkTamperRegistry             string
+	atkTamperPackageName          string
+	atkTamperTrigger              string
+	atkTamperEntryFile            string
+	atkTamperInjectScript         string
+	atkTamperLivePublish          bool
+	atkTamperPublishAuthorization string
+	atkTamperAllowPublicRegistry  bool
 	// Vault enumeration mode (HashiCorp Vault secrets sweep)
 	atkVaultEnum       bool
 	atkVaultAddr       string // Vault server URL
@@ -456,10 +467,20 @@ func init() {
 	attackCmd.Flags().BoolVar(&atkC2KeepAlive, "c2-keepalive", false, "Keep C2 channel alive with heartbeats")
 	attackCmd.Flags().StringVar(&atkC2CallbackURL, "c2-callback-url", "", "C2 callback URL")
 	// npm tamper mode flags
-	attackCmd.Flags().BoolVar(&atkNpmTamper, "npm-tamper", false, "Inject preinstall hooks into npm packages via CI (supply chain attack)")
-	attackCmd.Flags().StringVar(&atkNpmRegistry, "npm-registry", "", "npm registry URL (default: https://registry.npmjs.org)")
-	attackCmd.Flags().StringVar(&atkNpmPackage, "npm-package", "", "Specific npm package to tamper (auto-discover if empty)")
-	attackCmd.Flags().StringVar(&atkNpmInjectScript, "npm-inject-script", "", "Preinstall hook content to inject into package.json")
+	attackCmd.Flags().BoolVar(&atkNpmTamper, "npm-tamper", false, "Legacy alias for preview-only npm package tamper testing")
+	attackCmd.Flags().StringVar(&atkNpmRegistry, "npm-registry", "", "Legacy npm registry alias (no default public registry)")
+	attackCmd.Flags().StringVar(&atkNpmPackage, "npm-package", "", "Legacy npm package-name alias")
+	attackCmd.Flags().StringVar(&atkNpmInjectScript, "npm-inject-script", "", "Legacy npm injected-script alias")
+	attackCmd.Flags().BoolVar(&atkPackageTamper, "package-tamper", false, "Stage a manual npm, PyPI, or RubyGems package-tamper preview")
+	attackCmd.Flags().StringVar(&atkTamperEcosystem, "tamper-ecosystem", "npm", "Package ecosystem: npm|pypi|rubygems")
+	attackCmd.Flags().StringVar(&atkTamperRegistry, "tamper-registry", "", "Explicit package registry URL (required for live publishing)")
+	attackCmd.Flags().StringVar(&atkTamperPackageName, "tamper-package-name", "", "Authorized package identity (required for live publishing)")
+	attackCmd.Flags().StringVar(&atkTamperTrigger, "tamper-trigger", "", "Injection trigger: preinstall|postinstall|import")
+	attackCmd.Flags().StringVar(&atkTamperEntryFile, "tamper-entry-file", "", "Canonical relative entry file for an import trigger")
+	attackCmd.Flags().StringVar(&atkTamperInjectScript, "tamper-inject-script", "", "Code or lifecycle command to inject (default: inert console marker)")
+	attackCmd.Flags().BoolVar(&atkTamperLivePublish, "tamper-live-publish", false, "Render a manually gated live-publish job instead of a preview-only job")
+	attackCmd.Flags().StringVar(&atkTamperPublishAuthorization, "tamper-publish-authorization", "", "Exact publish:<ecosystem>:<package> generation-time acknowledgement")
+	attackCmd.Flags().BoolVar(&atkTamperAllowPublicRegistry, "tamper-allow-public-registry", false, "Additionally authorize publishing to npmjs, PyPI, or RubyGems")
 	// Vault enumeration mode flags
 	attackCmd.Flags().BoolVar(&atkVaultEnum, "vault-enum", false, "Enumerate and exfiltrate secrets from reachable HashiCorp Vault instances")
 	attackCmd.Flags().StringVar(&atkVaultAddr, "vault-addr", "", "Vault server URL (falls back to $VAULT_ADDR)")

@@ -7,11 +7,13 @@ GoGatoZ provides several commands, each with its own set of options:
 
 1. [Search Command](/user-guide/command-reference/search/) - Discover GitLab projects of interest
 2. [Enumerate Command](/user-guide/command-reference/enumerate/) - Analyze GitLab projects for exploitable CI/CD issues
-3. [Attack Command](/user-guide/command-reference/attack/) - Stage payloads or commit CI for ethical testing
-4. [Explain Command](/user-guide/command-reference/explain/) - Look up finding codes and remediation guidance
-5. [PBOM Command](/user-guide/command-reference/pbom/) - Generate Pipeline Bill of Materials
-6. [Query Command](/user-guide/command-reference/query/) - Query the local results database
-7. [Secretscan Command](/user-guide/command-reference/secretscan/) - Clone and scan repos for secrets
+3. [Deps Command](/user-guide/command-reference/deps/) - Audit dependency metadata and statically verify package artifacts
+4. [Attack Command](/user-guide/command-reference/attack/) - Stage payloads or commit CI for ethical testing
+5. [Watch Command](/user-guide/command-reference/watch/) - Monitor release refs and publishing workflow drift
+6. [Explain Command](/user-guide/command-reference/explain/) - Look up finding codes and remediation guidance
+7. [PBOM Command](/user-guide/command-reference/pbom/) - Generate Pipeline Bill of Materials
+8. [Query Command](/user-guide/command-reference/query/) - Query the local results database
+9. [Secretscan Command](/user-guide/command-reference/secretscan/) - Clone and scan repos for secrets
 
 ## Common Global Flags
 
@@ -41,7 +43,9 @@ gogatoz [command] [options]
 Where `[command]` is one of:
 - `search` - Search for GitLab projects
 - `enumerate` - Enumerate projects for CI/CD risks
+- `deps` - Audit dependency metadata and statically verify package artifacts
 - `attack` - Execute payloads or commit CI YAML
+- `watch` - Monitor release refs and publishing workflow drift
 - `explain` - Look up finding codes and remediation
 - `pbom` - Generate Pipeline Bill of Materials
 - `query` - Query stored scan results
@@ -55,7 +59,10 @@ To see the available options for any command, use the `-h` or `--help` flag:
 gogatoz --help
 gogatoz search --help
 gogatoz enumerate --help
+gogatoz deps audit --help
+gogatoz deps verify --help
 gogatoz attack --help
+gogatoz watch --help
 gogatoz explain --help
 gogatoz pbom --help
 gogatoz query --help

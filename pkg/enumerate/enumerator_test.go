@@ -10,6 +10,8 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/mr-pmillz/gogatoz/pkg/analyze"
+	"github.com/mr-pmillz/gogatoz/pkg/depscan"
 	"github.com/mr-pmillz/gogatoz/pkg/gitlabx"
 )
 
@@ -169,6 +171,58 @@ func TestEnumerateProjects_NoCIFile(t *testing.T) {
 	}
 	if results[0].CISummary != "no .gitlab-ci.yml" {
 		t.Fatalf("expected CISummary='no .gitlab-ci.yml', got %q", results[0].CISummary)
+	}
+}
+
+type fakeProjectDependencyScanner struct {
+	report    depscan.Report
+	projectID int64
+	ref       string
+}
+
+func (s *fakeProjectDependencyScanner) ScanGitLabProject(
+	_ context.Context,
+	_ *gitlabx.Client,
+	projectID int64,
+	ref string,
+) (depscan.Report, error) {
+	s.projectID = projectID
+	s.ref = ref
+	return s.report, nil
+}
+
+func TestEnumerateProjects_DependencyScanRunsWithoutCIFile(t *testing.T) {
+	client, server := newEnumMockServer(t, false)
+	defer server.Close()
+
+	finding := analyze.Finding{
+		ID: analyze.MaliciousDependencyID, Severity: analyze.SeverityCritical,
+		Title: "Known malicious dependency", SourceFile: "bom.cdx.json",
+	}
+	scanner := &fakeProjectDependencyScanner{report: depscan.Report{
+		Engine: "depx", Dependencies: 1, Findings: []analyze.Finding{finding},
+	}}
+	results, err := EnumerateProjects(context.Background(), client, []string{"42"}, Options{
+		Concurrency: 1, SkipAnalyze: true, ScanDependencies: true, DependencyScanner: scanner,
+	})
+	if err != nil {
+		t.Fatalf("EnumerateProjects: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("results = %d, want 1", len(results))
+	}
+	result := results[0]
+	if result.DependencyScan == nil || result.DependencyScan.Engine != "depx" {
+		t.Fatalf("dependency scan = %+v", result.DependencyScan)
+	}
+	if len(result.Findings) != 1 || result.Findings[0].ID != analyze.MaliciousDependencyID {
+		t.Fatalf("findings = %+v", result.Findings)
+	}
+	if scanner.projectID != 42 || scanner.ref != "main" {
+		t.Fatalf("scan call = project %d ref %q", scanner.projectID, scanner.ref)
+	}
+	if result.CISummary != "no .gitlab-ci.yml" {
+		t.Fatalf("CI summary = %q", result.CISummary)
 	}
 }
 
@@ -462,6 +516,68 @@ func TestScanOne_FetchRunners_ProjectScope(t *testing.T) {
 	}
 	if r.RunnersOnline != 1 {
 		t.Fatalf("expected RunnersOnline=1, got %d", r.RunnersOnline)
+	}
+}
+
+func TestScanOne_RunnerAPIDeniedFallsBackToJobLogs(t *testing.T) {
+	t.Parallel()
+
+	ciEncoded := base64.StdEncoding.EncodeToString([]byte(testCIYAML))
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.URL.Path == "/api/v4/projects/42/runners":
+			w.WriteHeader(http.StatusForbidden)
+		case r.URL.Path == "/api/v4/projects/42/pipelines":
+			_ = json.NewEncoder(w).Encode([]map[string]any{{"id": 501}})
+		case r.URL.Path == "/api/v4/projects/42/pipelines/501/jobs":
+			_ = json.NewEncoder(w).Encode([]map[string]any{{
+				"id": 601, "tag_list": []string{"shell", "internal"},
+				"runner":         map[string]any{"id": 77, "description": "fallback-runner", "runner_type": "project_type"},
+				"runner_manager": map[string]any{"system_id": "s_fallback", "version": "18.1.0", "platform": "linux", "architecture": "amd64"},
+			}})
+		case r.URL.Path == "/api/v4/projects/42/jobs/601/trace":
+			w.Header().Set("Content-Type", "text/plain")
+			_, _ = w.Write([]byte("Preparing the \"shell\" executor\nRunning on fallback-host..."))
+		case strings.Contains(r.URL.Path, "/repository/files/"):
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"file_name": ".gitlab-ci.yml", "file_path": ".gitlab-ci.yml",
+				"encoding": "base64", "content": ciEncoded,
+			})
+		case r.URL.Path == "/api/v4/projects/42":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"id": int64(42), "path_with_namespace": "group/fallback-project",
+				"web_url": "https://gitlab.local/group/fallback-project", "default_branch": "main",
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	client, err := gitlabx.New(server.URL, "test-token")
+	if err != nil {
+		t.Fatalf("gitlabx.New: %v", err)
+	}
+	results, err := EnumerateProjects(context.Background(), client, []string{"42"}, Options{
+		Concurrency: 1, SkipAnalyze: true, FetchRunners: true, RunnerScope: "project",
+		RunnerLogMaxPipelines: 2, RunnerLogMaxJobs: 3,
+	})
+	if err != nil {
+		t.Fatalf("EnumerateProjects: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("result count = %d, want 1", len(results))
+	}
+	result := results[0]
+	if !strings.Contains(result.Error, "runners(project)") {
+		t.Errorf("result error = %q, want original runner API denial", result.Error)
+	}
+	if len(result.RunnerLogs) != 1 {
+		t.Fatalf("runner logs = %+v, want one fallback result", result.RunnerLogs)
+	}
+	if result.RunnerLog == nil || result.RunnerLog.RunnerID != 77 || result.RunnerLog.Executor != "shell" {
+		t.Fatalf("legacy runner log = %+v", result.RunnerLog)
 	}
 }
 

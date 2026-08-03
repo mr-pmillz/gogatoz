@@ -5,10 +5,69 @@ import (
 	"context"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 )
+
+func TestGetRefSnapshotCorrelatesRecentPipelines(t *testing.T) {
+	created := time.Date(2026, 7, 31, 12, 0, 0, 0, time.UTC)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/api/v4/projects/42/repository/branches":
+			_, _ = io.WriteString(w, `[{"name":"main","commit":{"id":"aaa"}},{"name":"ci-check","commit":{"id":"bbb"}}]`)
+		case "/api/v4/projects/42/repository/tags":
+			_, _ = io.WriteString(w, `[{"name":"v1.0.0","commit":{"id":"aaa"},"created_at":"2026-07-31T12:00:00Z"}]`)
+		case "/api/v4/projects/42/pipelines":
+			_, _ = io.WriteString(w, `[{"id":7,"ref":"ci-check","sha":"bbb","created_at":"2026-07-31T12:01:00Z"}]`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	client, err := New(srv.URL, "token")
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := client.GetRefSnapshot(context.Background(), 42, created.Add(-time.Minute))
+	if err != nil {
+		t.Fatalf("GetRefSnapshot: %v", err)
+	}
+	if snapshot.Branches["main"].SHA != "aaa" || snapshot.Tags["v1.0.0"].SHA != "aaa" {
+		t.Fatalf("snapshot = %+v", snapshot)
+	}
+	if !snapshot.Branches["ci-check"].HasRecentPipeline {
+		t.Fatalf("pipeline correlation missing: %+v", snapshot.Branches["ci-check"])
+	}
+}
+
+func TestIsCommitAncestorUsesMergeBase(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v4/projects/42/repository/merge_base" {
+			http.NotFound(w, r)
+			return
+		}
+		refs := r.URL.Query()["refs[]"]
+		if len(refs) != 2 || refs[0] != "old" || refs[1] != "new" {
+			t.Fatalf("refs = %v", refs)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"id":"old"}`)
+	}))
+	defer srv.Close()
+
+	client, err := New(srv.URL, "token")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ancestor, err := client.IsCommitAncestor(context.Background(), 42, "old", "new")
+	if err != nil || !ancestor {
+		t.Fatalf("IsCommitAncestor = %t, %v", ancestor, err)
+	}
+}
 
 type fakeRT struct {
 	codes []int

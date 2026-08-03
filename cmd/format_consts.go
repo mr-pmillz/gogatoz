@@ -10,4 +10,7 @@ const (
 	fmtCSV    = "csv"
 	fmtSARIF  = "sarif"
 	fmtGLSAST = "glsast"
+	fmtGLDep  = "gldep"
+	fmtCDX    = "cyclonedx"
+	fmtSPDX   = "spdx"
 )
