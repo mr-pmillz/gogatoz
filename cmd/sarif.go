@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"path/filepath"
+	"strings"
 
 	"github.com/mr-pmillz/gogatoz/pkg/analyze"
 )
@@ -268,7 +270,7 @@ func buildSARIFResults(findings []analyze.Finding) []sarifResult {
 				{
 					PhysicalLocation: sarifPhysical{
 						ArtifactLocation: sarifArtifact{
-							URI: ".gitlab-ci.yml",
+							URI: findingSourceFile(f),
 						},
 					},
 				},
@@ -276,6 +278,14 @@ func buildSARIFResults(findings []analyze.Finding) []sarifResult {
 		})
 	}
 	return results
+}
+
+func findingSourceFile(finding analyze.Finding) string {
+	sourceFile := strings.TrimSpace(finding.SourceFile)
+	if sourceFile == "" {
+		return ".gitlab-ci.yml"
+	}
+	return filepath.ToSlash(sourceFile)
 }
 
 // buildSARIF constructs a SARIF 2.1.0 log from analyze findings.

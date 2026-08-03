@@ -1,0 +1,240 @@
+package cmd
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"strings"
+	"time"
+
+	"github.com/mr-pmillz/gogatoz/pkg/depscan"
+	"github.com/mr-pmillz/gogatoz/pkg/gitlabx"
+	"github.com/spf13/cobra"
+)
+
+var ErrDependencyFindings = errors.New("dependency findings detected")
+
+var (
+	depsFormat                string
+	depsOutput                string
+	depsCacheDir              string
+	depsTimeout               string
+	depsFailOnFindings        bool
+	depsCooldown              string
+	depsDormancyThreshold     string
+	depsReleaseBurstWindow    string
+	depsReleaseBurstThreshold int
+)
+
+type dependencyScanRunner interface {
+	Scan(context.Context, []string) (depscan.Report, error)
+	ScanSBOM(context.Context, []string, string) (depscan.Report, []byte, error)
+	ScanReleaseIntel(context.Context, []string, depscan.ReleaseIntelOptions) (depscan.Report, error)
+	ScanGitLabProject(context.Context, *gitlabx.Client, int64, string) (depscan.Report, error)
+	Close()
+}
+
+var newDependencyScanner = func(opts depscan.Options) (dependencyScanRunner, error) {
+	return depscan.New(opts)
+}
+
+var depsCmd = &cobra.Command{
+	Use:   "deps",
+	Short: "Audit dependency metadata with depx",
+}
+
+var depsAuditCmd = &cobra.Command{
+	Use:   "audit [path...]",
+	Short: "Find malicious or quarantined dependencies",
+	Long: `Audit supported lockfiles and CycloneDX/SPDX SBOMs in-process with depx.
+
+This command reads dependency metadata only. It never invokes a package
+manager and never installs or executes package contents or lifecycle scripts.`,
+	Args: cobra.ArbitraryArgs,
+	RunE: runDependencyAudit,
+}
+
+func init() {
+	rootCmd.AddCommand(depsCmd)
+	depsCmd.AddCommand(depsAuditCmd)
+	depsAuditCmd.Flags().StringVarP(&depsFormat, "format", "f", fmtText, "Output format: text|json|sarif|glsast|gldep|cyclonedx|spdx")
+	depsAuditCmd.Flags().StringVarP(&depsOutput, "output", "o", "", "Write output to file (default: stdout)")
+	depsAuditCmd.Flags().StringVar(&depsCacheDir, "cache-dir", "", "depx inventory cache directory")
+	depsAuditCmd.Flags().StringVar(&depsTimeout, "timeout", "30s", "depx inventory and registry request timeout")
+	depsAuditCmd.Flags().StringVar(&depsCooldown, "cooldown", "0", "Minimum package age (for example 72h); 0 disables registry release metadata queries")
+	depsAuditCmd.Flags().StringVar(&depsDormancyThreshold, "dormancy-threshold", "8760h", "Release gap treated as dormant-package resurrection")
+	depsAuditCmd.Flags().StringVar(&depsReleaseBurstWindow, "release-burst-window", "1h", "Maximum time span for a coordinated dependency release burst")
+	depsAuditCmd.Flags().IntVar(&depsReleaseBurstThreshold, "release-burst-threshold", 3, "Minimum selected releases in a release burst")
+	depsAuditCmd.Flags().BoolVar(&depsFailOnFindings, "fail-on-findings", false, "Return a non-zero status when malicious or quarantined dependencies are found")
+}
+
+func runDependencyAudit(cmd *cobra.Command, args []string) error {
+	paths := make([]string, 0, len(args))
+	for _, inputPath := range args {
+		if inputPath = strings.TrimSpace(inputPath); inputPath != "" {
+			paths = append(paths, inputPath)
+		}
+	}
+	if len(paths) == 0 {
+		paths = []string{"."}
+	}
+
+	scanner, err := makeDependencyScanner(depsCacheDir, depsTimeout)
+	if err != nil {
+		return err
+	}
+	defer scanner.Close()
+
+	format := strings.ToLower(strings.TrimSpace(depsFormat))
+	releaseOptions, releaseIntelEnabled, err := dependencyReleaseIntelOptions()
+	if err != nil {
+		return err
+	}
+	if releaseIntelEnabled && (format == fmtCDX || format == fmtSPDX) {
+		return errors.New("--cooldown cannot be combined with CycloneDX or SPDX output; use json, text, SARIF, glsast, or gldep")
+	}
+	var report depscan.Report
+	var sbom []byte
+	switch {
+	case format == fmtCDX || format == fmtSPDX:
+		report, sbom, err = scanner.ScanSBOM(cmd.Context(), paths, format)
+	case releaseIntelEnabled:
+		report, err = scanner.ScanReleaseIntel(cmd.Context(), paths, releaseOptions)
+	default:
+		report, err = scanner.Scan(cmd.Context(), paths)
+	}
+	if err != nil {
+		return err
+	}
+	writer, closer, err := openOutputWriter(cmd, depsOutput)
+	if err != nil {
+		return err
+	}
+	if closer != nil {
+		defer closer()
+	}
+	if len(sbom) > 0 {
+		if _, err := io.Copy(writer, bytes.NewReader(sbom)); err != nil {
+			return fmt.Errorf("write dependency SBOM: %w", err)
+		}
+	} else if err := renderDependencyReport(writer, report, format); err != nil {
+		return err
+	}
+	if depsFailOnFindings && len(report.Findings) > 0 {
+		return fmt.Errorf("%w: %d", ErrDependencyFindings, len(report.Findings))
+	}
+	return nil
+}
+
+func dependencyReleaseIntelOptions() (depscan.ReleaseIntelOptions, bool, error) {
+	cooldown, err := parseDependencyDuration("cooldown", depsCooldown, true)
+	if err != nil {
+		return depscan.ReleaseIntelOptions{}, false, err
+	}
+	if cooldown == 0 {
+		return depscan.ReleaseIntelOptions{}, false, nil
+	}
+	dormancy, err := parseDependencyDuration("dormancy-threshold", depsDormancyThreshold, false)
+	if err != nil {
+		return depscan.ReleaseIntelOptions{}, false, err
+	}
+	burstWindow, err := parseDependencyDuration("release-burst-window", depsReleaseBurstWindow, false)
+	if err != nil {
+		return depscan.ReleaseIntelOptions{}, false, err
+	}
+	if depsReleaseBurstThreshold <= 0 {
+		return depscan.ReleaseIntelOptions{}, false, errors.New("release-burst-threshold must be greater than zero")
+	}
+	return depscan.ReleaseIntelOptions{
+		Cooldown: cooldown, DormancyThreshold: dormancy,
+		BurstWindow: burstWindow, BurstThreshold: depsReleaseBurstThreshold,
+	}, true, nil
+}
+
+func parseDependencyDuration(name, value string, allowZero bool) (time.Duration, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return 0, fmt.Errorf("%s is required", name)
+	}
+	duration, err := time.ParseDuration(value)
+	if err != nil {
+		return 0, fmt.Errorf("invalid %s: %w", name, err)
+	}
+	if duration < 0 || (!allowZero && duration == 0) {
+		return 0, fmt.Errorf("%s must be greater than zero", name)
+	}
+	return duration, nil
+}
+
+func makeDependencyScanner(cacheDir, timeoutValue string) (dependencyScanRunner, error) {
+	timeoutValue = strings.TrimSpace(timeoutValue)
+	var timeout time.Duration
+	if timeoutValue != "" {
+		parsed, err := time.ParseDuration(timeoutValue)
+		if err != nil {
+			return nil, fmt.Errorf("invalid depx timeout: %w", err)
+		}
+		if parsed <= 0 {
+			return nil, errors.New("depx timeout must be greater than zero")
+		}
+		timeout = parsed
+	}
+	return newDependencyScanner(depscan.Options{
+		CacheDir: strings.TrimSpace(cacheDir),
+		Timeout:  timeout,
+		Version:  version,
+	})
+}
+
+func renderDependencyReport(writer io.Writer, report depscan.Report, format string) error {
+	format = strings.ToLower(strings.TrimSpace(format))
+	if outputJSON && format == "" {
+		format = fmtJSON
+	}
+	if format == "" {
+		format = fmtText
+	}
+	switch format {
+	case fmtText:
+		return renderDependencyText(writer, report)
+	case fmtJSON:
+		encoder := json.NewEncoder(writer)
+		encoder.SetIndent("", "  ")
+		return encoder.Encode(report)
+	case fmtSARIF:
+		return WriteSARIF(writer, report.Findings, version)
+	case fmtGLSAST:
+		now := time.Now()
+		return WriteGLSAST(writer, report.Findings, version, now, now)
+	case fmtGLDep:
+		now := time.Now()
+		return WriteGLDependencyScanning(writer, report, version, now, now)
+	default:
+		return fmt.Errorf("unsupported dependency report format %q", format)
+	}
+}
+
+func renderDependencyText(writer io.Writer, report depscan.Report) error {
+	if _, err := fmt.Fprintf(writer,
+		"Dependency Audit (%s)\nDependencies: %d\nComponents enriched: %d\nLockfiles/SBOMs: %d\nMalicious: %d\nQuarantined: %d\n",
+		report.Engine, report.Dependencies, len(report.Components), report.Summary.Lockfiles,
+		report.Summary.Malicious, report.Summary.Quarantined,
+	); err != nil {
+		return err
+	}
+	for _, finding := range report.Findings {
+		if _, err := fmt.Fprintf(writer, "- [%s] %s: %s (%s)\n",
+			finding.Severity, finding.ID, finding.Title, finding.SourceFile); err != nil {
+			return err
+		}
+	}
+	for _, warning := range report.Warnings {
+		if _, err := fmt.Fprintf(writer, "- [WARNING] registry metadata: %s\n", warning); err != nil {
+			return err
+		}
+	}
+	return nil
+}

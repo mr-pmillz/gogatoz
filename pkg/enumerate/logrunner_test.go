@@ -1,6 +1,16 @@
 package enumerate
 
-import "testing"
+import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"slices"
+	"sync/atomic"
+	"testing"
+
+	"github.com/mr-pmillz/gogatoz/pkg/gitlabx"
+)
 
 func TestExtractRunnerFromLog(t *testing.T) {
 	tests := []struct {
@@ -87,5 +97,129 @@ func TestExtractRunnerVersion(t *testing.T) {
 	}
 	if info.Version != "17.5.0" {
 		t.Errorf("version: got %q, want 17.5.0", info.Version)
+	}
+}
+
+func TestDiscoverRunnersFromLogs_BoundedAndMergesMetadata(t *testing.T) {
+	t.Parallel()
+
+	var pipelineJobRequests atomic.Int32
+	var traceRequests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/api/v4/projects/42/pipelines":
+			if got := r.URL.Query().Get("per_page"); got != "2" {
+				t.Errorf("pipeline per_page = %q, want 2", got)
+			}
+			if got := r.URL.Query().Get("ref"); got != "main" {
+				t.Errorf("pipeline ref = %q, want main", got)
+			}
+			// Return an extra item deliberately; the client must still honor its bound.
+			_ = json.NewEncoder(w).Encode([]map[string]any{{"id": 101}, {"id": 102}, {"id": 103}})
+		case "/api/v4/projects/42/pipelines/101/jobs":
+			pipelineJobRequests.Add(1)
+			_ = json.NewEncoder(w).Encode([]map[string]any{
+				{
+					"id": 1001, "tag_list": []string{"shell", "linux"},
+					"runner": map[string]any{"id": 7, "description": "build-shell", "runner_type": "project_type"},
+					"runner_manager": map[string]any{
+						"system_id": "s_shell", "version": "18.2.1", "revision": "abc123",
+						"platform": "linux", "architecture": "amd64",
+					},
+				},
+				{
+					"id": 1002, "tag_list": []string{"trusted", "shell"},
+					"runner":         map[string]any{"id": 7, "description": "build-shell", "runner_type": "project_type"},
+					"runner_manager": map[string]any{"system_id": "s_shell", "version": "18.2.1"},
+				},
+			})
+		case "/api/v4/projects/42/pipelines/102/jobs":
+			pipelineJobRequests.Add(1)
+			_ = json.NewEncoder(w).Encode([]map[string]any{{
+				"id": 2001, "tag_list": []string{"docker"},
+				"runner":         map[string]any{"id": 8, "description": "build-docker", "runner_type": "group_type"},
+				"runner_manager": map[string]any{"system_id": "s_docker", "version": "17.11.0", "platform": "linux", "architecture": "arm64"},
+			}})
+		case "/api/v4/projects/42/pipelines/103/jobs":
+			t.Error("third pipeline exceeded configured sample bound")
+			w.WriteHeader(http.StatusInternalServerError)
+		case "/api/v4/projects/42/jobs/1001/trace":
+			traceRequests.Add(1)
+			w.Header().Set("Content-Type", "text/plain")
+			_, _ = w.Write([]byte("Running with gitlab-runner 18.2.1 (abc123)\n  on build-shell token, system ID: s_shell\nPreparing the \"shell\" executor\nRunning on shell-host..."))
+		case "/api/v4/projects/42/jobs/1002/trace":
+			traceRequests.Add(1)
+			w.WriteHeader(http.StatusNotFound)
+		case "/api/v4/projects/42/jobs/2001/trace":
+			traceRequests.Add(1)
+			w.Header().Set("Content-Type", "text/plain")
+			_, _ = w.Write([]byte("Preparing the \"docker\" executor\nRunning on docker-host..."))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	client, err := gitlabx.New(server.URL, "test-token")
+	if err != nil {
+		t.Fatalf("gitlabx.New: %v", err)
+	}
+
+	runners, err := DiscoverRunnersFromLogs(context.Background(), client, int64(42), "main", RunnerLogLimits{
+		Pipelines:  2,
+		Jobs:       2,
+		TraceBytes: 64 << 10,
+	})
+	if err != nil {
+		t.Fatalf("DiscoverRunnersFromLogs: %v", err)
+	}
+	if got := len(runners); got != 2 {
+		t.Fatalf("runner count = %d, want 2: %+v", got, runners)
+	}
+	if got := pipelineJobRequests.Load(); got != 2 {
+		t.Fatalf("pipeline job requests = %d, want 2", got)
+	}
+	if got := traceRequests.Load(); got != 3 {
+		t.Fatalf("trace requests = %d, want 3", got)
+	}
+
+	shell := runners[0]
+	if shell.RunnerID != 7 || shell.Description != "build-shell" || shell.RunnerType != "project_type" {
+		t.Fatalf("shell runner identity = %+v", shell)
+	}
+	if shell.Executor != "shell" || shell.RunnerName != "shell-host" || shell.SystemID != "s_shell" {
+		t.Fatalf("shell runner trace metadata = %+v", shell)
+	}
+	if shell.Version != "18.2.1" || shell.Revision != "abc123" || shell.Platform != "linux" || shell.Architecture != "amd64" {
+		t.Fatalf("shell runner manager metadata = %+v", shell)
+	}
+	for _, want := range []string{"shell", "linux", "trusted"} {
+		if !slices.Contains(shell.Tags, want) {
+			t.Errorf("shell tags %v missing %q", shell.Tags, want)
+		}
+	}
+	if !slices.Contains(shell.Sources, "job_api") || !slices.Contains(shell.Sources, "job_trace") {
+		t.Errorf("shell sources = %v, want job_api and job_trace", shell.Sources)
+	}
+	if shell.Confidence != "high" {
+		t.Errorf("shell confidence = %q, want high", shell.Confidence)
+	}
+	if !slices.Equal(shell.JobIDs, []int64{1001, 1002}) {
+		t.Errorf("shell job IDs = %v, want [1001 1002]", shell.JobIDs)
+	}
+
+	docker := runners[1]
+	if docker.RunnerID != 8 || docker.Executor != "docker" || docker.Architecture != "arm64" {
+		t.Fatalf("docker runner = %+v", docker)
+	}
+}
+
+func TestDiscoverRunnersFromLogs_RejectsNilClient(t *testing.T) {
+	t.Parallel()
+
+	_, err := DiscoverRunnersFromLogs(context.Background(), nil, int64(42), "main", RunnerLogLimits{})
+	if err == nil {
+		t.Fatal("expected nil client error")
 	}
 }

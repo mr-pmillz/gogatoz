@@ -177,6 +177,18 @@ func TestTaxonomySpecificMappings(t *testing.T) {
 		{DepConfusionRiskID, 427, "T1195.001", "CICD-SEC-3"},
 		{SecretExfilHTTPID, 319, "T1567", "CICD-SEC-6"},
 		{DinDDetectedID, 250, "T1611", "CICD-SEC-7"},
+		{"RELEASE_BRANCH_WEAK_PROTECTION", 284, "T1195.001", "CICD-SEC-1"},
+		{"RELEASE_TAG_WEAK_PROTECTION", 345, "T1553", "CICD-SEC-3"},
+		{"RELEASE_JOB_BROAD_TRIGGER", 284, "T1195.001", "CICD-SEC-1"},
+		{"REF_NON_FAST_FORWARD", 345, "T1565.001", "CICD-SEC-1"},
+		{"TAG_TARGET_CHANGED", 345, "T1553", "CICD-SEC-9"},
+		{"TAG_RECREATED", 345, "T1553", "CICD-SEC-9"},
+		{"SHORT_LIVED_CI_BRANCH", 284, "T1195.002", "CICD-SEC-4"},
+		{"REF_CREATION_BURST", 284, "T1195.002", "CICD-SEC-10"},
+		{"RELEASE_WORKFLOW_CHANGED", 345, "T1195.002", "CICD-SEC-3"},
+		{"DEPENDENCY_COOLDOWN", 1104, "T1195.001", "CICD-SEC-3"},
+		{"DORMANT_PACKAGE_RESURRECTION", 829, "T1195.001", "CICD-SEC-3"},
+		{"DEPENDENCY_RELEASE_BURST", 829, "T1195.001", "CICD-SEC-10"},
 	}
 
 	for _, tt := range tests {
@@ -193,6 +205,20 @@ func TestTaxonomySpecificMappings(t *testing.T) {
 			}
 			if !taxonomyHasOWASPCICD(tax, tt.wantOWASP) {
 				t.Errorf("expected OWASP %s in taxonomy for %q, got %v", tt.wantOWASP, tt.findingID, tax.OWASPCICDRefs)
+			}
+		})
+	}
+}
+
+func TestPackageArtifactTaxonomyRegistered(t *testing.T) {
+	for _, id := range []string{
+		PackageExecutionTriggerID, PackagePersistenceID, PackageExecutableID, PackageObfuscationID,
+		ArtifactSourceDivergenceID, ArtifactPartialBuildID, ProvenanceMismatchID, ReleaseTagMismatchID,
+	} {
+		t.Run(id, func(t *testing.T) {
+			taxonomy := LookupTaxonomy(id)
+			if taxonomy == nil || len(taxonomy.CWEs) == 0 || len(taxonomy.ATTACKRefs) == 0 || len(taxonomy.OWASPCICDRefs) == 0 {
+				t.Fatalf("package artifact taxonomy %s is incomplete: %+v", id, taxonomy)
 			}
 		})
 	}

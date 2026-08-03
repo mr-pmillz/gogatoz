@@ -53,8 +53,20 @@ func detectSuspiciousNetworkTargets(doc *pipeline.Document, feed *config.ThreatI
 	}
 
 	domains := suspiciousDomains
+	blockedIPs := make(map[string]struct{})
+	var blockedHashes []string
 	if feed != nil {
 		domains = append(domains, feed.BlockedDomains...)
+		for _, rawIP := range feed.BlockedIPs {
+			if ip := net.ParseIP(strings.TrimSpace(rawIP)); ip != nil {
+				blockedIPs[ip.String()] = struct{}{}
+			}
+		}
+		for _, hash := range feed.BlockedHashes {
+			if hash = strings.ToLower(strings.TrimSpace(hash)); hash != "" {
+				blockedHashes = append(blockedHashes, hash)
+			}
+		}
 	}
 
 	for _, job := range doc.Jobs {
@@ -66,6 +78,18 @@ func detectSuspiciousNetworkTargets(doc *pipeline.Document, feed *config.ThreatI
 			}
 			lower := strings.ToLower(line)
 			trimmed := strings.TrimSpace(line)
+			if blockedHash := matchingIOCToken(lower, blockedHashes); blockedHash != "" {
+				findings = append(findings, Finding{
+					ID:          CampaignMatchID,
+					Severity:    SeverityCritical,
+					Title:       "CI script contains threat-intelligence artifact hash",
+					Description: "CI/CD script contains an artifact hash present in the configured threat-intelligence feed. Treat the referenced artifact and every runner that handled it as potentially compromised.",
+					Evidence:    stringutil.TruncateEvidence("hash="+blockedHash+" line="+trimmed, 200),
+					JobName:     job.Name,
+				})
+				found = true
+				continue
+			}
 
 			if !containsHTTPCall(lower) && !strings.Contains(lower, "http") {
 				continue
@@ -89,12 +113,17 @@ func detectSuspiciousNetworkTargets(doc *pipeline.Document, feed *config.ThreatI
 			if !found {
 				if matches := ipInURLRe.FindStringSubmatch(trimmed); len(matches) >= 2 {
 					ip := net.ParseIP(matches[1])
-					if ip != nil && !isPrivateIP(ip) && !isLoopback(ip) {
+					_, feedBlocked := blockedIPs[ip.String()]
+					if ip != nil && (feedBlocked || (!isPrivateIP(ip) && !isLoopback(ip))) {
+						description := "CI/CD script makes an HTTP request to a public IP address (" + matches[1] + ") rather than a domain name. Direct IP connections bypass DNS monitoring and are commonly used by C2 infrastructure."
+						if feedBlocked {
+							description = "CI/CD script contacts an IP address present in the configured threat-intelligence feed (" + matches[1] + ")."
+						}
 						findings = append(findings, Finding{
 							ID:          SuspiciousNetworkID,
 							Severity:    SeverityHigh,
-							Title:       "CI script contacts public IP address directly",
-							Description: "CI/CD script makes an HTTP request to a public IP address (" + matches[1] + ") rather than a domain name. Direct IP connections bypass DNS monitoring and are commonly used by C2 infrastructure.",
+							Title:       "CI script contacts suspicious IP address",
+							Description: description,
 							Evidence:    stringutil.TruncateEvidence("ip="+matches[1]+" line="+trimmed, 200),
 							JobName:     job.Name,
 						})
@@ -105,6 +134,29 @@ func detectSuspiciousNetworkTargets(doc *pipeline.Document, feed *config.ThreatI
 		}
 	}
 	return findings
+}
+
+func matchingIOCToken(text string, indicators []string) string {
+	for _, indicator := range indicators {
+		for start := 0; start < len(text); {
+			offset := strings.Index(text[start:], indicator)
+			if offset < 0 {
+				break
+			}
+			index := start + offset
+			end := index + len(indicator)
+			if (index == 0 || !isIOCTokenChar(text[index-1])) &&
+				(end == len(text) || !isIOCTokenChar(text[end])) {
+				return indicator
+			}
+			start = index + 1
+		}
+	}
+	return ""
+}
+
+func isIOCTokenChar(char byte) bool {
+	return char >= 'a' && char <= 'z' || char >= '0' && char <= '9' || char == '_' || char == '-'
 }
 
 func isPrivateIP(ip net.IP) bool {

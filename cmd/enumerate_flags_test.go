@@ -89,6 +89,15 @@ func TestEnumerate_LogScrape_Flags_Map_To_Options(t *testing.T) {
 	logScrape = true
 	logMaxPipelines = 5
 	logMaxJobs = 7
+	runnerLogMaxPipelines = 4
+	runnerLogMaxJobs = 9
+	defer func() {
+		logScrape = false
+		logMaxPipelines = 3
+		logMaxJobs = 20
+		runnerLogMaxPipelines = 3
+		runnerLogMaxJobs = 10
+	}()
 
 	// Use JSONL to avoid template execution paths in test
 	enumFormat = fmtJSONL
@@ -113,6 +122,12 @@ func TestEnumerate_LogScrape_Flags_Map_To_Options(t *testing.T) {
 	}
 	if got.LogMaxJobs != 7 {
 		t.Fatalf("expected LogMaxJobs=7, got %d", got.LogMaxJobs)
+	}
+	if got.RunnerLogMaxPipelines != 4 {
+		t.Fatalf("expected RunnerLogMaxPipelines=4, got %d", got.RunnerLogMaxPipelines)
+	}
+	if got.RunnerLogMaxJobs != 9 {
+		t.Fatalf("expected RunnerLogMaxJobs=9, got %d", got.RunnerLogMaxJobs)
 	}
 }
 
@@ -163,5 +178,32 @@ func TestEnumerate_Redacted_Flag_Maps_To_Options(t *testing.T) {
 	enumRedact = true
 	if got := run(); !got.Redact {
 		t.Fatalf("expected Redact=true when --redacted set, got false")
+	}
+}
+
+func TestEnumerate_DependencyFlagsMapToOptions(t *testing.T) {
+	originalEnabled := enumDependencies
+	originalCache := enumDepxCacheDir
+	originalTimeout := enumDepxTimeout
+	defer func() {
+		enumDependencies = originalEnabled
+		enumDepxCacheDir = originalCache
+		enumDepxTimeout = originalTimeout
+	}()
+
+	enumDependencies = true
+	enumDepxCacheDir = " /tmp/gogatoz-depx-test "
+	enumDepxTimeout = "17s"
+	opts, err := buildEnumerateOptions(nil)
+	if err != nil {
+		t.Fatalf("buildEnumerateOptions: %v", err)
+	}
+	if !opts.ScanDependencies {
+		t.Fatal("ScanDependencies = false, want true")
+	}
+	for _, flagName := range []string{"dependencies", "depx-cache-dir", "depx-timeout"} {
+		if enumerateCmd.Flags().Lookup(flagName) == nil {
+			t.Errorf("enumerate flag --%s is not registered", flagName)
+		}
 	}
 }

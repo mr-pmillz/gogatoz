@@ -562,6 +562,45 @@ type BranchProtectionDetail struct {
 	CodeOwnerApprovalNeeded bool   `json:"code_owner_approval_required"`
 }
 
+// TagProtectionDetail holds the access level allowed to create a protected tag.
+type TagProtectionDetail struct {
+	Name              string `json:"name"`
+	CreateAccessLevel int    `json:"create_access_level"`
+}
+
+// GetProtectedTagDetails returns access level details for protected tags.
+func (c *Client) GetProtectedTagDetails(ctx context.Context, projectID any, perPage int64) ([]TagProtectionDetail, error) {
+	if c == nil || c.GL == nil {
+		return nil, fmt.Errorf("nil gitlab client")
+	}
+	if perPage <= 0 {
+		perPage = 100
+	}
+	opt := &gitlab.ListProtectedTagsOptions{ListOptions: gitlab.ListOptions{PerPage: perPage, Page: 1}}
+	var out []TagProtectionDetail
+	for {
+		list, resp, err := c.GL.ProtectedTags.ListProtectedTags(projectID, opt, gitlab.WithContext(ctx))
+		if err != nil {
+			return nil, err
+		}
+		for _, tag := range list {
+			if tag == nil || strings.TrimSpace(tag.Name) == "" {
+				continue
+			}
+			detail := TagProtectionDetail{Name: tag.Name}
+			if len(tag.CreateAccessLevels) > 0 {
+				detail.CreateAccessLevel = int(tag.CreateAccessLevels[0].AccessLevel)
+			}
+			out = append(out, detail)
+		}
+		if resp == nil || resp.NextPage == 0 || resp.CurrentPage >= resp.TotalPages || len(list) == 0 {
+			break
+		}
+		opt.Page = resp.NextPage
+	}
+	return out, nil
+}
+
 // GetProtectedBranchDetails returns access level details for protected branches.
 func (c *Client) GetProtectedBranchDetails(ctx context.Context, projectID any, perPage int64) ([]BranchProtectionDetail, error) {
 	if c == nil || c.GL == nil {

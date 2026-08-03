@@ -79,6 +79,7 @@ func TestRenderPayload_FirstClassModes(t *testing.T) {
 		{name: "runner variable dump", payload: "runner-var-dump", contains: "runner-vars.txt"},
 		{name: "workflow exfiltration", payload: "workflow-exfil", contains: "format-results.txt"},
 		{name: "release pipeline tamper", payload: "release-tamper-pipeline", contains: "release-env.txt"},
+		{name: "package tamper preview", payload: "package-tamper", contains: "mode=preview"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -109,6 +110,7 @@ func TestAttack_NewModesParticipateInExclusiveSelection(t *testing.T) {
 		{name: "workflow exfiltration", mode: &atkWorkflowExfil},
 		{name: "commit prefix", mode: &atkCommitPrefix},
 		{name: "release pipeline tamper", mode: &atkReleaseTamperPipeline},
+		{name: "package tamper", mode: &atkPackageTamper},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

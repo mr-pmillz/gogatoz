@@ -13,6 +13,7 @@ import (
 	"github.com/mr-pmillz/gogatoz/pkg/analyze"
 	"github.com/mr-pmillz/gogatoz/pkg/attack/secretsdump"
 	"github.com/mr-pmillz/gogatoz/pkg/config"
+	"github.com/mr-pmillz/gogatoz/pkg/depscan"
 	"github.com/mr-pmillz/gogatoz/pkg/gitlabx"
 	"github.com/mr-pmillz/gogatoz/pkg/pipeline"
 	gitlab "gitlab.com/gitlab-org/api/client-go"
@@ -39,6 +40,7 @@ type Result struct {
 	HasCIPipeline     bool              `json:"has_ci_pipeline"`
 	CISummary         string            `json:"ci_summary,omitempty"`
 	Findings          []analyze.Finding `json:"findings,omitempty"`
+	DependencyScan    *depscan.Report   `json:"dependency_scan,omitempty"`
 	ProtectedBranches []string          `json:"protected_branches,omitempty"`
 	// Runner enrichment (optional)
 	RunnerScope     string         `json:"runner_scope,omitempty"`
@@ -54,10 +56,11 @@ type Result struct {
 	GroupVariables   []analyze.VariableInfo    `json:"group_variables,omitempty"`
 	Environments     []analyze.EnvironmentInfo `json:"environments,omitempty"`
 	// Log scraping (optional)
-	LogFindingsCount int            `json:"log_findings_count,omitempty"`
-	RunnerLog        *RunnerLogInfo `json:"runner_log,omitempty"`
-	DurationMS       int64          `json:"duration_ms,omitempty"`
-	Error            string         `json:"error,omitempty"`
+	LogFindingsCount int             `json:"log_findings_count,omitempty"`
+	RunnerLog        *RunnerLogInfo  `json:"runner_log,omitempty"`
+	RunnerLogs       []RunnerLogInfo `json:"runner_logs,omitempty"`
+	DurationMS       int64           `json:"duration_ms,omitempty"`
+	Error            string          `json:"error,omitempty"`
 }
 
 // Options controls enumeration behavior.
@@ -81,9 +84,11 @@ type Options struct {
 	RunnerScope    string // project|group|instance (default: project)
 	AllowAdmin     bool   // allow admin-only operations when RunnerScope=instance
 	// Logs scraping (optional)
-	LogScrape       bool // scrape recent job logs for key=value findings
-	LogMaxPipelines int  // cap pipelines per ref
-	LogMaxJobs      int  // cap jobs per pipeline
+	LogScrape             bool // scrape recent job logs for key=value findings
+	LogMaxPipelines       int  // cap pipelines per ref
+	LogMaxJobs            int  // cap jobs per pipeline
+	RunnerLogMaxPipelines int  // cap pipelines inspected for runner fallback
+	RunnerLogMaxJobs      int  // cap jobs inspected per pipeline for runner fallback
 	// Variable metadata
 	FetchVariables bool // fetch project and group CI/CD variable metadata (requires api scope)
 	// Environment metadata
@@ -93,8 +98,18 @@ type Options struct {
 	Redact      bool                    // when true, mask plaintext secret values in findings (default: unredacted)
 	Controls    *config.ControlsConfig  // per-detection configuration (nil = use defaults)
 	ThreatIntel *config.ThreatIntelFeed // external threat intel feed (nil = use hardcoded blocklist only)
+	// Native depx dependency metadata auditing.
+	ScanDependencies  bool
+	DependencyScanner DependencyScanner
 	// Progress, if set, is called once per completed project result.
 	Progress func(Result)
+}
+
+// DependencyScanner is the repository-archive scan surface used by
+// enumeration. Implementations must inspect metadata only and never execute
+// repository or package content.
+type DependencyScanner interface {
+	ScanGitLabProject(context.Context, *gitlabx.Client, int64, string) (depscan.Report, error)
 }
 
 func appendError(r *Result, msg string) {
@@ -138,6 +153,9 @@ func dedup(idents []string) []string {
 // Unlike EnumerateProjects, it does not accumulate results in memory.
 // The emit function is called from worker goroutines and is serialized internally.
 func EnumerateProjectsStream(ctx context.Context, cl *gitlabx.Client, idents []string, opts Options, emit func(Result)) error {
+	if opts.ScanDependencies && opts.DependencyScanner == nil {
+		return errors.New("dependency scanning requires a configured depx scanner")
+	}
 	if opts.Concurrency <= 0 {
 		opts.Concurrency = DefaultConcurrency
 	}
@@ -317,6 +335,18 @@ func scanOne(ctx context.Context, cl *gitlabx.Client, ident string, opts Options
 		r.CISummary = "no default branch"
 		return r
 	}
+	if opts.ScanDependencies {
+		dependencyReport, dependencyErr := opts.DependencyScanner.ScanGitLabProject(ctx, cl, proj.ID, refToUse)
+		if dependencyErr != nil {
+			appendError(&r, fmt.Sprintf("dependency scan: %v", dependencyErr))
+		} else {
+			r.DependencyScan = &dependencyReport
+			r.Findings = append(r.Findings, dependencyReport.Findings...)
+			slog.Debug("dependency metadata scanned", "project", r.ProjectPathWithNS,
+				"ref", refToUse, "dependencies", dependencyReport.Dependencies,
+				"findings", len(dependencyReport.Findings))
+		}
+	}
 
 	file, resp, err := cl.GL.RepositoryFiles.GetFile(proj.ID, ".gitlab-ci.yml", &gitlab.GetFileOptions{Ref: new(refToUse)}, gitlab.WithContext(ctx))
 	if err != nil {
@@ -360,8 +390,26 @@ func scanOne(ctx context.Context, cl *gitlabx.Client, ident string, opts Options
 	r.HasCIPipeline = true
 	r.CISummary = ciDocResolved.DebugString()
 
+	// Runner metadata fallback: inspect a bounded sample of recent jobs when
+	// inventory was not requested, returned no runners, or was denied.
+	if len(fetchedRunners) == 0 {
+		runnerLogs, runnerLogErr := DiscoverRunnersFromLogs(ctx, cl, proj.ID, refToUse, RunnerLogLimits{
+			Pipelines: opts.RunnerLogMaxPipelines,
+			Jobs:      opts.RunnerLogMaxJobs,
+		})
+		if runnerLogErr != nil {
+			slog.Debug("runner log fallback unavailable", "project", r.ProjectPathWithNS, "error", runnerLogErr)
+		} else if len(runnerLogs) > 0 {
+			r.RunnerLogs = runnerLogs
+			legacy := runnerLogs[0]
+			r.RunnerLog = &legacy
+			fetchedRunners = runnerLogsToInventory(runnerLogs)
+			applyRunnerInfo(&r, fetchedRunners)
+		}
+	}
+
 	// Correlate job tags with fetched runners (if any)
-	if opts.FetchRunners && len(fetchedRunners) > 0 {
+	if len(fetchedRunners) > 0 {
 		// Collect unique job tags from the resolved pipeline
 		jobTags := map[string]struct{}{}
 		for _, j := range ciDocResolved.Jobs {
@@ -427,13 +475,6 @@ func scanOne(ctx context.Context, cl *gitlabx.Client, ident string, opts Options
 		}
 	}
 
-	// Run-log runner detection (fallback when --runners not available)
-	if r.RunnerLog == nil && !opts.FetchRunners {
-		if trace := fetchFirstJobTrace(ctx, cl, proj.ID, refToUse); trace != "" {
-			r.RunnerLog = ExtractRunnerFromLog(trace)
-		}
-	}
-
 	if opts.SkipAnalyze {
 		return r
 	}
@@ -463,6 +504,14 @@ func scanOne(ctx context.Context, cl *gitlabx.Client, ident string, opts Options
 		appendError(&r, fmt.Sprintf("analysis error: %v", ferr))
 	}
 	r.Findings = append(r.Findings, findings...)
+	if opts.FetchProtected {
+		releaseFindings, releaseErr := checkReleaseGovernance(ctx, cl, proj.ID, proj.DefaultBranch, ciDocResolved)
+		if releaseErr != nil {
+			appendError(&r, fmt.Sprintf("release governance: %v", releaseErr))
+		} else {
+			r.Findings = append(r.Findings, releaseFindings...)
+		}
+	}
 	// Post-analysis: emit executor-specific findings before severity adjustment
 	addExecutorFindings(&r, ciDocResolved)
 	// Post-analysis: adjust severities based on runner risk correlation, if available
@@ -471,6 +520,17 @@ func scanOne(ctx context.Context, cl *gitlabx.Client, ident string, opts Options
 	adjustFindingsForProtectedBranches(&r, ciDocResolved)
 	slog.Debug("project scanned", "project", r.ProjectPathWithNS, "findings", len(r.Findings), "ref", ref, "duration_ms", r.DurationMS)
 	return r
+}
+
+func runnerLogsToInventory(logs []RunnerLogInfo) []gitlabx.RunnerInfo {
+	runners := make([]gitlabx.RunnerInfo, 0, len(logs))
+	for _, info := range logs {
+		runners = append(runners, gitlabx.RunnerInfo{
+			ID: info.RunnerID, Description: info.Description,
+			TagList: append([]string(nil), info.Tags...), Executor: info.Executor,
+		})
+	}
+	return runners
 }
 
 // determineRefs returns the list of refs to scan based on options, deduped and capped.
