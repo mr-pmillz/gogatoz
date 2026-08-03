@@ -2,6 +2,101 @@
 
 All notable changes to this project will be documented [here](https://github.com/mr-pmillz/gogatoz/blob/main/CHANGELOG.md)
 
+## [0.6.2](https://github.com/mr-pmillz/gogatoz/compare/v0.6.1...v0.6.2) - 2026-08-03
+
+### ✨ New features
+
+- Feat: add read-only token capability inference - ([4b559f9](https://github.com/mr-pmillz/gogatoz/commit/4b559f9509ba2e31bb0489ef368f702ab36ad090))
+- Feat: add gated multi-ecosystem package tampering - ([ecf7598](https://github.com/mr-pmillz/gogatoz/commit/ecf7598ca0821edac7d6102520a5c250794c4079))
+- Feat: add static package archive inspection - ([3d6e390](https://github.com/mr-pmillz/gogatoz/commit/3d6e390c0015b890ab1d13ffeda5f429ee64cd97))
+- Test: add RED release-intel dependency report coverage - ([7ceed1d](https://github.com/mr-pmillz/gogatoz/commit/7ceed1d5ac797831b874d9dbe0b8a5c05a3af7cf))
+- Test: add RED coverage for cooldown CLI options - ([1ede48a](https://github.com/mr-pmillz/gogatoz/commit/1ede48a4844d04ef652a7b1ec6313fc387c899e5))
+- Test: add RED registry metadata coverage - ([b51e9b0](https://github.com/mr-pmillz/gogatoz/commit/b51e9b030b43a16f88259a06c463d79c659a3246))
+- Feat: add dependency release age intelligence - ([d7d7132](https://github.com/mr-pmillz/gogatoz/commit/d7d71321c499e466a5f9e6b07d7ceb6b769b9e3d))
+- Test: add RED coverage for dependency release intelligence - ([e7f5820](https://github.com/mr-pmillz/gogatoz/commit/e7f582035f2e1a73ba8dc45d2011b833ea8496a3))
+- Test: add RED coverage for watch ref integration - ([5f1a6db](https://github.com/mr-pmillz/gogatoz/commit/5f1a6dbc1fbd886d95de4631c6730b1d8679b40a))
+- Test: add RED coverage for GitLab ref snapshots - ([5ee8dc2](https://github.com/mr-pmillz/gogatoz/commit/5ee8dc2971ebff1fc0e2cd63d78c262570ce01c5))
+- Test: add RED coverage for release ref monitoring - ([c422216](https://github.com/mr-pmillz/gogatoz/commit/c4222168a6537a26bb46a69724953303769277a3))
+- Test: add RED coverage for release governance - ([2a9c1c1](https://github.com/mr-pmillz/gogatoz/commit/2a9c1c1501073ecf6f24b76c15462e53500e7087))
+- Feat: add native SBOM and GitLab dependency reports - ([8f6025d](https://github.com/mr-pmillz/gogatoz/commit/8f6025dd8622d31c4025f1af18eac9f7a3277208))
+- Test: add RED coverage for dependency report formats - ([59926dc](https://github.com/mr-pmillz/gogatoz/commit/59926dc19a0db53e5e027859e6c9921b6184dd22))
+- Test: add RED coverage for threat-feed IP and hash IOCs - ([bc0d7ca](https://github.com/mr-pmillz/gogatoz/commit/bc0d7ca7db8e1e4eeef230b2c67da8be57f344d1))
+- Test: add RED coverage for archived SBOM discovery - ([f81cf3f](https://github.com/mr-pmillz/gogatoz/commit/f81cf3ff2e0de5fee31252e78749fe3bb6203826))
+- Test: add RED coverage for GitLab PAX archives - ([b2e18f0](https://github.com/mr-pmillz/gogatoz/commit/b2e18f063a4f7d3a9c3acc127a37107266ab3651))
+- Test: add RED coverage for mutable release refs - ([2a2804b](https://github.com/mr-pmillz/gogatoz/commit/2a2804b3758a9d9675091f47699bfdda8ad9d866))
+- Test: add RED coverage for depx CLI and enumeration - ([c8fe5fa](https://github.com/mr-pmillz/gogatoz/commit/c8fe5fa8634ec1c4ec02bb4e472cb75aa7c8f999))
+- Test: add RED coverage for native depx scanning - ([1d6c6b7](https://github.com/mr-pmillz/gogatoz/commit/1d6c6b7577206ab13c689dcef615c5817b1aa89e))
+
+### ✨: New features
+
+- Feat: expose runner log sampling bounds - ([308f30f](https://github.com/mr-pmillz/gogatoz/commit/308f30f08d21a4eb72a4ea02458be1747fe2c4a4))
+- Feat: expose project-aware token validation - ([65b6a6d](https://github.com/mr-pmillz/gogatoz/commit/65b6a6dde8c7d2b7b1770d3c707f820b50268d4e))
+- Feat: complete runner log fallback discovery - ([356f866](https://github.com/mr-pmillz/gogatoz/commit/356f8667ff75eab9238e66218c6ed5b551cbada5))
+- Feat: expose package artifact verification - ([b7a3097](https://github.com/mr-pmillz/gogatoz/commit/b7a3097efdf2863eb4b832ec46d2f442c2a7c8a8))
+- Feat: verify package source and provenance - ([1207d27](https://github.com/mr-pmillz/gogatoz/commit/1207d277112631620776a56093bb4ce6d39ed31e))
+- Feat: expand package persistence detection - ([d4c4df4](https://github.com/mr-pmillz/gogatoz/commit/d4c4df4f96622da8e665cfc3072624c44276fe6a))
+- Feat: expose dependency cooldown controls - ([738e3aa](https://github.com/mr-pmillz/gogatoz/commit/738e3aa8d127a7e49ce023665a4b8258d32661b5))
+- Feat: monitor release refs and workflow changes - ([717f32e](https://github.com/mr-pmillz/gogatoz/commit/717f32e703f5b83fea9e7d98d7eed170f959e26e))
+- Feat: collect GitLab ref snapshots safely - ([8151774](https://github.com/mr-pmillz/gogatoz/commit/815177454b49a12f223fbc738b5e7edcdd146c43))
+- Feat: detect release ref lifecycle anomalies - ([bd7f967](https://github.com/mr-pmillz/gogatoz/commit/bd7f967c88fd2a6cc8cd68a30d637ada1fd2e2fa))
+- Feat: audit publishing branch and tag governance - ([9d04eb2](https://github.com/mr-pmillz/gogatoz/commit/9d04eb24a242c7caf3de53ea5eef971f8ab4b97b))
+- Feat: flag mutable include release refs - ([c66a6ca](https://github.com/mr-pmillz/gogatoz/commit/c66a6ca56363d9fc14e6e4ca0503eb7d24c3a389))
+- Feat: expose depx audits in CLI and enumeration - ([f76af6b](https://github.com/mr-pmillz/gogatoz/commit/f76af6bfe839c02dc5bd337a62924c5a9071fbbf))
+- Feat: integrate native depx dependency auditing - ([f1c3bea](https://github.com/mr-pmillz/gogatoz/commit/f1c3bea336922e79bc369d3ce803079b085cdfbc))
+
+### 🐛 Bug fixes
+
+- Fix: reject shell metacharacters in package entry paths - ([a159622](https://github.com/mr-pmillz/gogatoz/commit/a159622e39f5c985b1a6ba2159d000c6ea9fa26e))
+- Fix: isolate package tamper previews - ([40f40d6](https://github.com/mr-pmillz/gogatoz/commit/40f40d67f8ef43f5ac56bfa0b438e8c1de122d70))
+- Fix: avoid treating branch names as release tags - ([a65bc56](https://github.com/mr-pmillz/gogatoz/commit/a65bc560de437df8fa5e9eb7d43ecc6cbb4623c7))
+- Fix: keep watch JSON output machine readable - ([7d42e08](https://github.com/mr-pmillz/gogatoz/commit/7d42e08fce91362ee142ad319e9870d50af72a54))
+- Fix: include release intelligence in dependency reports - ([b1f8549](https://github.com/mr-pmillz/gogatoz/commit/b1f8549e4cf2b0a037b4219c6f0c815735a29a2e))
+- Fix: preserve scoped package paths in registry queries - ([ab003f4](https://github.com/mr-pmillz/gogatoz/commit/ab003f4b5f89361b4e884098b94aa4e95ff7652a))
+- Fix: consume threat-feed IP and hash indicators - ([820c484](https://github.com/mr-pmillz/gogatoz/commit/820c484d9b2d171a844c5afc0b37c1159a112198))
+- Fix: discover SBOMs in GitLab archives - ([df42676](https://github.com/mr-pmillz/gogatoz/commit/df42676341917d6b6a4a76c6a848c0f5f7da985a))
+- Fix: accept GitLab PAX archive metadata - ([dd53721](https://github.com/mr-pmillz/gogatoz/commit/dd53721d10c1b5afc7f25d8a9521de4ee1f0dccb))
+
+### 📚 Documentation
+
+- Docs: document runner and token reconnaissance - ([ea243f8](https://github.com/mr-pmillz/gogatoz/commit/ea243f8b45c4cf97e401b8fcca119478c6de9b06))
+- Docs: record package entry path hardening - ([7a77950](https://github.com/mr-pmillz/gogatoz/commit/7a77950786e9ac6be9e486a1c892f8c79c2bc1df))
+- Docs: document gated package tamper testing - ([e2e907b](https://github.com/mr-pmillz/gogatoz/commit/e2e907bf3114fe1a6fc929461aab471c4d2cd5a6))
+- Docs: document static package artifact verification - ([b9c1f09](https://github.com/mr-pmillz/gogatoz/commit/b9c1f0990cff9fec0434dba532918082614ff152))
+- Docs: record final P0 depx validation - ([be559d6](https://github.com/mr-pmillz/gogatoz/commit/be559d63feb7fdc9792e34947cf4169d6d64636b))
+- Docs: document P0 release intelligence and monitoring - ([b3efdd2](https://github.com/mr-pmillz/gogatoz/commit/b3efdd2a2d6a3745bae9c419122d11f3fe31e851))
+- Docs: record P0 depx TDD evidence - ([4261ebe](https://github.com/mr-pmillz/gogatoz/commit/4261ebe06284f6d15e8c0816ac3b8fede1d2f630))
+- Docs: document native depx dependency auditing - ([968a238](https://github.com/mr-pmillz/gogatoz/commit/968a238867e548d14bb16f0e922533128e7df639))
+
+### 🎨 Styling
+
+- Style: format runner log test limits - ([3d1ff5b](https://github.com/mr-pmillz/gogatoz/commit/3d1ff5bdfb30dee7f857c46c91d9b8442886a54c))
+
+### 🧪 Testing
+
+- Test: expose runner log sampling bounds - ([f4fd9b8](https://github.com/mr-pmillz/gogatoz/commit/f4fd9b80c1eabc55086df2b4cb97e9fbe6b3cfd6))
+- Test: expose project-aware token validation - ([37d4cda](https://github.com/mr-pmillz/gogatoz/commit/37d4cdabd4b81fa5190967b4f208a7b661574ccd))
+- Test: specify read-only token capability inference - ([2c42b03](https://github.com/mr-pmillz/gogatoz/commit/2c42b03142c4a221c8b9699f3cb8aed687c5c02d))
+- Test: specify bounded runner log fallback - ([b947552](https://github.com/mr-pmillz/gogatoz/commit/b947552869a7d4239f12cad96dd0620c01aa754c))
+- Test: reject package entry shell expansion - ([d4d56e1](https://github.com/mr-pmillz/gogatoz/commit/d4d56e10bcaa6591a9620a5b09d3df8e339f284a))
+- Test: harden package tamper isolation and identity - ([cd26224](https://github.com/mr-pmillz/gogatoz/commit/cd26224e5464e481ae855af1c23fead8b99f2c0c))
+- Test: define safe multi-ecosystem package tampering - ([9938b32](https://github.com/mr-pmillz/gogatoz/commit/9938b32f08b9dd393c8bd916ee7d00bb1d20ac69))
+- Test: exercise artifact verifier CLI end to end - ([5fe69cc](https://github.com/mr-pmillz/gogatoz/commit/5fe69cc1c8631c581ab25a479412a67bdc0694bf))
+- Test: distinguish release tags from bare branches - ([f636c0f](https://github.com/mr-pmillz/gogatoz/commit/f636c0f8938eb496246b8e31acbf0d6aed8ae926))
+- Test: harden artifact verifier boundaries - ([062b375](https://github.com/mr-pmillz/gogatoz/commit/062b37594abacecd0ad5a091d8325e06d54b6dc7))
+- Test: define artifact verifier CLI and taxonomy - ([ba36f72](https://github.com/mr-pmillz/gogatoz/commit/ba36f72c3e112aac78756534b40651ad1df25d0d))
+- Test: define source and provenance verification - ([abde8dd](https://github.com/mr-pmillz/gogatoz/commit/abde8ddda562b15e7036994ecc476dd5f3354723))
+- Test: define bounded package artifact inspection - ([b410c60](https://github.com/mr-pmillz/gogatoz/commit/b410c601072ea8b42b36ba5b76fb6cd3d1ed06e9))
+- Test: define expanded package persistence detection - ([e8352b3](https://github.com/mr-pmillz/gogatoz/commit/e8352b3c448278e5ae678bd147d312d32d4f6668))
+- Test: cover depx bridge safety guards - ([aa637f8](https://github.com/mr-pmillz/gogatoz/commit/aa637f88e838557ac2ee60bac7584f15005d8a27))
+- Test: raise depx integration coverage above 80 percent - ([51ac468](https://github.com/mr-pmillz/gogatoz/commit/51ac4688ea3c4dc678845b547dff5d7e17a113ef))
+
+### ⚙️  Miscellaneous
+
+- Merge pull request #47 from mr-pmillz/feat/techniques - ([d8f8ec8](https://github.com/mr-pmillz/gogatoz/commit/d8f8ec8464212cf155cd87600c117408643a1cfb))
+- Feat/techniques - ([d8f8ec8](https://github.com/mr-pmillz/gogatoz/commit/d8f8ec8464212cf155cd87600c117408643a1cfb))
+- Merge pull request #46 from mr-pmillz/main - ([4352131](https://github.com/mr-pmillz/gogatoz/commit/4352131da3bb2b5eee643dfd0e5da9cbb9d1404c))
+- Sync main back to develop - ([4352131](https://github.com/mr-pmillz/gogatoz/commit/4352131da3bb2b5eee643dfd0e5da9cbb9d1404c))
+
 ## [0.6.1](https://github.com/mr-pmillz/gogatoz/compare/v0.6.0...v0.6.1) - 2026-07-31
 
 ### ✨ New features
@@ -10,6 +105,9 @@ All notable changes to this project will be documented [here](https://github.com
 
 ### ⚙️  Miscellaneous
 
+- Merge pull request #44 from mr-pmillz/release/v0.6.1 - ([8bbcc04](https://github.com/mr-pmillz/gogatoz/commit/8bbcc04641bff7e824414a60fcad500a899b165a))
+- Release/v0.6.1 - ([8bbcc04](https://github.com/mr-pmillz/gogatoz/commit/8bbcc04641bff7e824414a60fcad500a899b165a))
+- Chore: update changelog - ([84ce15b](https://github.com/mr-pmillz/gogatoz/commit/84ce15b6bc47baee27797b32f7352b59f8b93298))
 - Merge pull request #43 from mr-pmillz/qa/updates - ([dc34e6c](https://github.com/mr-pmillz/gogatoz/commit/dc34e6c3ffa86f6dd3d326ab518d7a1cf15edc35))
 - Qa/updates - ([dc34e6c](https://github.com/mr-pmillz/gogatoz/commit/dc34e6c3ffa86f6dd3d326ab518d7a1cf15edc35))
 - Do not cache setup-go action on release job - ([452d68a](https://github.com/mr-pmillz/gogatoz/commit/452d68afe509be412a4deef675955a8650921a68))
