@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented [here](https://github.com/mr-pmillz/gogatoz/blob/main/CHANGELOG.md)
 
+## [0.6.4](https://github.com/mr-pmillz/gogatoz/compare/v0.6.3...v0.6.4) - 2026-09-17
+
+### ⚙️  Miscellaneous
+
+- Merge pull request #66 from mr-pmillz/docs/fix-docs - ([2d7be4e](https://github.com/mr-pmillz/gogatoz/commit/2d7be4ece6fe6a1ecb124207cf3d29bc7b745b2e))
+- Upgrade astro version - ([2d7be4e](https://github.com/mr-pmillz/gogatoz/commit/2d7be4ece6fe6a1ecb124207cf3d29bc7b745b2e))
+- Upgrade astro version - ([02db8fb](https://github.com/mr-pmillz/gogatoz/commit/02db8fb2e2a17a637efc90430c18e7e37fc22de9))
+- Merge pull request #65 from mr-pmillz/main - ([a897168](https://github.com/mr-pmillz/gogatoz/commit/a8971689b99ab4abf32c69afa2c63a4cc445a17b))
+- Sync main back to develop - ([a897168](https://github.com/mr-pmillz/gogatoz/commit/a8971689b99ab4abf32c69afa2c63a4cc445a17b))
+
 ## [0.6.3](https://github.com/mr-pmillz/gogatoz/compare/v0.6.2...v0.6.3) - 2026-09-17
 
 ### 📦 Dependencies
@@ -41,6 +51,9 @@ All notable changes to this project will be documented [here](https://github.com
 
 ### ⚙️  Miscellaneous
 
+- Merge pull request #64 from mr-pmillz/release/v0.6.3 - ([3376ce7](https://github.com/mr-pmillz/gogatoz/commit/3376ce74a702a6b65b23fe08ccdfca2fe1547d34))
+- Release/v0.6.3 - ([3376ce7](https://github.com/mr-pmillz/gogatoz/commit/3376ce74a702a6b65b23fe08ccdfca2fe1547d34))
+- Chore: update changelog - ([6cf681d](https://github.com/mr-pmillz/gogatoz/commit/6cf681dca858b4b1a12211c235df2da95ffc5c41))
 - Merge pull request #63 from mr-pmillz/deps/update-deps - ([60136c0](https://github.com/mr-pmillz/gogatoz/commit/60136c07edcb2b10e90d24baa3df11f3d6d144ff))
 - Deps/update deps - ([60136c0](https://github.com/mr-pmillz/gogatoz/commit/60136c07edcb2b10e90d24baa3df11f3d6d144ff))
 - Bump go version to v1.26.6 - ([af49855](https://github.com/mr-pmillz/gogatoz/commit/af49855eda3ec221e9902ed6f8701a31c8172f0f))
