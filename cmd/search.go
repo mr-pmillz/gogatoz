@@ -82,7 +82,7 @@ var searchCmd = &cobra.Command{
 		}
 
 		opts := &gitlab.ListProjectsOptions{
-			ListOptions: gitlab.ListOptions{Page: 1, PerPage: perPage},
+			Page: 1, PerPage: perPage,
 		}
 		if strings.TrimSpace(searchQuery) != "" {
 			opts.Search = new(searchQuery)

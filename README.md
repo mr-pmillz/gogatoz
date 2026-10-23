@@ -36,6 +36,8 @@ GoGatoZ discovers GitLab projects, scans their CI/CD configurations for security
 
 ### go install
 
+Requires Go 1.27.3 or later.
+
 ```bash
 go install github.com/mr-pmillz/gogatoz@latest
 ```

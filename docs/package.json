@@ -10,21 +10,21 @@
     "astro": "astro"
   },
   "dependencies": {
-    "@astrojs/starlight": "^0.42.1",
-    "astro": "^7.3.3",
+    "@astrojs/starlight": "^0.42.6",
+    "astro": "^7.4.2",
     "astro-mermaid": "^2.1.0",
-    "sharp": "^0.35.1"
+    "sharp": "^0.35.5"
   },
   "overrides": {
-    "svgo": ">=4.0.1",
-    "rollup": ">=4.59.0",
-    "dompurify": ">=3.4.11",
-    "devalue": ">=5.8.1",
-    "defu": ">=6.1.5",
-    "vite": "^8.0.13",
-    "esbuild": ">=0.28.1",
-    "@astrojs/internal-helpers": ">=0.10.0",
-    "picomatch": ">=4.0.4",
-    "postcss": ">=8.5.10"
+    "svgo": "^4.1.0",
+    "rollup": "^4.65.0",
+    "dompurify": "^3.4.17",
+    "devalue": "^5.9.4",
+    "defu": "^6.1.7",
+    "vite": "^8.3.5",
+    "esbuild": "^0.28.2",
+    "picomatch": "^4.0.7",
+    "postcss": "^8.5.31",
+    "katex": "0.18.10"
   }
 }

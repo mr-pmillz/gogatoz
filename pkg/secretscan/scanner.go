@@ -205,7 +205,7 @@ func discoverProjects(ctx context.Context, cl *gitlabx.Client, opts Options) ([]
 	maxPages := opts.MaxPages // 0 = unlimited
 
 	listOpts := &gitlab.ListProjectsOptions{
-		ListOptions: gitlab.ListOptions{Page: 1, PerPage: perPage},
+		Page: 1, PerPage: perPage,
 	}
 	if q := strings.TrimSpace(opts.Query); q != "" {
 		listOpts.Search = new(q)

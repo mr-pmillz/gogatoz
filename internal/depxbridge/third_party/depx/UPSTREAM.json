@@ -1,0 +1,31 @@
+{
+  "module": "github.com/projectdiscovery/depx",
+  "version": "v0.1.1",
+  "sum": "h1:cYJpSbOLNQiIZUWYhzcQCdizzSrvm+IU1sF9vdOYGzU=",
+  "go_mod_sum": "h1:RUclwi3SPPurevbaVxOAPmJHbeukhXrw+xyDeJbG6F8=",
+  "packages": [
+    "apperr",
+    "audit",
+    "check",
+    "config",
+    "github",
+    "intel",
+    "inventory",
+    "lockfile",
+    "malindex",
+    "ref",
+    "registry",
+    "source",
+    "sync"
+  ],
+  "patches": [
+    {
+      "path": "scripts/depx_patches/0001-audit-correctness.patch",
+      "sha256": "6e7bd2734c3409608b385eabd837bf280a65a0ae134e5d0fc406d1dd3539e044"
+    },
+    {
+      "path": "scripts/depx_patches/0002-portable-sbom-import.patch",
+      "sha256": "6137cf9d01d6804841a4e93249bcbaae062297aca629e010fa8312590668608a"
+    }
+  ]
+}

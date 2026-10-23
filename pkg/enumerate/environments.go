@@ -16,7 +16,7 @@ func FetchEnvironments(ctx context.Context, cl *gitlabx.Client, projectID any) (
 	page := int64(1)
 	for {
 		envs, resp, err := cl.GL.Environments.ListEnvironments(projectID,
-			&gitlab.ListEnvironmentsOptions{ListOptions: gitlab.ListOptions{Page: page, PerPage: 100}},
+			&gitlab.ListEnvironmentsOptions{Page: page, PerPage: 100},
 			gitlab.WithContext(ctx))
 		if err != nil {
 			return all, err

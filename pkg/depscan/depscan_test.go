@@ -184,13 +184,13 @@ func TestScanner_ScanSerializesNativeAudits(t *testing.T) {
 
 func TestScanner_ScanSBOMUsesNativeDepxExporter(t *testing.T) {
 	auditor := &fakeSBOMAuditor{
-		fakeAuditor: fakeAuditor{result: AuditResult{
+		result: AuditResult{
 			Dependencies: 1,
 			Findings: []AuditFinding{{
 				Verdict: "malicious", Ecosystem: "npm", Name: "synthetic-package",
 				Version: "1.2.3", Source: "/repo/package-lock.json",
 			}},
-		}},
+		},
 		sbom: []byte(`{"bomFormat":"CycloneDX"}`),
 	}
 	scanner := NewScanner(auditor)

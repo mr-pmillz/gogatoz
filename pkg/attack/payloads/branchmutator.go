@@ -260,10 +260,8 @@ func RunBranchMutator(ctx context.Context, client *gitlab.Client, projectID any,
 	var branches []*gitlab.Branch
 	for {
 		listOpts := &gitlab.ListBranchesOptions{
-			ListOptions: gitlab.ListOptions{
-				PerPage: 100,
-				Page:    page,
-			},
+			PerPage: 100,
+			Page:    page,
 		}
 		bs, resp, err := client.Branches.ListBranches(projectID, listOpts, gitlab.WithContext(ctx))
 		if err != nil {

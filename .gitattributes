@@ -1,1 +1,4 @@
 * text=auto eol=lf
+
+# Unified-diff context lines require a space before tabs and on blank lines.
+scripts/depx_patches/*.patch whitespace=-blank-at-eol,-space-before-tab

@@ -162,11 +162,11 @@ func TestResolveIncludes_ProjectInclude_PinnedVsUnpinned(t *testing.T) {
 // document is fetched only once (visited set deduplication).
 func TestResolveIncludes_VisitedDedup(t *testing.T) {
 	encoded := base64.StdEncoding.EncodeToString([]byte(includedJobYAML))
-	var fetchCount int64
+	var fetchCount atomic.Int64
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.Contains(r.URL.Path, "/repository/files/") {
-			atomic.AddInt64(&fetchCount, 1)
+			fetchCount.Add(1)
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(map[string]any{
 				"file_name": "shared.yml",
@@ -198,7 +198,7 @@ func TestResolveIncludes_VisitedDedup(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	count := atomic.LoadInt64(&fetchCount)
+	count := fetchCount.Load()
 	if count != 1 {
 		t.Fatalf("expected exactly 1 fetch for deduped include, got %d", count)
 	}

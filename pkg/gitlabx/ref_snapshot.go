@@ -15,7 +15,7 @@ const refSnapshotPageSize int64 = 100
 // RefState captures the GitLab metadata needed to compare a branch or tag.
 type RefState struct {
 	SHA               string    `json:"sha"`
-	CreatedAt         time.Time `json:"created_at,omitempty"`
+	CreatedAt         time.Time `json:"created_at"`
 	HasRecentPipeline bool      `json:"has_recent_pipeline,omitempty"`
 }
 
@@ -74,7 +74,7 @@ func (c *Client) IsCommitAncestor(ctx context.Context, projectID any, oldSHA, ne
 }
 
 func (c *Client) collectBranches(ctx context.Context, projectID any, out map[string]RefState) error {
-	options := &gitlab.ListBranchesOptions{ListOptions: gitlab.ListOptions{PerPage: refSnapshotPageSize, Page: 1}}
+	options := &gitlab.ListBranchesOptions{PerPage: refSnapshotPageSize, Page: 1}
 	for {
 		branches, response, err := c.GL.Branches.ListBranches(projectID, options, gitlab.WithContext(ctx))
 		if err != nil {
@@ -94,7 +94,7 @@ func (c *Client) collectBranches(ctx context.Context, projectID any, out map[str
 }
 
 func (c *Client) collectTags(ctx context.Context, projectID any, out map[string]RefState) error {
-	options := &gitlab.ListTagsOptions{ListOptions: gitlab.ListOptions{PerPage: refSnapshotPageSize, Page: 1}}
+	options := &gitlab.ListTagsOptions{PerPage: refSnapshotPageSize, Page: 1}
 	for {
 		tags, response, err := c.GL.Tags.ListTags(projectID, options, gitlab.WithContext(ctx))
 		if err != nil {
@@ -128,7 +128,7 @@ func (c *Client) correlateRecentPipelines(
 	branches map[string]RefState,
 ) error {
 	options := &gitlab.ListProjectPipelinesOptions{
-		ListOptions:  gitlab.ListOptions{PerPage: refSnapshotPageSize, Page: 1},
+		PerPage: refSnapshotPageSize, Page: 1,
 		UpdatedAfter: &recentSince,
 	}
 	for {

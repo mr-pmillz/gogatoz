@@ -202,7 +202,7 @@ func commonArchiveRoot(files []FileRecord) string {
 
 func comparisonIgnored(filePath string) bool {
 	lower := strings.ToLower(filePath)
-	for _, part := range strings.Split(lower, "/") {
+	for part := range strings.SplitSeq(lower, "/") {
 		if strings.HasSuffix(part, ".dist-info") || strings.HasSuffix(part, ".egg-info") {
 			return true
 		}

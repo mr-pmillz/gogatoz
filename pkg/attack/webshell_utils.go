@@ -63,9 +63,9 @@ func WaitForPipelineForRef(ctx context.Context, client *gitlabx.Client, projectI
 	var foundID int64
 	check := func(ctx context.Context) (bool, error) {
 		opts := &gitlab.ListProjectPipelinesOptions{
-			ListOptions: gitlab.ListOptions{PerPage: 1, Page: 1},
-			OrderBy:     new("id"),
-			Sort:        new("desc"),
+			PerPage: 1, Page: 1,
+			OrderBy: new("id"),
+			Sort:    new("desc"),
 		}
 		if ref != "" {
 			opts.Ref = new(ref)
@@ -124,9 +124,9 @@ func WaitForExfilPipeline(ctx context.Context, client *gitlabx.Client, projectID
 
 func listRecentPipelines(ctx context.Context, client *gitlabx.Client, projectID any, ref string, n int) ([]int64, error) {
 	opts := &gitlab.ListProjectPipelinesOptions{
-		ListOptions: gitlab.ListOptions{PerPage: int64(n), Page: 1},
-		OrderBy:     new("id"),
-		Sort:        new("desc"),
+		PerPage: int64(n), Page: 1,
+		OrderBy: new("id"),
+		Sort:    new("desc"),
 	}
 	if ref != "" {
 		opts.Ref = new(ref)
@@ -144,7 +144,7 @@ func listRecentPipelines(ctx context.Context, client *gitlabx.Client, projectID 
 
 func findJobInPipeline(ctx context.Context, client *gitlabx.Client, projectID any, pipelineID int64, jobName string) (found bool, jobID int64, status string, err error) {
 	opts := &gitlab.ListJobsOptions{
-		ListOptions: gitlab.ListOptions{PerPage: 100, Page: 1},
+		PerPage: 100, Page: 1,
 	}
 	jobs, _, err := client.GL.Jobs.ListPipelineJobs(projectID, pipelineID, opts, gitlab.WithContext(ctx))
 	if err != nil {
@@ -165,7 +165,7 @@ func WaitForJobCompletion(ctx context.Context, client *gitlabx.Client, projectID
 	}
 	check := func(ctx context.Context) (bool, error) {
 		opts := &gitlab.ListJobsOptions{
-			ListOptions: gitlab.ListOptions{PerPage: 100, Page: 1},
+			PerPage: 100, Page: 1,
 		}
 		jobs, _, jerr := client.GL.Jobs.ListPipelineJobs(projectID, pipelineID, opts, gitlab.WithContext(ctx))
 		if jerr != nil {

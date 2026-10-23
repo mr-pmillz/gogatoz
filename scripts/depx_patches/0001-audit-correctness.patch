@@ -1,0 +1,178 @@
+--- a/audit/audit.go
++++ b/audit/audit.go
+@@ -189,12 +189,6 @@
+ 	jobs := collectExtractJobs(targets)
+ 	if len(jobs) == 0 && !auditIncludesHome(inputPaths) {
+ 		opts.Progress.status("No lockfiles or SBOM files found")
+-		return &Result{
+-			Paths:      displayPaths,
+-			Summary:    Summary{},
+-			Mode:       auditMode(opts),
+-			DurationMS: time.Since(started).Milliseconds(),
+-		}, nil
+ 	}
+ 
+ 	if len(jobs) > 0 {
+@@ -204,6 +198,15 @@
+ 	allDeps, err := s.collectDependencies(ctx, jobs, inputPaths, opts)
+ 	if err != nil {
+ 		return nil, err
++	}
++
++	sbomPath := ""
++	if opts.SBOMExport != "" {
++		written, werr := writeSBOM(opts.SBOMExport, opts.SBOMFormat, opts.SBOMToolVersion, allDeps)
++		if werr != nil {
++			return nil, fmt.Errorf("sbom export: %w", werr)
++		}
++		sbomPath = written
+ 	}
+ 
+ 	if len(allDeps) == 0 {
+@@ -211,18 +214,10 @@
+ 		return &Result{
+ 			Paths:      displayPaths,
+ 			Summary:    Summary{Lockfiles: len(jobs)},
++			SBOMPath:   sbomPath,
+ 			Mode:       auditMode(opts),
+ 			DurationMS: time.Since(started).Milliseconds(),
+ 		}, nil
+-	}
+-
+-	sbomPath := ""
+-	if opts.SBOMExport != "" {
+-		written, werr := writeSBOM(opts.SBOMExport, opts.SBOMFormat, opts.SBOMToolVersion, allDeps)
+-		if werr != nil {
+-			return nil, fmt.Errorf("sbom export: %w", werr)
+-		}
+-		sbomPath = written
+ 	}
+ 
+ 	findings, maliciousCount, quarantinedCount, cleanCount, skippedPlaceholders, err := s.matchLocally(ctx, allDeps, opts)
+@@ -471,9 +466,28 @@
+ 		UseGitignore:   false,
+ 	}
+ 	results := scalibr.New().Scan(ctx, cfg)
+-	if results != nil && results.Status != nil &&
+-		results.Status.Status != plugin.ScanStatusSucceeded &&
+-		results.Status.Status != plugin.ScanStatusPartiallySucceeded {
++	if err := ctx.Err(); err != nil {
++		return nil, err
++	}
++	if results == nil || results.Status == nil {
++		return nil, fmt.Errorf("scalibr returned no scan status")
++	}
++	// A partial extraction must not be reported as a complete, clean audit.
++	// SCALIBR may also attach file errors to an otherwise successful scan.
++	for _, status := range results.PluginStatus {
++		if status == nil || status.Status == nil {
++			continue
++		}
++		for _, fileErr := range status.Status.FileErrors {
++			if fileErr != nil {
++				return nil, fmt.Errorf("%s: %s: %s", status.Name, fileErr.FilePath, fileErr.ErrorMessage)
++			}
++		}
++		if status.Status.Status == plugin.ScanStatusFailed || status.Status.Status == plugin.ScanStatusPartiallySucceeded {
++			return nil, fmt.Errorf("%s: %s", status.Name, status.Status.FailureReason)
++		}
++	}
++	if results.Status.Status != plugin.ScanStatusSucceeded {
+ 		reason := results.Status.FailureReason
+ 		if reason == "" {
+ 			reason = "scalibr scan failed"
+--- a/audit/discover.go
++++ b/audit/discover.go
+@@ -233,7 +233,7 @@
+ 	}
+ 	found := make([]string, 0)
+ 	for _, entry := range entries {
+-		if entry.IsDir() || !lockfile.IsRootName(entry.Name()) {
++		if entry.IsDir() || !isAuditSourcePath(entry.Name()) {
+ 			continue
+ 		}
+ 		path := filepath.Join(home, entry.Name())
+@@ -296,7 +296,7 @@
+ 			}
+ 			return nil
+ 		}
+-		if !isLockfilePath(path) {
++		if !isAuditSourcePath(path) {
+ 			return nil
+ 		}
+ 		found = append(found, path)
+--- a/audit/discover_find_unix.go
++++ b/audit/discover_find_unix.go
+@@ -34,6 +34,7 @@
+ 		"*/go/pkg/sumdb",
+ 	}
+ 	lockNames := append([]string(nil), lockfile.RootNames...)
++	lockNames = append(lockNames, sbomFilePatterns...)
+ 	sort.Strings(lockNames)
+ 
+ 	args := []string{root, "("}
+@@ -49,7 +50,7 @@
+ 		if !first {
+ 			args = append(args, "-o")
+ 		}
+-		args = append(args, "-name", n)
++		args = append(args, "-iname", n)
+ 		first = false
+ 	}
+ 	args = append(args, ")", "-prune", "-o", "(")
+@@ -57,9 +58,9 @@
+ 		if i > 0 {
+ 			args = append(args, "-o")
+ 		}
+-		args = append(args, "-name", name)
++		args = append(args, "-iname", name)
+ 	}
+-	args = append(args, ")", "-print")
++	args = append(args, ")", "-print0")
+ 
+ 	cmd := exec.Command("find", args...)
+ 	var stderr bytes.Buffer
+@@ -72,10 +73,9 @@
+ 		return nil, fmt.Errorf("find: %w", err)
+ 	}
+ 
+-	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
++	lines := strings.Split(string(out), "\x00")
+ 	found := make([]string, 0, len(lines))
+ 	for _, line := range lines {
+-		line = strings.TrimSpace(line)
+ 		if line == "" {
+ 			continue
+ 		}
+--- a/audit/source.go
++++ b/audit/source.go
+@@ -34,19 +34,19 @@
+ 	return ok
+ }
+ 
++// Shared by direct-path checks, find(1), and the portable directory walker.
++var sbomFilePatterns = []string{
++	"bom.json", "bom.xml",
++	"*.cdx.json", "*.cdx.xml",
++	"*.cyclonedx.json", "*.cyclonedx.xml",
++	"*.spdx.json", "*.spdx", "*.spdx.yml", "*.spdx.rdf", "*.spdx.rdf.xml",
++}
++
+ // isSBOMPath mirrors osv-scalibr sbom/cdx and sbom/spdx FileRequired patterns.
+ func isSBOMPath(path string) bool {
+ 	base := strings.ToLower(filepath.Base(path))
+-	switch base {
+-	case "bom.json", "bom.xml":
+-		return true
+-	}
+-	for _, ext := range []string{
+-		".cdx.json", ".cdx.xml",
+-		".cyclonedx.json", ".cyclonedx.xml",
+-		".spdx.json", ".spdx", ".spdx.yml", ".spdx.rdf", ".spdx.rdf.xml",
+-	} {
+-		if strings.HasSuffix(base, ext) {
++	for _, pattern := range sbomFilePatterns {
++		if matched, _ := filepath.Match(pattern, base); matched {
+ 			return true
+ 		}
+ 	}

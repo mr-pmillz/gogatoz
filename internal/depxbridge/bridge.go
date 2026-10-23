@@ -1,7 +1,6 @@
 // Package depxbridge exposes the minimum stable surface GoGatoZ needs from
-// depx. The upstream project currently keeps its native audit API internal, so
-// this nested module deliberately uses a depx-prefixed module path to consume
-// that API in-process without invoking the depx CLI.
+// depx. The upstream audit API is internal, so the required source is maintained
+// in third_party/depx with its license and provenance.
 package depxbridge
 
 import (
@@ -16,10 +15,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/projectdiscovery/depx/internal/audit"
-	"github.com/projectdiscovery/depx/internal/config"
-	"github.com/projectdiscovery/depx/internal/intel"
-	"github.com/projectdiscovery/depx/internal/registry"
+	"github.com/mr-pmillz/gogatoz/internal/depxbridge/third_party/depx/audit"
+	"github.com/mr-pmillz/gogatoz/internal/depxbridge/third_party/depx/config"
+	"github.com/mr-pmillz/gogatoz/internal/depxbridge/third_party/depx/intel"
+	"github.com/mr-pmillz/gogatoz/internal/depxbridge/third_party/depx/registry"
 )
 
 const defaultVersion = "gogatoz"
@@ -94,7 +93,7 @@ type Auditor struct {
 	closeOnce sync.Once
 }
 
-// New constructs an in-process depx auditor pinned by this module's go.mod.
+// New constructs an in-process depx auditor from the pinned source snapshot.
 func New(opts Options) (*Auditor, error) {
 	cfg := config.Default()
 	if cacheDir := strings.TrimSpace(opts.CacheDir); cacheDir != "" {
@@ -133,6 +132,9 @@ func (a *Auditor) Audit(ctx context.Context, paths []string) (Result, error) {
 // AuditSBOM audits dependencies once and returns depx's native CycloneDX or
 // SPDX serialization alongside the normal verdict result.
 func (a *Auditor) AuditSBOM(ctx context.Context, paths []string, format string) (Result, []byte, error) {
+	if a == nil {
+		return Result{}, nil, errors.New("audit dependencies: nil depx auditor")
+	}
 	format = strings.ToLower(strings.TrimSpace(format))
 	if format != "cyclonedx" && format != "spdx" {
 		return Result{}, nil, fmt.Errorf("unsupported depx SBOM format %q", format)
@@ -164,6 +166,8 @@ func (a *Auditor) AuditSBOM(ctx context.Context, paths []string, format string) 
 	if len(data) > maxSBOMBytes {
 		return Result{}, nil, fmt.Errorf("native depx SBOM exceeds %d bytes", maxSBOMBytes)
 	}
+	// The temporary export is removed on return; only the bytes remain usable.
+	result.SBOMPath = ""
 	return result, data, nil
 }
 

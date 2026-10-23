@@ -27,8 +27,8 @@ type AuditFinding struct {
 	Version    string    `json:"version"`
 	IDs        []string  `json:"ids,omitempty"`
 	Summary    string    `json:"summary,omitempty"`
-	Published  time.Time `json:"published_at,omitempty"`
-	ModifiedAt time.Time `json:"modified_at,omitempty"`
+	Published  time.Time `json:"published_at"`
+	ModifiedAt time.Time `json:"modified_at"`
 	Source     string    `json:"source,omitempty"`
 	SourceType string    `json:"source_type,omitempty"`
 	Lockfile   string    `json:"lockfile,omitempty"`

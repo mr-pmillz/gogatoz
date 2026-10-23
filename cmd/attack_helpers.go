@@ -8,6 +8,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -521,8 +522,8 @@ func resultsToMap(results []*CallbackResult) map[string]string {
 // URL format: https://gitlab.com/group/project/-/pipelines/123
 func parsePipelineURL(pipelineURL string) (int64, error) {
 	parts := strings.Split(pipelineURL, "/")
-	for i := len(parts) - 1; i >= 0; i-- {
-		if parts[i] == "pipelines" && i+1 < len(parts) {
+	for i, part := range slices.Backward(parts) {
+		if part == "pipelines" && i+1 < len(parts) {
 			var id int64
 			_, err := fmt.Sscanf(parts[i+1], "%d", &id)
 			return id, err
