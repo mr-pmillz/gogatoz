@@ -2,10 +2,35 @@
 
 All notable changes to this project will be documented [here](https://github.com/mr-pmillz/gogatoz/blob/main/CHANGELOG.md)
 
+## [0.6.5](https://github.com/mr-pmillz/gogatoz/compare/v0.6.4...v0.6.5) - 2026-10-23
+
+### ✨ New features
+
+- Fix lockfile and sbom discovery, reject incomplete extraction, and support empty exports and portable imports with reproducible depx patches - ([900fd59](https://github.com/mr-pmillz/gogatoz/commit/900fd59ae9d58c39fae51fef6fe4acb694b8456a))
+
+### 🐛 Bug fixes
+
+- Fix: prevent incomplete dependency audits and repair setup - ([900fd59](https://github.com/mr-pmillz/gogatoz/commit/900fd59ae9d58c39fae51fef6fe4acb694b8456a))
+- Fix: restore go install and modernize dependencies - ([65686b1](https://github.com/mr-pmillz/gogatoz/commit/65686b15197d6e1c67c370e3ce1c6ab604b521b7))
+
+### ⚙️  Miscellaneous
+
+- Merge pull request #77 from mr-pmillz/fix/goinstall - ([1885066](https://github.com/mr-pmillz/gogatoz/commit/18850661663b8fe909c7a4bc8874f6c5c526ccf2))
+- Fix/goinstall - ([1885066](https://github.com/mr-pmillz/gogatoz/commit/18850661663b8fe909c7a4bc8874f6c5c526ccf2))
+- Repair container entrypoint behavior and clean-checkout tests, add regression and snapshot verification checks, and narrow ci permissions - ([900fd59](https://github.com/mr-pmillz/gogatoz/commit/900fd59ae9d58c39fae51fef6fe4acb694b8456a))
+- Validated with race tests, vet, lint, six release builds, versioned installation, and container smoke tests - ([900fd59](https://github.com/mr-pmillz/gogatoz/commit/900fd59ae9d58c39fae51fef6fe4acb694b8456a))
+- Upgrade to go 1.27.3, remove module replacements with a reproducible depx source snapshot, and add a versioned installation regression check. - ([65686b1](https://github.com/mr-pmillz/gogatoz/commit/65686b15197d6e1c67c370e3ce1c6ab604b521b7))
+- Apply go fix modernizers and refresh go, github actions, docker, documentation, and development-tool dependencies. retain documented compatibility pins where upstream upgrades break callers. - ([65686b1](https://github.com/mr-pmillz/gogatoz/commit/65686b15197d6e1c67c370e3ce1c6ab604b521b7))
+- Merge pull request #68 from mr-pmillz/main - ([dfefe8b](https://github.com/mr-pmillz/gogatoz/commit/dfefe8b7d5c2912e530bb92372241645e45e43e1))
+- Sync main back to develop - ([dfefe8b](https://github.com/mr-pmillz/gogatoz/commit/dfefe8b7d5c2912e530bb92372241645e45e43e1))
+
 ## [0.6.4](https://github.com/mr-pmillz/gogatoz/compare/v0.6.3...v0.6.4) - 2026-09-17
 
 ### ⚙️  Miscellaneous
 
+- Merge pull request #67 from mr-pmillz/release/v0.6.4 - ([bbd1f00](https://github.com/mr-pmillz/gogatoz/commit/bbd1f001c2f790d77cb31a4ca26703c4985ef269))
+- Release/v0.6.4 - ([bbd1f00](https://github.com/mr-pmillz/gogatoz/commit/bbd1f001c2f790d77cb31a4ca26703c4985ef269))
+- Chore: update changelog - ([55cc869](https://github.com/mr-pmillz/gogatoz/commit/55cc869d49ee6c1a161aeaefd8e8a1b4be9c2a53))
 - Merge pull request #66 from mr-pmillz/docs/fix-docs - ([2d7be4e](https://github.com/mr-pmillz/gogatoz/commit/2d7be4ece6fe6a1ecb124207cf3d29bc7b745b2e))
 - Upgrade astro version - ([2d7be4e](https://github.com/mr-pmillz/gogatoz/commit/2d7be4ece6fe6a1ecb124207cf3d29bc7b745b2e))
 - Upgrade astro version - ([02db8fb](https://github.com/mr-pmillz/gogatoz/commit/02db8fb2e2a17a637efc90430c18e7e37fc22de9))
