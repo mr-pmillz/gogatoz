@@ -20,7 +20,7 @@ func FetchProjectVariables(ctx context.Context, cl *gitlabx.Client, projectID an
 	page := int64(1)
 	for {
 		vars, resp, err := cl.GL.ProjectVariables.ListVariables(projectID,
-			&gitlab.ListProjectVariablesOptions{ListOptions: gitlab.ListOptions{Page: page, PerPage: 100}},
+			&gitlab.ListProjectVariablesOptions{Page: page, PerPage: 100},
 			gitlab.WithContext(ctx))
 		if err != nil {
 			return all, err
@@ -54,7 +54,7 @@ func FetchGroupVariables(ctx context.Context, cl *gitlabx.Client, groupID any) (
 	page := int64(1)
 	for {
 		vars, resp, err := cl.GL.GroupVariables.ListVariables(groupID,
-			&gitlab.ListGroupVariablesOptions{ListOptions: gitlab.ListOptions{Page: page, PerPage: 100}},
+			&gitlab.ListGroupVariablesOptions{Page: page, PerPage: 100},
 			gitlab.WithContext(ctx))
 		if err != nil {
 			return all, err

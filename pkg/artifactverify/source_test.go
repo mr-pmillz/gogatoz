@@ -40,7 +40,7 @@ func TestVerifyDetectsPartialBuildByFileCountOrSize(t *testing.T) {
 		{path: "package/index.js", content: []byte("export {};\n")},
 	})
 	sourceFiles := make([]syntheticArchiveFile, 0, 12)
-	for i := 0; i < 12; i++ {
+	for i := range 12 {
 		sourceFiles = append(sourceFiles, syntheticArchiveFile{
 			path:    "project-v1.2.3/src/file-" + string(rune('a'+i)) + ".js",
 			content: []byte("export const syntheticFixtureValue = '012345678901234567890123456789';\n"),

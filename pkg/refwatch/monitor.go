@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"maps"
 	"regexp"
 	"sort"
 	"strings"
@@ -36,7 +37,7 @@ var releaseCommandPattern = regexp.MustCompile(`(?i)\b(?:npm|pnpm)\s+publish\b|\
 // RefState captures the immutable data needed to compare a branch or tag.
 type RefState struct {
 	SHA               string    `json:"sha"`
-	CreatedAt         time.Time `json:"created_at,omitempty"`
+	CreatedAt         time.Time `json:"created_at"`
 	HasRecentPipeline bool      `json:"has_recent_pipeline,omitempty"`
 }
 
@@ -269,11 +270,7 @@ func cloneSnapshot(snapshot Snapshot) Snapshot {
 		Branches:   make(map[string]RefState, len(snapshot.Branches)),
 		Tags:       make(map[string]RefState, len(snapshot.Tags)),
 	}
-	for name, state := range snapshot.Branches {
-		clone.Branches[name] = state
-	}
-	for name, state := range snapshot.Tags {
-		clone.Tags[name] = state
-	}
+	maps.Copy(clone.Branches, snapshot.Branches)
+	maps.Copy(clone.Tags, snapshot.Tags)
 	return clone
 }

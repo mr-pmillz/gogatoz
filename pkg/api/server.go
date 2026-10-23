@@ -292,7 +292,7 @@ func (s *Server) handleEnumerateGroup(c *gin.Context) {
 
 	// List projects in the group, optionally including nested groups.
 	opt := &gitlab.ListGroupProjectsOptions{
-		ListOptions:      gitlab.ListOptions{PerPage: 100},
+		PerPage:          100,
 		IncludeSubGroups: new(in.IncludeSubgroups),
 	}
 	var idents []string
@@ -438,8 +438,7 @@ type httpError struct {
 func (e httpError) Error() string { return e.msg }
 
 func statusFromErr(c *gin.Context, err error) {
-	var he httpError
-	if errors.As(err, &he) {
+	if he, ok := errors.AsType[httpError](err); ok {
 		c.JSON(he.code, gin.H{"error": he.msg})
 		return
 	}

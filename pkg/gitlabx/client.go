@@ -576,7 +576,7 @@ func (c *Client) GetProtectedTagDetails(ctx context.Context, projectID any, perP
 	if perPage <= 0 {
 		perPage = 100
 	}
-	opt := &gitlab.ListProtectedTagsOptions{ListOptions: gitlab.ListOptions{PerPage: perPage, Page: 1}}
+	opt := &gitlab.ListProtectedTagsOptions{PerPage: perPage, Page: 1}
 	var out []TagProtectionDetail
 	for {
 		list, resp, err := c.GL.ProtectedTags.ListProtectedTags(projectID, opt, gitlab.WithContext(ctx))
@@ -609,7 +609,7 @@ func (c *Client) GetProtectedBranchDetails(ctx context.Context, projectID any, p
 	if perPage <= 0 {
 		perPage = 100
 	}
-	opt := &gitlab.ListProtectedBranchesOptions{ListOptions: gitlab.ListOptions{PerPage: perPage, Page: 1}}
+	opt := &gitlab.ListProtectedBranchesOptions{PerPage: perPage, Page: 1}
 	var out []BranchProtectionDetail
 	for {
 		list, resp, err := c.GL.ProtectedBranches.ListProtectedBranches(projectID, opt, gitlab.WithContext(ctx))
@@ -649,7 +649,7 @@ func (c *Client) GetProtectedBranches(ctx context.Context, projectID any, perPag
 	if page <= 0 {
 		page = 1
 	}
-	opt := &gitlab.ListProtectedBranchesOptions{ListOptions: gitlab.ListOptions{PerPage: perPage, Page: page}}
+	opt := &gitlab.ListProtectedBranchesOptions{PerPage: perPage, Page: page}
 	var out []string
 	for {
 		list, resp, err := c.GL.ProtectedBranches.ListProtectedBranches(projectID, opt, gitlab.WithContext(ctx))

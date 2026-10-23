@@ -376,10 +376,8 @@ func discoverSiblings(ctx context.Context, client *gitlab.Client, groupPath, tar
 	page := int64(1)
 	for {
 		opts := &gitlab.ListGroupProjectsOptions{
-			ListOptions: gitlab.ListOptions{
-				PerPage: 100,
-				Page:    page,
-			},
+			PerPage: 100,
+			Page:    page,
 		}
 		projects, resp, err := client.Groups.ListGroupProjects(groupPath, opts, gitlab.WithContext(ctx))
 		if err != nil {

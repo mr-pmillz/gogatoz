@@ -1,0 +1,17 @@
+.git
+.agents
+.codex
+.aws
+.env
+.env.*
+.gogatoz.yaml
+docs/node_modules
+docs/dist
+docs/.astro
+bin
+dist
+coverage
+output
+*.db
+*.sqlite3
+*.log

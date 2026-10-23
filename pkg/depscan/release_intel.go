@@ -66,8 +66,8 @@ type DependencyComponent struct {
 	Name                string        `json:"name"`
 	Version             string        `json:"version"`
 	PURL                string        `json:"purl,omitempty"`
-	PublishedAt         time.Time     `json:"published_at,omitempty"`
-	PreviousPublishedAt time.Time     `json:"previous_published_at,omitempty"`
+	PublishedAt         time.Time     `json:"published_at"`
+	PreviousPublishedAt time.Time     `json:"previous_published_at"`
 	ReleaseGap          time.Duration `json:"release_gap,omitempty"`
 }
 
@@ -172,9 +172,7 @@ func enrichReleaseMetadata(ctx context.Context, provider ReleaseProvider, compon
 	var warnings []string
 	for _, key := range keys {
 		indexes := groups[key]
-		waitGroup.Add(1)
-		go func() {
-			defer waitGroup.Done()
+		waitGroup.Go(func() {
 			select {
 			case semaphore <- struct{}{}:
 				defer func() { <-semaphore }()
@@ -192,7 +190,7 @@ func enrichReleaseMetadata(ctx context.Context, provider ReleaseProvider, compon
 			for _, index := range indexes {
 				applyReleaseHistory(&components[index], history)
 			}
-		}()
+		})
 	}
 	waitGroup.Wait()
 	sort.Strings(warnings)
@@ -496,14 +494,16 @@ func registryBase(environmentName, fallback string) (*url.URL, error) {
 
 func registryURL(base *url.URL, pathParts ...string) string {
 	copyURL := *base
-	decodedPath := strings.TrimRight(base.Path, "/")
-	escapedPath := strings.TrimRight(base.EscapedPath(), "/")
+	var decodedPath strings.Builder
+	decodedPath.WriteString(strings.TrimRight(base.Path, "/"))
+	var escapedPath strings.Builder
+	escapedPath.WriteString(strings.TrimRight(base.EscapedPath(), "/"))
 	for _, part := range pathParts {
 		part = strings.TrimSpace(part)
-		decodedPath += "/" + part
-		escapedPath += "/" + url.PathEscape(part)
+		decodedPath.WriteString("/" + part)
+		escapedPath.WriteString("/" + url.PathEscape(part))
 	}
-	copyURL.Path = decodedPath
-	copyURL.RawPath = escapedPath
+	copyURL.Path = decodedPath.String()
+	copyURL.RawPath = escapedPath.String()
 	return copyURL.String()
 }

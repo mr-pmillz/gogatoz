@@ -12,13 +12,13 @@ Download the latest release for your platform from the Releases page and place t
 ## Build from source
 
 Prerequisites:
-- Go 1.26+
+- Go 1.27.3 or later
 
 Steps:
 ```bash
 git clone https://github.com/mr-pmillz/gogatoz
 cd gogatoz
-make build # or: go build -o gogatoz ./...
+go build -o gogatoz .
 ```
 
 Alternatively, install directly with Go:

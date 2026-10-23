@@ -36,7 +36,7 @@ type glDependencyVuln struct {
 	Description string               `json:"description,omitempty"`
 	Severity    string               `json:"severity,omitempty"`
 	Solution    string               `json:"solution,omitempty"`
-	Scanner     glsastVulnScanner    `json:"scanner,omitempty"`
+	Scanner     glsastVulnScanner    `json:"scanner"`
 	Identifiers []glsastIdentifier   `json:"identifiers"`
 	Location    glDependencyLocation `json:"location"`
 }
@@ -140,7 +140,7 @@ func dependencyReportSource(report depscan.Report, finding analyze.Finding) stri
 
 func evidenceValue(evidence, key string) string {
 	prefix := key + "="
-	for _, field := range strings.Fields(evidence) {
+	for field := range strings.FieldsSeq(evidence) {
 		if value, ok := strings.CutPrefix(field, prefix); ok {
 			return strings.TrimSpace(strings.TrimSuffix(value, ","))
 		}

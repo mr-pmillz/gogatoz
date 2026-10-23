@@ -29,7 +29,7 @@ func searchProjects(ctx context.Context, cl *gitlabx.Client, opts searchProjects
 	}
 
 	listOpts := &gitlab.ListProjectsOptions{
-		ListOptions: gitlab.ListOptions{Page: 1, PerPage: perPage},
+		Page: 1, PerPage: perPage,
 	}
 	if q := strings.TrimSpace(opts.Query); q != "" {
 		listOpts.Search = new(q)
