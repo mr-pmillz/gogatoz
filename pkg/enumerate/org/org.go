@@ -21,9 +21,9 @@ func ListAccessibleProjects(ctx context.Context, client *gitlabx.Client) ([]stri
 	simple := true
 	for {
 		opt := &gitlab.ListProjectsOptions{
-			ListOptions: gitlab.ListOptions{Page: page, PerPage: 100},
-			Membership:  &membership,
-			Simple:      &simple,
+			Page: page, PerPage: 100,
+			Membership: &membership,
+			Simple:     &simple,
 		}
 		projs, resp, err := client.GL.Projects.ListProjects(opt, gitlab.WithContext(ctx))
 		if err != nil {
@@ -55,8 +55,8 @@ func ListAllProjects(ctx context.Context, client *gitlabx.Client) ([]string, err
 	simple := true
 	for {
 		opt := &gitlab.ListProjectsOptions{
-			ListOptions: gitlab.ListOptions{Page: page, PerPage: 100},
-			Simple:      &simple,
+			Page: page, PerPage: 100,
+			Simple: &simple,
 		}
 		projs, resp, err := client.GL.Projects.ListProjects(opt, gitlab.WithContext(ctx))
 		if err != nil {
@@ -91,7 +91,7 @@ func ListGroupProjects(ctx context.Context, client *gitlabx.Client, groupID any,
 	var out []string
 	var page int64 = 1
 	for {
-		opt := &gitlab.ListGroupProjectsOptions{ListOptions: gitlab.ListOptions{Page: page, PerPage: 100}}
+		opt := &gitlab.ListGroupProjectsOptions{Page: page, PerPage: 100}
 		// NOTE: recursive traversal can be implemented by walking subgroups via REST if needed.
 		projs, resp, err := client.GL.Groups.ListGroupProjects(grp.ID, opt, gitlab.WithContext(ctx))
 		if err != nil {

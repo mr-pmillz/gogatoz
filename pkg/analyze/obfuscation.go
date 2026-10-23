@@ -10,15 +10,15 @@ import (
 )
 
 var (
-	fromCharCodeRe = regexp.MustCompile(`(?i)String\.fromCharCode\s*\([\d,\s]{20,}\)`)
+	fromCharCodeRe       = regexp.MustCompile(`(?i)String\.fromCharCode\s*\([\d,\s]{20,}\)`)
 	numericCharCodeMapRe = regexp.MustCompile(
 		`(?i)\[\s*(?:\d{1,3}\s*,\s*){5,}\d{1,3}\s*,?\s*\]\s*\.map\s*\(.{0,120}String\.fromCharCode`,
 	)
-	pythonChrRe    = regexp.MustCompile(`(?i)(chr\(\d+\)\s*\+\s*){5,}`)
-	pythonBytesRe  = regexp.MustCompile(`(?i)bytes\(\s*\[\s*(\d+\s*,\s*){5,}`)
-	rubyPackRe     = regexp.MustCompile(`(?i)\[\s*(\d+\s*,\s*){5,}.*\]\.pack\s*\(\s*"C\*"\s*\)`)
-	perlPackRe     = regexp.MustCompile(`(?i)pack\s*\(\s*"C\*"\s*,\s*(\d+\s*,\s*){5,}`)
-	printfHexRe    = regexp.MustCompile(`(?i)printf\s+['"]((\\x[0-9a-fA-F]{2}){10,})`)
+	pythonChrRe   = regexp.MustCompile(`(?i)(chr\(\d+\)\s*\+\s*){5,}`)
+	pythonBytesRe = regexp.MustCompile(`(?i)bytes\(\s*\[\s*(\d+\s*,\s*){5,}`)
+	rubyPackRe    = regexp.MustCompile(`(?i)\[\s*(\d+\s*,\s*){5,}.*\]\.pack\s*\(\s*"C\*"\s*\)`)
+	perlPackRe    = regexp.MustCompile(`(?i)pack\s*\(\s*"C\*"\s*,\s*(\d+\s*,\s*){5,}`)
+	printfHexRe   = regexp.MustCompile(`(?i)printf\s+['"]((\\x[0-9a-fA-F]{2}){10,})`)
 )
 
 func detectScriptObfuscation(doc *pipeline.Document) []Finding {

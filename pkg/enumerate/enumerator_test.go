@@ -132,12 +132,12 @@ func TestEnumerateProjects_ProgressCallback(t *testing.T) {
 	cl, ts := newEnumMockServer(t, true)
 	defer ts.Close()
 
-	var count int64
+	var count atomic.Int64
 	opts := Options{
 		Concurrency: 2,
 		SkipAnalyze: true,
 		Progress: func(r Result) {
-			atomic.AddInt64(&count, 1)
+			count.Add(1)
 		},
 	}
 
@@ -149,8 +149,8 @@ func TestEnumerateProjects_ProgressCallback(t *testing.T) {
 	if len(results) != 1 {
 		t.Fatalf("expected 1 result (dedup), got %d", len(results))
 	}
-	if atomic.LoadInt64(&count) != 1 {
-		t.Fatalf("expected progress called 1 time, got %d", atomic.LoadInt64(&count))
+	if count.Load() != 1 {
+		t.Fatalf("expected progress called 1 time, got %d", count.Load())
 	}
 }
 

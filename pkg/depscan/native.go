@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	depxbridge "github.com/projectdiscovery/depx/gogatozbridge"
+	"github.com/mr-pmillz/gogatoz/internal/depxbridge"
 )
 
 // Options configures a native depx scanner.

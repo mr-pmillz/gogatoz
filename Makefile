@@ -59,8 +59,8 @@ tidy: ## Ensure go.mod/go.sum are tidy
 	@$(GO) mod tidy
 
 tools: ## Install developer tools (tparse, golangci-lint)
-	@$(GO) install github.com/mfridman/tparse@latest
-	@$(GO) install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+	@$(GO) install github.com/mfridman/tparse@v0.18.0
+	@$(GO) install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0
 
 ci: fmt vet lint test ## Run a basic CI pipeline locally
 
@@ -78,7 +78,7 @@ test-e2e: ## Run E2E tests against live GitLab (accepts GITLAB_TOKEN, TEST_GITLA
 docs-cmd: ## Generate CLI command docs into docs/cmd
 	@$(GO) run ./cmd/gen-docs
 
-# Documentation site (Astro Starlight) — requires Node >= 18.20.8 (see docs/.nvmrc)
+# Documentation site (Astro Starlight) — uses Node 24 (see docs/.nvmrc)
 DOCS_NODE := $(shell . "$$HOME/.nvm/nvm.sh" 2>/dev/null && nvm which 24 2>/dev/null || which node)
 .PHONY: docs-dev docs-build docs-preview
 docs-dev: ## Start docs dev server

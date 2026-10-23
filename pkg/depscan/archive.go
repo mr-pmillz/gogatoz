@@ -168,7 +168,7 @@ func safeArchivePath(name string) (string, error) {
 	if name == "" || path.IsAbs(name) || strings.Contains(name, "\\") {
 		return "", fmt.Errorf("%w: %q", ErrUnsafeArchivePath, name)
 	}
-	for _, component := range strings.Split(name, "/") {
+	for component := range strings.SplitSeq(name, "/") {
 		if component == ".." {
 			return "", fmt.Errorf("%w: %q", ErrUnsafeArchivePath, name)
 		}

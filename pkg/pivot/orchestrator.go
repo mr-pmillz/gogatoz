@@ -351,10 +351,8 @@ func (o *Orchestrator) discoverMemberProjects(ctx context.Context, cl *gitlabx.C
 		projects, resp, err := cl.GL.Projects.ListProjects(
 			&gitlab.ListProjectsOptions{
 				Membership: new(true),
-				ListOptions: gitlab.ListOptions{
-					Page:    page,
-					PerPage: 100,
-				},
+				Page:       page,
+				PerPage:    100,
 			}, gitlab.WithContext(ctx))
 		if err != nil {
 			return idents, err

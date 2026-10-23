@@ -8,7 +8,7 @@ GoGatoZ is a Go port of Gato-X, adapted for GitLab CI/CD. It's a security scanni
 
 ## Build & Development Commands
 
-Go version: 1.24.4 (per go.mod).
+Go version: 1.27.3 (per go.mod).
 
 ```bash
 go build -o gogatoz .              # Build the CLI
@@ -82,7 +82,7 @@ Notify → sends enumeration results to Apprise API or Discord webhooks with for
 
 ### Documentation Site
 
-Astro Starlight in `docs/`. Content in `docs/src/content/docs/`, sidebar manually configured in `docs/astro.config.mjs`. Requires Node >= 18.20.8 (pin via `docs/.nvmrc`). Build: `make docs-build`. Dev: `make docs-dev`.
+Astro Starlight in `docs/`. Content in `docs/src/content/docs/`, sidebar manually configured in `docs/astro.config.mjs`. Uses Node 24 (pin via `docs/.nvmrc`). Build: `make docs-build`. Dev: `make docs-dev`.
 
 ### Key Patterns
 

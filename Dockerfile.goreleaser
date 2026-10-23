@@ -1,4 +1,8 @@
-FROM ghcr.io/mr-pmillz/alpine-bash-tini:latest
+FROM alpine:3.24@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a
+
+# Keep the shell utilities provided by alpine-bash-tini, using a base that
+# supports both release architectures (amd64 and arm64).
+RUN apk add --no-cache bash gawk sed grep bc coreutils curl tini zip unzip bind-tools ca-certificates
 
 ARG TARGETPLATFORM
 

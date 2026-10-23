@@ -9,9 +9,9 @@ import (
 // ListMergeRequestNotes returns all notes on a merge request.
 func (c *Client) ListMergeRequestNotes(ctx context.Context, projectID int64, mrIID int64) ([]*gitlab.Note, error) {
 	opts := &gitlab.ListMergeRequestNotesOptions{
-		ListOptions: gitlab.ListOptions{PerPage: 100},
-		OrderBy:     new("created_at"),
-		Sort:        new("asc"),
+		PerPage: 100,
+		OrderBy: new("created_at"),
+		Sort:    new("asc"),
 	}
 	var all []*gitlab.Note
 	for {

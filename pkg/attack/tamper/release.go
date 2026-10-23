@@ -27,7 +27,7 @@ type LinkInfo struct {
 func ListReleases(ctx context.Context, client *gitlabx.Client, projectID any) ([]ReleaseInfo, error) {
 	var result []ReleaseInfo
 	opt := &gitlab.ListReleasesOptions{
-		ListOptions: gitlab.ListOptions{PerPage: 20},
+		PerPage: 20,
 	}
 	for {
 		releases, resp, err := client.GL.Releases.ListReleases(projectID, opt, gitlab.WithContext(ctx))
@@ -54,7 +54,7 @@ func ListReleases(ctx context.Context, client *gitlabx.Client, projectID any) ([
 func ListReleaseLinks(ctx context.Context, client *gitlabx.Client, projectID any, tagName string) ([]LinkInfo, error) {
 	var result []LinkInfo
 	opt := &gitlab.ListReleaseLinksOptions{
-		ListOptions: gitlab.ListOptions{PerPage: 20},
+		PerPage: 20,
 	}
 	for {
 		links, resp, err := client.GL.ReleaseLinks.ListReleaseLinks(projectID, tagName, opt, gitlab.WithContext(ctx))

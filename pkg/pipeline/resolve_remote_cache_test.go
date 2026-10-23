@@ -11,9 +11,9 @@ import (
 )
 
 func TestRemoteIncludeTTLCachingAcrossCalls(t *testing.T) {
-	var hits int32
+	var hits atomic.Int32
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		atomic.AddInt32(&hits, 1)
+		hits.Add(1)
 		w.WriteHeader(200)
 		_, _ = w.Write([]byte("stages: [build]\njob1:\n  script: ['echo hi']\n"))
 	}))
@@ -45,7 +45,7 @@ func TestRemoteIncludeTTLCachingAcrossCalls(t *testing.T) {
 	if merged1 == nil || len(merged1.Jobs) != 1 {
 		t.Fatalf("expected merged doc with 1 job, got %+v", merged1)
 	}
-	if got := atomic.LoadInt32(&hits); got != 1 {
+	if got := hits.Load(); got != 1 {
 		t.Fatalf("expected 1 network hit after first call, got %d", got)
 	}
 
@@ -65,7 +65,7 @@ func TestRemoteIncludeTTLCachingAcrossCalls(t *testing.T) {
 	if merged2 == nil || len(merged2.Jobs) != 1 {
 		t.Fatalf("expected merged doc with 1 job on second call, got %+v", merged2)
 	}
-	if got := atomic.LoadInt32(&hits); got != 1 {
+	if got := hits.Load(); got != 1 {
 		t.Fatalf("expected no additional network hit due to TTL cache, got %d", got)
 	}
 }

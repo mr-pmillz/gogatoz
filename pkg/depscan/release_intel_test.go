@@ -69,7 +69,7 @@ func (f *fakeReleaseProvider) ReleaseHistory(_ context.Context, ecosystem, name 
 func TestScannerScanReleaseIntelUsesNativeDepxComponents(t *testing.T) {
 	now := time.Date(2026, 7, 31, 12, 0, 0, 0, time.UTC)
 	auditor := &fakeSBOMAuditor{
-		fakeAuditor: fakeAuditor{result: AuditResult{Dependencies: 3}},
+		result: AuditResult{Dependencies: 3},
 		sbom: []byte(`{
   "bomFormat": "CycloneDX",
   "components": [
@@ -120,8 +120,8 @@ func TestScannerScanReleaseIntelUsesNativeDepxComponents(t *testing.T) {
 
 func TestScannerScanReleaseIntelKeepsAuditWhenRegistryMetadataFails(t *testing.T) {
 	auditor := &fakeSBOMAuditor{
-		fakeAuditor: fakeAuditor{result: AuditResult{Dependencies: 1}},
-		sbom:        []byte(`{"bomFormat":"CycloneDX","components":[{"name":"safe-fixture","version":"1.0.0","purl":"pkg:npm/safe-fixture@1.0.0"}]}`),
+		result: AuditResult{Dependencies: 1},
+		sbom:   []byte(`{"bomFormat":"CycloneDX","components":[{"name":"safe-fixture","version":"1.0.0","purl":"pkg:npm/safe-fixture@1.0.0"}]}`),
 	}
 	scanner := NewScanner(auditor)
 	scanner.releaseProvider = &fakeReleaseProvider{err: errors.New("registry unavailable")}

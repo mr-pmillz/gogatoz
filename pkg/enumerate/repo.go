@@ -50,7 +50,7 @@ func ListRefs(ctx context.Context, cl *gitlabx.Client, projectID any, limit int)
 		per = int64(limit)
 	}
 	for {
-		branches, resp, err := cl.GL.Branches.ListBranches(projectID, &gitlab.ListBranchesOptions{ListOptions: gitlab.ListOptions{Page: page, PerPage: per}}, gitlab.WithContext(ctx))
+		branches, resp, err := cl.GL.Branches.ListBranches(projectID, &gitlab.ListBranchesOptions{Page: page, PerPage: per}, gitlab.WithContext(ctx))
 		if err != nil {
 			return nil, err
 		}

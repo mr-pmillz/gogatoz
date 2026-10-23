@@ -91,7 +91,7 @@ func DiscoverGroupRunnerSharing(ctx context.Context, client *gitlabx.Client, gro
 	// List all runners available to the group.
 	var allRunners []*gitlab.Runner
 	opts := &gitlab.ListGroupsRunnersOptions{
-		ListOptions: gitlab.ListOptions{PerPage: 100, Page: 1},
+		PerPage: 100, Page: 1,
 	}
 	for {
 		runners, resp, err := client.GL.Runners.ListGroupsRunners(groupID, opts, gitlab.WithContext(ctx))
@@ -117,7 +117,7 @@ func DiscoverGroupRunnerSharing(ctx context.Context, client *gitlabx.Client, gro
 		// Discover project IDs from recent jobs processed by this runner.
 		projectSet := map[int64]struct{}{}
 		jobOpts := &gitlab.ListRunnerJobsOptions{
-			ListOptions: gitlab.ListOptions{PerPage: 100, Page: 1},
+			PerPage: 100, Page: 1,
 		}
 		for {
 			jobs, resp, err := client.GL.Runners.ListRunnerJobs(r.ID, jobOpts, gitlab.WithContext(ctx))
