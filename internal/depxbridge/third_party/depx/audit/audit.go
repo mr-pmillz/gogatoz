@@ -189,12 +189,6 @@ func (s *Service) AuditWithOptions(ctx context.Context, paths []string, opts Opt
 	jobs := collectExtractJobs(targets)
 	if len(jobs) == 0 && !auditIncludesHome(inputPaths) {
 		opts.Progress.status("No lockfiles or SBOM files found")
-		return &Result{
-			Paths:      displayPaths,
-			Summary:    Summary{},
-			Mode:       auditMode(opts),
-			DurationMS: time.Since(started).Milliseconds(),
-		}, nil
 	}
 
 	if len(jobs) > 0 {
@@ -206,16 +200,6 @@ func (s *Service) AuditWithOptions(ctx context.Context, paths []string, opts Opt
 		return nil, err
 	}
 
-	if len(allDeps) == 0 {
-		opts.Progress.status("No dependencies found")
-		return &Result{
-			Paths:      displayPaths,
-			Summary:    Summary{Lockfiles: len(jobs)},
-			Mode:       auditMode(opts),
-			DurationMS: time.Since(started).Milliseconds(),
-		}, nil
-	}
-
 	sbomPath := ""
 	if opts.SBOMExport != "" {
 		written, werr := writeSBOM(opts.SBOMExport, opts.SBOMFormat, opts.SBOMToolVersion, allDeps)
@@ -223,6 +207,17 @@ func (s *Service) AuditWithOptions(ctx context.Context, paths []string, opts Opt
 			return nil, fmt.Errorf("sbom export: %w", werr)
 		}
 		sbomPath = written
+	}
+
+	if len(allDeps) == 0 {
+		opts.Progress.status("No dependencies found")
+		return &Result{
+			Paths:      displayPaths,
+			Summary:    Summary{Lockfiles: len(jobs)},
+			SBOMPath:   sbomPath,
+			Mode:       auditMode(opts),
+			DurationMS: time.Since(started).Milliseconds(),
+		}, nil
 	}
 
 	findings, maliciousCount, quarantinedCount, cleanCount, skippedPlaceholders, err := s.matchLocally(ctx, allDeps, opts)
@@ -471,9 +466,28 @@ func extractFromSource(ctx context.Context, projectRoot, sourcePath string, sour
 		UseGitignore:   false,
 	}
 	results := scalibr.New().Scan(ctx, cfg)
-	if results != nil && results.Status != nil &&
-		results.Status.Status != plugin.ScanStatusSucceeded &&
-		results.Status.Status != plugin.ScanStatusPartiallySucceeded {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if results == nil || results.Status == nil {
+		return nil, fmt.Errorf("scalibr returned no scan status")
+	}
+	// A partial extraction must not be reported as a complete, clean audit.
+	// SCALIBR may also attach file errors to an otherwise successful scan.
+	for _, status := range results.PluginStatus {
+		if status == nil || status.Status == nil {
+			continue
+		}
+		for _, fileErr := range status.Status.FileErrors {
+			if fileErr != nil {
+				return nil, fmt.Errorf("%s: %s: %s", status.Name, fileErr.FilePath, fileErr.ErrorMessage)
+			}
+		}
+		if status.Status.Status == plugin.ScanStatusFailed || status.Status.Status == plugin.ScanStatusPartiallySucceeded {
+			return nil, fmt.Errorf("%s: %s", status.Name, status.Status.FailureReason)
+		}
+	}
+	if results.Status.Status != plugin.ScanStatusSucceeded {
 		reason := results.Status.FailureReason
 		if reason == "" {
 			reason = "scalibr scan failed"

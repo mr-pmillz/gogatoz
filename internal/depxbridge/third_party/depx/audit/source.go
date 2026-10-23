@@ -34,19 +34,19 @@ func isAuditSourcePath(path string) bool {
 	return ok
 }
 
+// Shared by direct-path checks, find(1), and the portable directory walker.
+var sbomFilePatterns = []string{
+	"bom.json", "bom.xml",
+	"*.cdx.json", "*.cdx.xml",
+	"*.cyclonedx.json", "*.cyclonedx.xml",
+	"*.spdx.json", "*.spdx", "*.spdx.yml", "*.spdx.rdf", "*.spdx.rdf.xml",
+}
+
 // isSBOMPath mirrors osv-scalibr sbom/cdx and sbom/spdx FileRequired patterns.
 func isSBOMPath(path string) bool {
 	base := strings.ToLower(filepath.Base(path))
-	switch base {
-	case "bom.json", "bom.xml":
-		return true
-	}
-	for _, ext := range []string{
-		".cdx.json", ".cdx.xml",
-		".cyclonedx.json", ".cyclonedx.xml",
-		".spdx.json", ".spdx", ".spdx.yml", ".spdx.rdf", ".spdx.rdf.xml",
-	} {
-		if strings.HasSuffix(base, ext) {
+	for _, pattern := range sbomFilePatterns {
+		if matched, _ := filepath.Match(pattern, base); matched {
 			return true
 		}
 	}

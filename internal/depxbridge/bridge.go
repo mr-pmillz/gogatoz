@@ -132,6 +132,9 @@ func (a *Auditor) Audit(ctx context.Context, paths []string) (Result, error) {
 // AuditSBOM audits dependencies once and returns depx's native CycloneDX or
 // SPDX serialization alongside the normal verdict result.
 func (a *Auditor) AuditSBOM(ctx context.Context, paths []string, format string) (Result, []byte, error) {
+	if a == nil {
+		return Result{}, nil, errors.New("audit dependencies: nil depx auditor")
+	}
 	format = strings.ToLower(strings.TrimSpace(format))
 	if format != "cyclonedx" && format != "spdx" {
 		return Result{}, nil, fmt.Errorf("unsupported depx SBOM format %q", format)
@@ -163,6 +166,8 @@ func (a *Auditor) AuditSBOM(ctx context.Context, paths []string, format string) 
 	if len(data) > maxSBOMBytes {
 		return Result{}, nil, fmt.Errorf("native depx SBOM exceeds %d bytes", maxSBOMBytes)
 	}
+	// The temporary export is removed on return; only the bytes remain usable.
+	result.SBOMPath = ""
 	return result, data, nil
 }
 

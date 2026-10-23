@@ -11,3 +11,5 @@ COPY $TARGETPLATFORM/gogatoz /usr/local/bin/gogatoz
 RUN chmod +x /entrypoint.sh /usr/local/bin/gogatoz
 
 ENTRYPOINT ["/sbin/tini", "--", "/entrypoint.sh"]
+# Let the entrypoint choose CLI help or the CI shell instead of inheriting sh.
+CMD []

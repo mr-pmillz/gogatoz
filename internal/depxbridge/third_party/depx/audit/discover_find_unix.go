@@ -34,6 +34,7 @@ func discoverLockfilesUnix(root string) ([]string, error) {
 		"*/go/pkg/sumdb",
 	}
 	lockNames := append([]string(nil), lockfile.RootNames...)
+	lockNames = append(lockNames, sbomFilePatterns...)
 	sort.Strings(lockNames)
 
 	args := []string{root, "("}
@@ -49,7 +50,7 @@ func discoverLockfilesUnix(root string) ([]string, error) {
 		if !first {
 			args = append(args, "-o")
 		}
-		args = append(args, "-name", n)
+		args = append(args, "-iname", n)
 		first = false
 	}
 	args = append(args, ")", "-prune", "-o", "(")
@@ -57,9 +58,9 @@ func discoverLockfilesUnix(root string) ([]string, error) {
 		if i > 0 {
 			args = append(args, "-o")
 		}
-		args = append(args, "-name", name)
+		args = append(args, "-iname", name)
 	}
-	args = append(args, ")", "-print")
+	args = append(args, ")", "-print0")
 
 	cmd := exec.Command("find", args...)
 	var stderr bytes.Buffer
@@ -72,10 +73,9 @@ func discoverLockfilesUnix(root string) ([]string, error) {
 		return nil, fmt.Errorf("find: %w", err)
 	}
 
-	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	lines := strings.Split(string(out), "\x00")
 	found := make([]string, 0, len(lines))
 	for _, line := range lines {
-		line = strings.TrimSpace(line)
 		if line == "" {
 			continue
 		}

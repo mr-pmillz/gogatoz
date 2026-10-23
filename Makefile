@@ -7,7 +7,7 @@ GOLANGCI_LINT := $(shell command -v golangci-lint 2>/dev/null)
 COVER_PROFILE := coverage.out
 COVER_DIR := coverage
 
-TEST_FLAGS ?= -covermode=atomic -coverprofile=coverage/coverage.out
+TEST_FLAGS ?= -covermode=atomic -coverprofile=$(COVER_DIR)/$(COVER_PROFILE)
 RACE_FLAGS ?= -race -count=1
 LINT_FLAGS ?= --config ./.golangci-lint.yml --timeout=10m -v
 
@@ -23,6 +23,7 @@ endif
 	@$(GOLANGCI_LINT) run $(LINT_FLAGS)
 
 test: ## Run unit tests (uses tparse if available)
+	@mkdir -p "$(COVER_DIR)"
 ifdef TPARSE
 	@set -o pipefail; $(GO) test $(TEST_FLAGS) -json ./... | $(TPARSE) -all
 else

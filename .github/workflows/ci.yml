@@ -8,7 +8,10 @@ on:
       - 'go.mod'
       - 'go.sum'
       - 'Makefile'
-      - 'scripts/check_go_install.py'
+      - 'scripts/**'
+      - 'entrypoint.sh'
+      - 'Dockerfile*'
+      - 'internal/depxbridge/third_party/depx/**'
       - '.golangci-lint.yml'
       - '.github/workflows/ci.yml'
   pull_request:
@@ -18,14 +21,15 @@ on:
       - 'go.mod'
       - 'go.sum'
       - 'Makefile'
-      - 'scripts/check_go_install.py'
+      - 'scripts/**'
+      - 'entrypoint.sh'
+      - 'Dockerfile*'
+      - 'internal/depxbridge/third_party/depx/**'
       - '.golangci-lint.yml'
       - '.github/workflows/ci.yml'
 
 permissions:
   contents: read
-  checks: write
-  pull-requests: write
 
 jobs:
   build:
@@ -47,6 +51,12 @@ jobs:
             -ldflags="-s -w" \
             -o ./bin/gogatoz \
             ./main.go
+
+      - name: Verify depx source snapshot
+        run: python3 scripts/sync_depx.py --check
+
+      - name: Test container entrypoint
+        run: python3 -m unittest discover -s scripts -p 'test_*.py'
 
       - name: Verify versioned go install
         run: python3 scripts/check_go_install.py
@@ -74,6 +84,9 @@ jobs:
     name: test
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write # dorny/test-reporter publishes the test results
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v7

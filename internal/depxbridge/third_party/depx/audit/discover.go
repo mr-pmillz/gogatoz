@@ -233,7 +233,7 @@ func discoverHomeRootLockfiles(home string) ([]string, error) {
 	}
 	found := make([]string, 0)
 	for _, entry := range entries {
-		if entry.IsDir() || !lockfile.IsRootName(entry.Name()) {
+		if entry.IsDir() || !isAuditSourcePath(entry.Name()) {
 			continue
 		}
 		path := filepath.Join(home, entry.Name())
@@ -296,7 +296,7 @@ func discoverLockfilesWalk(root string, onProgress func(found int, currentPath s
 			}
 			return nil
 		}
-		if !isLockfilePath(path) {
+		if !isAuditSourcePath(path) {
 			return nil
 		}
 		found = append(found, path)

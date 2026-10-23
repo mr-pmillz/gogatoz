@@ -17,5 +17,15 @@
     "registry",
     "source",
     "sync"
+  ],
+  "patches": [
+    {
+      "path": "scripts/depx_patches/0001-audit-correctness.patch",
+      "sha256": "6e7bd2734c3409608b385eabd837bf280a65a0ae134e5d0fc406d1dd3539e044"
+    },
+    {
+      "path": "scripts/depx_patches/0002-portable-sbom-import.patch",
+      "sha256": "6137cf9d01d6804841a4e93249bcbaae062297aca629e010fa8312590668608a"
+    }
   ]
 }
