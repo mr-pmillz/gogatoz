@@ -2,6 +2,34 @@
 
 All notable changes to this project will be documented [here](https://github.com/mr-pmillz/gogatoz/blob/main/CHANGELOG.md)
 
+## [0.6.6](https://github.com/mr-pmillz/gogatoz/compare/v0.6.5...v0.6.6) - 2026-11-14
+
+### 🧪 Testing
+
+- Test-reporter adds reporting options and parser fixes; the golang-json - ([36df433](https://github.com/mr-pmillz/gogatoz/commit/36df433351c73b37b0be94f81848228309a310be))
+
+### ⚙️  Miscellaneous
+
+- Merge pull request #87 from mr-pmillz/deps/bump - ([a41441c](https://github.com/mr-pmillz/gogatoz/commit/a41441c005689094f2b5c0bbcb78a14c4806daea))
+- Deps/bump - ([a41441c](https://github.com/mr-pmillz/gogatoz/commit/a41441c005689094f2b5c0bbcb78a14c4806daea))
+- Ci(deps): bump github actions - ([36df433](https://github.com/mr-pmillz/gogatoz/commit/36df433351c73b37b0be94f81848228309a310be))
+- Apply #86 to current HEAD with current compatible tags verified against - ([36df433](https://github.com/mr-pmillz/gogatoz/commit/36df433351c73b37b0be94f81848228309a310be))
+- Upstream git refs on 2026-11-13: - ([36df433](https://github.com/mr-pmillz/gogatoz/commit/36df433351c73b37b0be94f81848228309a310be))
+- - dorny/test-reporter: 3.0.0 -> 3.2.0 - ([36df433](https://github.com/mr-pmillz/gogatoz/commit/36df433351c73b37b0be94f81848228309a310be))
+- - getplumber/plumber: 0.7.11 -> 0.7.23 (PR proposed 0.7.17) - ([36df433](https://github.com/mr-pmillz/gogatoz/commit/36df433351c73b37b0be94f81848228309a310be))
+- - docker/login-action: 4.6.0 -> 4.8.0 (PR proposed 4.7.0) - ([36df433](https://github.com/mr-pmillz/gogatoz/commit/36df433351c73b37b0be94f81848228309a310be))
+- Preserve full SHA pins and synchronize the exact Plumber ratchet comment. - ([36df433](https://github.com/mr-pmillz/gogatoz/commit/36df433351c73b37b0be94f81848228309a310be))
+- Configuration remains compatible. Plumber's bundled CLI default follows - ([36df433](https://github.com/mr-pmillz/gogatoz/commit/36df433351c73b37b0be94f81848228309a310be))
+- 0.7.23, adding analysis fixes and signed score metadata. login-action's - ([36df433](https://github.com/mr-pmillz/gogatoz/commit/36df433351c73b37b0be94f81848228309a310be))
+- Docker Hub OIDC lifetime change does not affect our GHCR token login. - ([36df433](https://github.com/mr-pmillz/gogatoz/commit/36df433351c73b37b0be94f81848228309a310be))
+- Validated: actionlint, full-SHA checks, upstream tag/commit verification, - ([36df433](https://github.com/mr-pmillz/gogatoz/commit/36df433351c73b37b0be94f81848228309a310be))
+- And the workflow security scan reviewed in context. no permissions, - ([36df433](https://github.com/mr-pmillz/gogatoz/commit/36df433351c73b37b0be94f81848228309a310be))
+- Triggers, secret wiring, or untrusted-code execution paths are added. - ([36df433](https://github.com/mr-pmillz/gogatoz/commit/36df433351c73b37b0be94f81848228309a310be))
+- Rollback: revert to test-reporter a43b3a5, plumber d1133cd, - ([36df433](https://github.com/mr-pmillz/gogatoz/commit/36df433351c73b37b0be94f81848228309a310be))
+- And login-action dbcb813. leave the Dependabot PR lifecycle to the user. - ([36df433](https://github.com/mr-pmillz/gogatoz/commit/36df433351c73b37b0be94f81848228309a310be))
+- Merge pull request #80 from mr-pmillz/main - ([43f9579](https://github.com/mr-pmillz/gogatoz/commit/43f9579d2f37519d2e05434c1738dedd599b6fcd))
+- Sync main back to develop - ([43f9579](https://github.com/mr-pmillz/gogatoz/commit/43f9579d2f37519d2e05434c1738dedd599b6fcd))
+
 ## [0.6.5](https://github.com/mr-pmillz/gogatoz/compare/v0.6.4...v0.6.5) - 2026-10-23
 
 ### ✨ New features
@@ -15,6 +43,9 @@ All notable changes to this project will be documented [here](https://github.com
 
 ### ⚙️  Miscellaneous
 
+- Merge pull request #78 from mr-pmillz/release/v0.6.5 - ([c0563fa](https://github.com/mr-pmillz/gogatoz/commit/c0563fa923b81917cfdee44531b69c5d66c7688f))
+- Release/v0.6.5 - ([c0563fa](https://github.com/mr-pmillz/gogatoz/commit/c0563fa923b81917cfdee44531b69c5d66c7688f))
+- Chore: update changelog - ([c8b828c](https://github.com/mr-pmillz/gogatoz/commit/c8b828cbc26c9e312be379ae77617258b843d926))
 - Merge pull request #77 from mr-pmillz/fix/goinstall - ([1885066](https://github.com/mr-pmillz/gogatoz/commit/18850661663b8fe909c7a4bc8874f6c5c526ccf2))
 - Fix/goinstall - ([1885066](https://github.com/mr-pmillz/gogatoz/commit/18850661663b8fe909c7a4bc8874f6c5c526ccf2))
 - Repair container entrypoint behavior and clean-checkout tests, add regression and snapshot verification checks, and narrow ci permissions - ([900fd59](https://github.com/mr-pmillz/gogatoz/commit/900fd59ae9d58c39fae51fef6fe4acb694b8456a))
