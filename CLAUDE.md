@@ -8,7 +8,7 @@ GoGatoZ is a Go port of Gato-X, adapted for GitLab CI/CD. It's a security scanni
 
 ## Build & Development Commands
 
-Go version: 1.27.3 (per go.mod).
+Go version: 1.27.4 (per go.mod).
 
 ```bash
 go build -o gogatoz .              # Build the CLI
